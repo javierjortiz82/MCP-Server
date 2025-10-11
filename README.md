@@ -1530,6 +1530,6 @@ See [CHANGELOG.md](client_mcp/CHANGELOG.md) for detailed version history.
 
 **Built with ❤️ using Google Gemini AI and MCP Protocol**
 
-[Report Bug](https://github.com/yourusername/Lab01-MCP/issues) · [Request Feature](https://github.com/yourusername/Lab01-MCP/issues) · [Documentation](https://github.com/yourusername/Lab01-MCP#readme)
+[Report Bug](https://github.com/javierjortiz82/MCP-Server/issues) · [Request Feature](https://github.com/javierjortiz82/MCP-Server/issues) · [Documentation](https://github.com/javierjortiz82/MCP-Server#readme)
 
 </div>
