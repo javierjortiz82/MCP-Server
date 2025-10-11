@@ -1,0 +1,16 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "MCP Database",
+      "Group": "Local Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "mcpdb",
+      "Username": "mcp_user",
+      "Password": "mcp_password",
+      "SSLMode": "prefer",
+      "PassFile": "/tmp/pgpassfile",
+      "Comment": "Servidor PostgreSQL para aplicaciones MCP"
+    }
+  }
+}

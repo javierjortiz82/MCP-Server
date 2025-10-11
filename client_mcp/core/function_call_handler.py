@@ -1,0 +1,106 @@
+"""Function calling loop handler for Gemini API.
+
+This module handles the iterative function calling loop required by Gemini API,
+including function execution, response processing, and iteration management.
+"""
+
+from typing import Any
+
+from google.genai import types
+
+from config.settings import settings
+from utils.logger import get_logger
+
+logger = get_logger("FunctionCallHandler", settings.LOG_LEVEL)
+
+
+class FunctionCallHandler:
+    """Handler for Gemini function calling loop.
+
+    Gemini doesn't auto-execute functions, so we need to manually:
+    1. Extract function calls from response
+    2. Execute functions
+    3. Add results to conversation
+    4. Generate next response
+    5. Repeat until we get text response
+
+    Attributes:
+        max_iterations: Maximum iterations to prevent infinite loops
+        logger: Logger instance for debugging
+    """
+
+    def __init__(self, max_iterations: int = 10):
+        """Initialize function call handler.
+
+        Args:
+            max_iterations: Maximum function calling iterations
+        """
+        self.max_iterations = max_iterations
+
+    def extract_function_calls(self, parts: list[types.Part] | None) -> list[Any]:
+        """Extract function calls from response parts.
+
+        Args:
+            parts: Response parts from Gemini
+
+        Returns:
+            List of function_call objects
+        """
+        if parts is None:
+            logger.warning("Response parts is None - cannot extract function calls")
+            return []
+
+        function_calls = [
+            part.function_call
+            for part in parts
+            if hasattr(part, "function_call") and part.function_call
+        ]
+
+        return function_calls
+
+    def extract_text(self, parts: list[types.Part] | None) -> str | None:
+        """Extract text content from response parts.
+
+        Args:
+            parts: Response parts from Gemini
+
+        Returns:
+            Combined text from all text parts, or None if no text
+        """
+        if parts is None:
+            logger.warning("Response parts is None - cannot extract text")
+            return None
+
+        text_parts = [
+            part.text for part in parts if hasattr(part, "text") and part.text
+        ]
+
+        if not text_parts:
+            return None
+
+        return " ".join(text_parts)
+
+    def has_candidates(self, response: Any) -> bool:
+        """Check if response has candidates.
+
+        Args:
+            response: Gemini API response
+
+        Returns:
+            True if response has candidates
+        """
+        return hasattr(response, "candidates") and response.candidates
+
+    def get_parts(self, response: Any) -> list[types.Part] | None:
+        """Get parts from response.
+
+        Args:
+            response: Gemini API response
+
+        Returns:
+            Parts list or None if not available
+        """
+        if not self.has_candidates(response):
+            return None
+
+        return response.candidates[0].content.parts

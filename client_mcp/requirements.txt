@@ -1,0 +1,34 @@
+# ============================================================================
+# SmartBot MCP Client - Python Dependencies
+# ============================================================================
+# Production dependencies for the MCP client with Google GenAI integration
+#
+# Installation:
+#   pip install -r requirements.txt
+#
+# Development installation (includes dev tools):
+#   pip install -r requirements.txt -r requirements-dev.txt
+# ============================================================================
+
+# Core MCP SDK
+mcp>=1.2.0                    # Official MCP SDK from Anthropic
+
+# Google GenAI for LLM
+google-genai>=1.38.0          # Google GenAI SDK for Gemini models
+
+# Async IO and HTTP
+anyio>=4.0.0                  # Async IO support for MCP SDK
+httpx>=0.27.0                 # HTTP client (used by MCP SDK)
+
+# Rate Limiting
+aiolimiter>=1.1.0             # Async rate limiting (Leaky Bucket algorithm)
+
+# Data Validation and Settings
+pydantic>=2.11.0              # Data validation and settings management (v2)
+pydantic-settings>=2.11.0     # Settings management from environment variables
+
+# Database
+psycopg2-binary>=2.9.0        # PostgreSQL adapter for pagination persistence
+
+# Environment Variables
+python-dotenv>=1.0.0          # Load environment variables from .env file

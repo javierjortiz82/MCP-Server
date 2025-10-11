@@ -1,0 +1,8 @@
+# Ignore generated data files
+*.json
+*.csv
+*.log
+*.txt
+
+# Keep directory structure
+!.gitignore

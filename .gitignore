@@ -1,0 +1,161 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+*.cover
+*.log
+
+# Python additional patterns
+pip-log.txt
+pip-delete-this-directory.txt
+*.pot
+*.mo
+celerybeat-schedule
+celerybeat.pid
+*.sage.py
+local_settings.py
+instance/
+.scrapy
+.webassets-cache
+.python-version
+.pytype/
+.pyre/
+cython_debug/
+__pypackages__/
+.pdm.toml
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# Claude Code (personal settings only)
+.claude/settings.local.json
+.claude/*.local.*
+
+# Environment variables
+.env
+.env.*
+.env.local
+.env.*.local
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.Identifier
+*:Zone.Identifier
+
+# Logs and databases
+logs/
+*.log
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+tmp/
+temp/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Project specific
+pids/
+metrics/
+prompts/
+borrar/
+backups/
+*.json
+!package.json
+!tsconfig.json
+!servers.json
+
+# Test outputs
+test_results/
+coverage/
+.coverage.*
+nosetests.xml
+coverage.xml
+*.cover
+
+# Documentation builds
+docs/_build/
+docs/.doctrees/
+docs/api/
+site/
+.buildinfo
+
+# Cache
+.cache/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+
+# PyBuilder
+target/
+.pybuilder/
+
+# macOS
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+.nfs*
