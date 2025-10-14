@@ -8,8 +8,8 @@ from typing import Any
 
 from google.genai import types
 
-from config.settings import settings
-from utils.logger import get_logger
+from client_mcp.config.settings import settings
+from client_mcp.utils.logger import get_logger
 
 logger = get_logger("ConversationManager", settings.LOG_LEVEL)
 
@@ -79,9 +79,7 @@ class ConversationManager:
             >>> parts = [types.Part(function_call=...)]
             >>> manager.add_function_call(parts)
         """
-        self.conversation_history.append(
-            types.Content(role="model", parts=parts)
-        )
+        self.conversation_history.append(types.Content(role="model", parts=parts))
         logger.debug(f"Added function call with {len(parts)} parts")
 
     def add_function_response(self, parts: list[types.Part]) -> None:
@@ -98,9 +96,7 @@ class ConversationManager:
             >>> parts = [types.Part(function_response=...)]
             >>> manager.add_function_response(parts)
         """
-        self.conversation_history.append(
-            types.Content(role="user", parts=parts)
-        )
+        self.conversation_history.append(types.Content(role="user", parts=parts))
         logger.debug(f"Added function response with {len(parts)} parts")
 
     def extract_text_from_parts(self, parts: list[types.Part] | None) -> str | None:
@@ -123,9 +119,7 @@ class ConversationManager:
             return None
 
         text_parts = [
-            part.text
-            for part in parts
-            if hasattr(part, "text") and part.text
+            part.text for part in parts if hasattr(part, "text") and part.text
         ]
 
         if not text_parts:

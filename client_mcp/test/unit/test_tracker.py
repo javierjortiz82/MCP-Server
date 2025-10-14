@@ -1,13 +1,13 @@
 """Unit tests for ToolTracker."""
 
-import pytest
-import time
-import tempfile
 import json
-from unittest.mock import MagicMock, patch
+import tempfile
+import time
 
+import pytest
+
+from observability.metrics import MetricsCollector
 from observability.tracker import ToolTracker, get_global_tracker
-from observability.metrics import MetricsCollector, ToolMetric
 
 
 class TestToolTracker:
@@ -144,9 +144,7 @@ class TestToolTracker:
         """Test track_with_result with user query."""
         tracker = ToolTracker(collector=self.collector)
 
-        with tracker.track_with_result(
-            "search", {}, user_query="find products"
-        ) as ctx:
+        with tracker.track_with_result("search", {}, user_query="find products") as ctx:
             ctx["result_size"] = 10
 
         last_metric = tracker.collector.get_last_metric()
@@ -263,13 +261,14 @@ class TestToolTracker:
             tracker.export_metrics(temp_file)
 
             # Verify file was created and contains data
-            with open(temp_file, "r") as f:
+            with open(temp_file) as f:
                 data = json.load(f)
                 assert "raw_metrics" in data
                 assert len(data["raw_metrics"]) == 1
                 assert data["raw_metrics"][0]["tool_name"] == "test_tool"
         finally:
             import os
+
             os.unlink(temp_file)
 
     def test_clear_metrics(self):
@@ -321,6 +320,7 @@ class TestGlobalTracker:
     def test_get_global_tracker_creates_instance(self):
         """Test that get_global_tracker creates instance."""
         import observability.tracker
+
         observability.tracker._global_tracker = None
 
         tracker = get_global_tracker()
@@ -331,6 +331,7 @@ class TestGlobalTracker:
     def test_get_global_tracker_singleton(self):
         """Test that get_global_tracker returns same instance."""
         import observability.tracker
+
         observability.tracker._global_tracker = None
 
         tracker1 = get_global_tracker()
@@ -341,6 +342,7 @@ class TestGlobalTracker:
     def test_global_tracker_shares_metrics(self):
         """Test that global tracker shares metrics across calls."""
         import observability.tracker
+
         observability.tracker._global_tracker = None
 
         tracker1 = get_global_tracker()

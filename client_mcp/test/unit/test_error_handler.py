@@ -6,12 +6,12 @@ from utils.error_handler import (
     ApplicationError,
     DatabaseError,
     ErrorContext,
-    ValidationError,
-    ResourceNotFoundError,
     ExternalServiceError,
-    handle_service_errors,
+    ResourceNotFoundError,
+    ValidationError,
     handle_api_errors,
     handle_database_errors,
+    handle_service_errors,
     handle_tool_errors,
     handle_utility_errors,
     safe_fallback,
@@ -31,9 +31,7 @@ class TestApplicationError:
     def test_error_with_context(self):
         """Test ApplicationError with context."""
         error = ApplicationError(
-            "Database error",
-            context=ErrorContext.DATABASE,
-            details={"table": "users"}
+            "Database error", context=ErrorContext.DATABASE, details={"table": "users"}
         )
 
         assert str(error) == "Database error"
@@ -43,9 +41,7 @@ class TestApplicationError:
     def test_to_dict(self):
         """Test ApplicationError to_dict method."""
         error = ApplicationError(
-            "Service error",
-            context=ErrorContext.SERVICE,
-            details={"code": 500}
+            "Service error", context=ErrorContext.SERVICE, details={"code": 500}
         )
 
         error_dict = error.to_dict()
@@ -62,6 +58,7 @@ class TestErrorDecorators:
     @pytest.mark.asyncio
     async def test_handle_service_errors_success(self):
         """Test handle_service_errors with successful execution."""
+
         @handle_service_errors
         async def test_func():
             return "success"
@@ -72,6 +69,7 @@ class TestErrorDecorators:
     @pytest.mark.asyncio
     async def test_handle_service_errors_application_error(self):
         """Test handle_service_errors passes through ApplicationError."""
+
         @handle_service_errors
         async def test_func():
             raise ValidationError("Invalid input")
@@ -82,6 +80,7 @@ class TestErrorDecorators:
     @pytest.mark.asyncio
     async def test_handle_service_errors_generic_exception(self):
         """Test handle_service_errors wraps generic exceptions."""
+
         @handle_service_errors
         async def test_func():
             raise ValueError("Something went wrong")
@@ -94,6 +93,7 @@ class TestErrorDecorators:
 
     def test_handle_service_errors_sync(self):
         """Test handle_service_errors with sync function."""
+
         @handle_service_errors
         def test_func():
             return "sync success"
@@ -104,6 +104,7 @@ class TestErrorDecorators:
     @pytest.mark.asyncio
     async def test_handle_api_errors_success(self):
         """Test handle_api_errors with successful execution."""
+
         @handle_api_errors
         async def test_func():
             return "api success"
@@ -114,6 +115,7 @@ class TestErrorDecorators:
     @pytest.mark.asyncio
     async def test_handle_api_errors_validation_error(self):
         """Test handle_api_errors returns dict for ValidationError."""
+
         @handle_api_errors
         async def test_func():
             raise ValidationError("Bad input", details={"field": "email"})
@@ -127,6 +129,7 @@ class TestErrorDecorators:
     @pytest.mark.asyncio
     async def test_handle_api_errors_not_found(self):
         """Test handle_api_errors handles ResourceNotFoundError."""
+
         @handle_api_errors
         async def test_func():
             raise ResourceNotFoundError("User not found")
@@ -139,6 +142,7 @@ class TestErrorDecorators:
     @pytest.mark.asyncio
     async def test_handle_api_errors_generic_exception(self):
         """Test handle_api_errors handles unexpected exceptions."""
+
         @handle_api_errors
         async def test_func():
             raise RuntimeError("Unexpected error")
@@ -152,6 +156,7 @@ class TestErrorDecorators:
     @pytest.mark.asyncio
     async def test_handle_tool_errors_success(self):
         """Test handle_tool_errors with successful execution."""
+
         @handle_tool_errors
         async def test_func():
             return {"result": "data"}
@@ -162,6 +167,7 @@ class TestErrorDecorators:
     @pytest.mark.asyncio
     async def test_handle_tool_errors_validation_error(self):
         """Test handle_tool_errors wraps ValidationError."""
+
         @handle_tool_errors
         async def test_func():
             raise ValidationError("Invalid parameters")
@@ -175,6 +181,7 @@ class TestErrorDecorators:
     @pytest.mark.asyncio
     async def test_handle_tool_errors_generic_exception(self):
         """Test handle_tool_errors wraps generic exceptions."""
+
         @handle_tool_errors
         async def test_func():
             raise RuntimeError("Tool failed")
@@ -188,6 +195,7 @@ class TestErrorDecorators:
     @pytest.mark.asyncio
     async def test_safe_fallback_success(self):
         """Test safe_fallback with successful execution."""
+
         @safe_fallback(default_value="default")
         async def test_func():
             return "actual value"
@@ -198,6 +206,7 @@ class TestErrorDecorators:
     @pytest.mark.asyncio
     async def test_safe_fallback_on_error(self):
         """Test safe_fallback returns default on error."""
+
         @safe_fallback(default_value="fallback")
         async def test_func():
             raise ValueError("Error")
@@ -208,6 +217,7 @@ class TestErrorDecorators:
     @pytest.mark.asyncio
     async def test_safe_fallback_none_default(self):
         """Test safe_fallback with None as default."""
+
         @safe_fallback(default_value=None)
         async def test_func():
             raise ValueError("Error")
@@ -217,6 +227,7 @@ class TestErrorDecorators:
 
     def test_safe_fallback_sync(self):
         """Test safe_fallback with sync function."""
+
         @safe_fallback(default_value="sync fallback")
         def test_func():
             raise ValueError("Error")
@@ -259,6 +270,7 @@ class TestMissingDecorators:
 
     def test_handle_database_errors_success(self):
         """Test handle_database_errors with successful execution."""
+
         @handle_database_errors
         def test_func():
             return "database success"
@@ -268,6 +280,7 @@ class TestMissingDecorators:
 
     def test_handle_database_errors_psycopg2_error(self):
         """Test handle_database_errors wraps psycopg2 errors."""
+
         @handle_database_errors
         def test_func():
             raise Exception("psycopg2.OperationalError: connection failed")
@@ -280,6 +293,7 @@ class TestMissingDecorators:
 
     def test_handle_database_errors_connection_error(self):
         """Test handle_database_errors wraps connection errors."""
+
         @handle_database_errors
         def test_func():
             raise Exception("Connection to database lost")
@@ -292,6 +306,7 @@ class TestMissingDecorators:
 
     def test_handle_database_errors_non_db_error(self):
         """Test handle_database_errors passes through non-database errors."""
+
         @handle_database_errors
         def test_func():
             raise ValueError("Not a database error")
@@ -303,6 +318,7 @@ class TestMissingDecorators:
 
     def test_handle_utility_errors_success(self):
         """Test handle_utility_errors with successful execution."""
+
         @handle_utility_errors
         def test_func():
             return "utility success"
@@ -312,6 +328,7 @@ class TestMissingDecorators:
 
     def test_handle_utility_errors_exception(self):
         """Test handle_utility_errors wraps exceptions."""
+
         @handle_utility_errors
         def test_func():
             raise ValueError("Utility failed")
@@ -329,6 +346,7 @@ class TestSyncDecoratorCoverage:
 
     def test_handle_service_errors_sync_exception(self):
         """Test handle_service_errors sync wrapper with exception."""
+
         @handle_service_errors
         def test_func():
             raise RuntimeError("Sync service error")
@@ -341,6 +359,7 @@ class TestSyncDecoratorCoverage:
 
     def test_handle_service_errors_sync_application_error(self):
         """Test handle_service_errors sync passes through ApplicationError."""
+
         @handle_service_errors
         def test_func():
             raise ValidationError("Validation failed")
@@ -350,6 +369,7 @@ class TestSyncDecoratorCoverage:
 
     def test_handle_api_errors_sync_success(self):
         """Test handle_api_errors sync with successful execution."""
+
         @handle_api_errors
         def test_func():
             return "sync api success"
@@ -359,6 +379,7 @@ class TestSyncDecoratorCoverage:
 
     def test_handle_api_errors_sync_validation_error(self):
         """Test handle_api_errors sync returns dict for ValidationError."""
+
         @handle_api_errors
         def test_func():
             raise ValidationError("Bad input", details={"field": "username"})
@@ -372,6 +393,7 @@ class TestSyncDecoratorCoverage:
 
     def test_handle_api_errors_sync_not_found(self):
         """Test handle_api_errors sync handles ResourceNotFoundError."""
+
         @handle_api_errors
         def test_func():
             raise ResourceNotFoundError("Product not found")
@@ -384,6 +406,7 @@ class TestSyncDecoratorCoverage:
 
     def test_handle_api_errors_sync_application_error(self):
         """Test handle_api_errors sync handles ApplicationError."""
+
         @handle_api_errors
         def test_func():
             raise ApplicationError("Operation failed")
@@ -395,6 +418,7 @@ class TestSyncDecoratorCoverage:
 
     def test_handle_api_errors_sync_generic_exception(self):
         """Test handle_api_errors sync handles unexpected exceptions."""
+
         @handle_api_errors
         def test_func():
             raise RuntimeError("Unexpected sync error")
@@ -407,6 +431,7 @@ class TestSyncDecoratorCoverage:
 
     def test_handle_tool_errors_sync_success(self):
         """Test handle_tool_errors sync with successful execution."""
+
         @handle_tool_errors
         def test_func():
             return {"result": "sync tool data"}
@@ -416,6 +441,7 @@ class TestSyncDecoratorCoverage:
 
     def test_handle_tool_errors_sync_validation_error(self):
         """Test handle_tool_errors sync wraps ValidationError."""
+
         @handle_tool_errors
         def test_func():
             raise ValidationError("Invalid tool params")
@@ -428,6 +454,7 @@ class TestSyncDecoratorCoverage:
 
     def test_handle_tool_errors_sync_generic_exception(self):
         """Test handle_tool_errors sync wraps generic exceptions."""
+
         @handle_tool_errors
         def test_func():
             raise RuntimeError("Sync tool failed")
@@ -457,7 +484,7 @@ class TestEdgeCases:
         error = ValidationError(
             "Invalid email",
             context=ErrorContext.API,
-            details={"field": "email", "value": "invalid"}
+            details={"field": "email", "value": "invalid"},
         )
         error_dict = error.to_dict()
 
@@ -476,6 +503,7 @@ class TestEdgeCases:
 
     def test_safe_fallback_with_list_default(self):
         """Test safe_fallback with list as default value."""
+
         @safe_fallback(default_value=[])
         def test_func():
             raise ValueError("Error")
@@ -485,6 +513,7 @@ class TestEdgeCases:
 
     def test_safe_fallback_with_dict_default(self):
         """Test safe_fallback with dict as default value."""
+
         @safe_fallback(default_value={})
         def test_func():
             raise ValueError("Error")
@@ -495,6 +524,7 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_handle_api_errors_application_error(self):
         """Test handle_api_errors async handles ApplicationError."""
+
         @handle_api_errors
         async def test_func():
             raise ApplicationError("Generic app error")

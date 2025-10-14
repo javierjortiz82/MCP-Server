@@ -107,6 +107,128 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # Google Calendar API Configuration (Booking System)
+    # ============================================================================
+    GOOGLE_CALENDAR_ENABLED: bool = Field(
+        default=False,
+        description="Enable Google Calendar integration for bookings",
+    )
+
+    GOOGLE_CALENDAR_CREDENTIALS_PATH: str = Field(
+        default="credentials/service-account.json",
+        description="Path to Google service account JSON credentials",
+    )
+
+    GOOGLE_CALENDAR_ID: str = Field(
+        default="primary",
+        description="Google Calendar ID for bookings (default: primary)",
+    )
+
+    GOOGLE_CALENDAR_TIMEZONE: str = Field(
+        default="America/New_York",
+        description="Timezone for Google Calendar events",
+    )
+
+    # ============================================================================
+    # Booking Configuration
+    # ============================================================================
+    BOOKING_DEFAULT_DURATION_MINUTES: int = Field(
+        default=60,
+        gt=0,
+        le=480,  # Max 8 hours
+        description="Default appointment duration in minutes",
+    )
+
+    BOOKING_SLOT_INTERVAL_MINUTES: int = Field(
+        default=30,
+        gt=0,
+        description="Time slot interval for availability checks",
+    )
+
+    BOOKING_ADVANCE_BOOKING_DAYS: int = Field(
+        default=30,
+        gt=0,
+        description="Maximum days in advance for booking",
+    )
+
+    BOOKING_MIN_ADVANCE_HOURS: int = Field(
+        default=2,
+        ge=0,
+        description="Minimum hours in advance required for booking",
+    )
+
+    BOOKING_MAX_DAILY_APPOINTMENTS: int = Field(
+        default=10,
+        gt=0,
+        description="Maximum appointments per day",
+    )
+
+    # ============================================================================
+    # Agent Memory Configuration (Persistent Context Management)
+    # ============================================================================
+    MEMORY_ENABLED: bool = Field(
+        default=True,
+        description="Enable persistent memory system for multi-agent context",
+    )
+
+    MEMORY_TTL_DAYS: int = Field(
+        default=90,
+        gt=0,
+        description="Default TTL for memory blocks in days",
+    )
+
+    MEMORY_MAX_HISTORY_TURNS: int = Field(
+        default=10,
+        gt=0,
+        le=50,
+        description="Maximum conversation turns to keep in short-term memory",
+    )
+
+    MEMORY_SEMANTIC_EXTRACTION_ENABLED: bool = Field(
+        default=True,
+        description="Enable LLM-based semantic memory extraction (Memory Blocks)",
+    )
+
+    MEMORY_AUTO_CLEANUP_ENABLED: bool = Field(
+        default=True,
+        description="Enable automatic cleanup of expired memory blocks",
+    )
+
+    MEMORY_PRIORITY_THRESHOLD: int = Field(
+        default=5,
+        ge=0,
+        le=10,
+        description="Minimum priority score (0-10) to persist memory block",
+    )
+
+    # ============================================================================
+    # Session Lifecycle Configuration (GDPR Compliance & Performance)
+    # ============================================================================
+    SESSION_SOFT_ARCHIVE_DAYS: int = Field(
+        default=90,
+        gt=0,
+        description="Days of inactivity before soft archiving session (exclude from queries)",
+    )
+
+    SESSION_HARD_DELETE_DAYS: int = Field(
+        default=365,
+        gt=0,
+        description="Days after archiving before permanently deleting session",
+    )
+
+    SESSION_PRESERVE_WITH_EMAIL_DAYS: int = Field(
+        default=180,
+        gt=0,
+        description="Keep sessions with customer_email longer (for CRM continuity)",
+    )
+
+    SESSION_ANONYMOUS_DELETE_DAYS: int = Field(
+        default=30,
+        gt=0,
+        description="Delete anonymous sessions (no email) faster (low business value)",
+    )
+
+    # ============================================================================
     # Field Validators
     # ============================================================================
     @field_validator("LOG_LEVEL")
@@ -207,6 +329,61 @@ class Settings(BaseSettings):
             "max_size_mb": self.LOG_MAX_SIZE_MB,
             "backup_count": self.LOG_BACKUP_COUNT,
             "log_dir": self.LOG_DIR,
+        }
+
+    def get_calendar_config(self) -> dict[str, str | bool]:
+        """Get Google Calendar configuration as dictionary.
+
+        Returns:
+            dict: Google Calendar configuration parameters
+        """
+        return {
+            "enabled": self.GOOGLE_CALENDAR_ENABLED,
+            "credentials_path": self.GOOGLE_CALENDAR_CREDENTIALS_PATH,
+            "calendar_id": self.GOOGLE_CALENDAR_ID,
+            "timezone": self.GOOGLE_CALENDAR_TIMEZONE,
+        }
+
+    def get_booking_config(self) -> dict[str, int]:
+        """Get booking configuration as dictionary.
+
+        Returns:
+            dict: Booking configuration parameters
+        """
+        return {
+            "default_duration_minutes": self.BOOKING_DEFAULT_DURATION_MINUTES,
+            "slot_interval_minutes": self.BOOKING_SLOT_INTERVAL_MINUTES,
+            "advance_booking_days": self.BOOKING_ADVANCE_BOOKING_DAYS,
+            "min_advance_hours": self.BOOKING_MIN_ADVANCE_HOURS,
+            "max_daily_appointments": self.BOOKING_MAX_DAILY_APPOINTMENTS,
+        }
+
+    def get_memory_config(self) -> dict[str, bool | int]:
+        """Get memory system configuration as dictionary.
+
+        Returns:
+            dict: Memory configuration parameters
+        """
+        return {
+            "enabled": self.MEMORY_ENABLED,
+            "ttl_days": self.MEMORY_TTL_DAYS,
+            "max_history_turns": self.MEMORY_MAX_HISTORY_TURNS,
+            "semantic_extraction_enabled": self.MEMORY_SEMANTIC_EXTRACTION_ENABLED,
+            "auto_cleanup_enabled": self.MEMORY_AUTO_CLEANUP_ENABLED,
+            "priority_threshold": self.MEMORY_PRIORITY_THRESHOLD,
+        }
+
+    def get_session_lifecycle_config(self) -> dict[str, int]:
+        """Get session lifecycle configuration as dictionary.
+
+        Returns:
+            dict: Session lifecycle configuration parameters
+        """
+        return {
+            "soft_archive_days": self.SESSION_SOFT_ARCHIVE_DAYS,
+            "hard_delete_days": self.SESSION_HARD_DELETE_DAYS,
+            "preserve_with_email_days": self.SESSION_PRESERVE_WITH_EMAIL_DAYS,
+            "anonymous_delete_days": self.SESSION_ANONYMOUS_DELETE_DAYS,
         }
 
 

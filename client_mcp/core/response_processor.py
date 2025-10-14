@@ -7,11 +7,11 @@ This module handles all post-generation response processing including:
 - Fallback pattern detection
 """
 
-from config.settings import settings
-from core.debug_formatter import DebugFormatter
-from core.response_validator import ResponseValidator
-from core.tool_executor import ToolExecutor
-from utils.logger import get_logger
+from client_mcp.config.settings import settings
+from client_mcp.core.debug_formatter import DebugFormatter
+from client_mcp.core.response_validator import ResponseValidator
+from client_mcp.core.tool_executor import ToolExecutor
+from client_mcp.utils.logger import get_logger
 
 logger = get_logger("ResponseProcessor", settings.LOG_LEVEL)
 
@@ -48,9 +48,7 @@ class ResponseProcessor:
         self.debug_formatter = debug_formatter
         self.tool_executor = tool_executor
 
-    async def process_text_response(
-        self, text: str, user_query: str
-    ) -> str:
+    async def process_text_response(self, text: str, user_query: str) -> str:
         """Process text response with validation and debug info.
 
         Args:
@@ -110,9 +108,13 @@ class ResponseProcessor:
         if len(matching_metrics) == 2:
             first, second = matching_metrics[0], matching_metrics[1]
             # Check if this is a fallback scenario (order-independent)
-            if first.success and second.success and (
-                (first.result_size == 0 and second.result_size > 0)
-                or (second.result_size == 0 and first.result_size > 0)
+            if (
+                first.success
+                and second.success
+                and (
+                    (first.result_size == 0 and second.result_size > 0)
+                    or (second.result_size == 0 and first.result_size > 0)
+                )
             ):
                 # Determine which is primary (0 results) and which is fallback (has results)
                 primary = first if first.result_size == 0 else second

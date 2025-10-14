@@ -17,3 +17,7 @@ google-genai>=1.0.0                # Google GenAI SDK for Gemini models
 pydantic>=2.11.0                   # Data validation and settings management (v2)
 pydantic-settings>=2.11.0          # Settings management from environment variables
 python-dotenv>=1.0.0               # Load environment variables from .env file
+
+# Template Engine and Data Formats
+jinja2>=3.1.0                      # Template engine for prompt management
+pyyaml>=6.0.0                      # YAML parser for configuration data

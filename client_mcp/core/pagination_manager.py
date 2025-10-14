@@ -407,7 +407,20 @@ class PaginationManager:
             return "general"
 
         # Filter out common words that don't add intent
-        stopwords = {"de", "para", "con", "en", "el", "la", "los", "las", "un", "una", "y", "a"}
+        stopwords = {
+            "de",
+            "para",
+            "con",
+            "en",
+            "el",
+            "la",
+            "los",
+            "las",
+            "un",
+            "una",
+            "y",
+            "a",
+        }
         meaningful_words = [w for w in words if w not in stopwords]
 
         if not meaningful_words:
@@ -473,9 +486,13 @@ class PaginationManager:
         # Footer with remaining count
         if remaining > 0:
             if spanish_mode:
-                response_lines.append(f"\n💡 Quedan {remaining} productos más. Escribe 'más' para verlos.")
+                response_lines.append(
+                    f"\n💡 Quedan {remaining} productos más. Escribe 'más' para verlos."
+                )
             else:
-                response_lines.append(f"\n💡 {remaining} more products available. Type 'more' to see them.")
+                response_lines.append(
+                    f"\n💡 {remaining} more products available. Type 'more' to see them."
+                )
         else:
             if spanish_mode:
                 response_lines.append("\n✅ Esos son todos los resultados disponibles.")

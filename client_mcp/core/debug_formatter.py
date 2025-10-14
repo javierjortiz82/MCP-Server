@@ -7,7 +7,7 @@ metrics and debug information in a user-friendly way.
 import hashlib
 import json
 
-from observability.metrics import ToolMetric
+from client_mcp.observability.metrics import ToolMetric
 
 
 class DebugFormatter:
@@ -80,11 +80,7 @@ class DebugFormatter:
         params_str = ", ".join(f"{k}={repr(v)}" for k, v in metric.parameters.items())
 
         # Format status with emoji
-        status = (
-            "✅ Éxito"
-            if metric.success
-            else f"❌ Error: {metric.error_message}"
-        )
+        status = "✅ Éxito" if metric.success else f"❌ Error: {metric.error_message}"
 
         # Handle fallback case
         result_msg = f"{metric.result_size} producto(s) encontrado(s)"
@@ -159,9 +155,7 @@ class DebugFormatter:
         self.shown_debug_hashes.add(metric_hash)
         return True
 
-    def should_show_fallback(
-        self, primary: ToolMetric, fallback: ToolMetric
-    ) -> bool:
+    def should_show_fallback(self, primary: ToolMetric, fallback: ToolMetric) -> bool:
         """Check if fallback metrics should be shown.
 
         Args:
@@ -171,9 +165,7 @@ class DebugFormatter:
         Returns:
             True if fallback should be shown, False if already displayed
         """
-        combined_hash = self.get_metric_hash(primary) + self.get_metric_hash(
-            fallback
-        )
+        combined_hash = self.get_metric_hash(primary) + self.get_metric_hash(fallback)
         if combined_hash in self.shown_debug_hashes:
             return False
 

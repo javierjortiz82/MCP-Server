@@ -83,44 +83,55 @@ def get_conn() -> Iterator[psycopg2.extensions.connection]:
         _pool.putconn(conn)
 
 
-def fetchone(query: str, params: tuple[Any, ...] = ()) -> dict | None:
+def fetchone(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> dict | None:
     """Execute a query and return a single row as a dictionary.
 
     Args:
         query: SQL query string (can include %s placeholders)
         params: Tuple of parameters for query placeholders (default: empty tuple)
+        commit: Whether to commit the transaction (default: False for SELECT, True for INSERT/UPDATE/DELETE)
 
     Returns:
         Dictionary with column names as keys and values, or None if no row found
 
     Example:
+        >>> # SELECT query (no commit needed)
         >>> result = fetchone("SELECT * FROM products WHERE id = %s", (42,))
         >>> if result:
         ...     print(result['name'])
+        >>>
+        >>> # INSERT with RETURNING (commit required)
+        >>> result = fetchone("INSERT INTO products (...) VALUES (...) RETURNING id", (...), commit=True)
     """
     with get_conn() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(query, params)
+        if commit:
+            conn.commit()
         row = cur.fetchone()
         return dict(row) if row else None
 
 
-def fetchall(query: str, params: tuple[Any, ...] = ()) -> list[dict]:
+def fetchall(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> list[dict]:
     """Execute a query and return all rows as a list of dictionaries.
 
     Args:
         query: SQL query string (can include %s placeholders)
         params: Tuple of parameters for query placeholders (default: empty tuple)
+        commit: Whether to commit the transaction (default: False for SELECT, True for write operations)
 
     Returns:
         List of dictionaries, each representing a row with column names as keys
 
     Example:
+        >>> # SELECT query (no commit needed)
         >>> results = fetchall("SELECT * FROM products WHERE category = %s", ("Electronics",))
         >>> for product in results:
         ...     print(product['name'], product['price'])
     """
     with get_conn() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(query, params)
+        if commit:
+            conn.commit()
         rows = cur.fetchall()
         return [dict(r) for r in rows]
 

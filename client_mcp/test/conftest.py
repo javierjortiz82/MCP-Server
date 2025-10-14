@@ -78,7 +78,6 @@ def sample_mcp_tools():
 @pytest.fixture
 def sample_gemini_response():
     """Sample Gemini API response."""
-    from google.genai import types
 
     mock_part = MagicMock()
     mock_part.text = "Test response from Gemini"

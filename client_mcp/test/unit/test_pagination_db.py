@@ -1,11 +1,9 @@
 """Unit tests for core/pagination_db.py."""
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import MagicMock, patch
-from uuid import UUID, uuid4
-
-import pytest
+from uuid import uuid4
 
 from core.pagination_db import PaginationDB
 

@@ -16,8 +16,12 @@ class FallbackRule:
 
     primary_tool: str
     fallback_tool: str
-    param_mapping: dict[str, str] | None = None  # Maps primary params to fallback params
-    condition: Callable[[Exception], bool] | None = None  # Optional condition to trigger fallback
+    param_mapping: dict[str, str] | None = (
+        None  # Maps primary params to fallback params
+    )
+    condition: Callable[[Exception], bool] | None = (
+        None  # Optional condition to trigger fallback
+    )
 
 
 class FallbackStrategy:
@@ -108,24 +112,32 @@ class FallbackStrategy:
         while depth <= max_fallback_depth:
             try:
                 # Try to execute current tool (without fallback to avoid recursion)
-                result = await executor.execute_tool(current_tool, current_params, _use_fallback=False)
+                result = await executor.execute_tool(
+                    current_tool, current_params, _use_fallback=False
+                )
 
                 if depth > 0:
-                    self.logger.info(f"Fallback successful: used '{current_tool}' instead of '{primary_tool}'")
+                    self.logger.info(
+                        f"Fallback successful: used '{current_tool}' instead of '{primary_tool}'"
+                    )
 
                 return result
 
             except Exception as e:
                 # Check if fallback rules exist for current tool
                 if current_tool not in self._rules:
-                    self.logger.error(f"Tool '{current_tool}' failed and no fallback rules defined")
+                    self.logger.error(
+                        f"Tool '{current_tool}' failed and no fallback rules defined"
+                    )
                     raise
 
                 # Find applicable fallback rule
                 fallback_rule = self._find_applicable_rule(current_tool, e)
 
                 if not fallback_rule:
-                    self.logger.error(f"Tool '{current_tool}' failed but no applicable fallback rule found")
+                    self.logger.error(
+                        f"Tool '{current_tool}' failed but no applicable fallback rule found"
+                    )
                     raise
 
                 # Apply fallback
@@ -135,16 +147,22 @@ class FallbackStrategy:
 
                 # Map parameters if needed
                 if fallback_rule.param_mapping:
-                    current_params = self._map_parameters(current_params, fallback_rule.param_mapping)
+                    current_params = self._map_parameters(
+                        current_params, fallback_rule.param_mapping
+                    )
 
                 # Update for next iteration
                 current_tool = fallback_rule.fallback_tool
                 depth += 1
 
         # Max depth reached
-        raise RuntimeError(f"Maximum fallback depth ({max_fallback_depth}) reached. Original tool: {primary_tool}")
+        raise RuntimeError(
+            f"Maximum fallback depth ({max_fallback_depth}) reached. Original tool: {primary_tool}"
+        )
 
-    def _find_applicable_rule(self, tool_name: str, exception: Exception) -> FallbackRule | None:
+    def _find_applicable_rule(
+        self, tool_name: str, exception: Exception
+    ) -> FallbackRule | None:
         """Find the first applicable fallback rule for a tool.
 
         Args:
@@ -167,7 +185,9 @@ class FallbackStrategy:
 
         return None
 
-    def _map_parameters(self, params: dict[str, Any], mapping: dict[str, str]) -> dict[str, Any]:
+    def _map_parameters(
+        self, params: dict[str, Any], mapping: dict[str, str]
+    ) -> dict[str, Any]:
         """Map parameters from one tool's schema to another.
 
         Args:

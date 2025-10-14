@@ -1,13 +1,11 @@
 """Unit tests for ToolCache."""
 
 import time
-import pytest
-from unittest.mock import MagicMock
 
 from core.tool_cache import (
     CachedTool,
-    ToolsSnapshot,
     ToolCache,
+    ToolsSnapshot,
     get_global_cache,
 )
 
@@ -161,8 +159,16 @@ class TestToolCache:
         cache = ToolCache()
 
         tools_defs = [
-            {"name": "tool1", "description": "Tool 1", "inputSchema": {"type": "object"}},
-            {"name": "tool2", "description": "Tool 2", "inputSchema": {"type": "string"}},
+            {
+                "name": "tool1",
+                "description": "Tool 1",
+                "inputSchema": {"type": "object"},
+            },
+            {
+                "name": "tool2",
+                "description": "Tool 2",
+                "inputSchema": {"type": "string"},
+            },
         ]
         wrappers = [lambda: "w1", lambda: "w2"]
 
@@ -454,6 +460,7 @@ class TestGlobalCache:
         """Test that get_global_cache creates instance."""
         # Reset global cache
         import core.tool_cache
+
         core.tool_cache._global_cache = None
 
         cache = get_global_cache()
@@ -465,6 +472,7 @@ class TestGlobalCache:
         """Test that get_global_cache returns same instance."""
         # Reset global cache
         import core.tool_cache
+
         core.tool_cache._global_cache = None
 
         cache1 = get_global_cache()
@@ -475,6 +483,7 @@ class TestGlobalCache:
     def test_get_global_cache_custom_ttl(self):
         """Test creating global cache with custom TTL."""
         import core.tool_cache
+
         core.tool_cache._global_cache = None
 
         cache = get_global_cache(ttl_seconds=600.0)
@@ -484,6 +493,7 @@ class TestGlobalCache:
     def test_get_global_cache_ignores_ttl_on_existing(self):
         """Test that TTL is ignored if cache already exists."""
         import core.tool_cache
+
         core.tool_cache._global_cache = None
 
         cache1 = get_global_cache(ttl_seconds=300.0)

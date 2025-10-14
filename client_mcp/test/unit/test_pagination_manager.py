@@ -1,6 +1,5 @@
 """Unit tests for core/pagination_manager.py."""
 
-import pytest
 from core.pagination_manager import PaginationManager, SearchContext
 
 
@@ -17,7 +16,7 @@ class TestSearchContext:
             page_size=2,
             current_page=0,
             all_results=products,
-            total_count=5
+            total_count=5,
         )
 
         assert context.category == "laptops"
@@ -38,7 +37,7 @@ class TestSearchContext:
             page_size=2,
             current_page=0,  # Showing products 0-1, have 2-3 left
             all_results=products,
-            total_count=4
+            total_count=4,
         )
 
         assert context.has_more is True
@@ -53,7 +52,7 @@ class TestSearchContext:
             page_size=2,
             current_page=1,  # Showing products 2, no more left
             all_results=products,
-            total_count=3
+            total_count=3,
         )
 
         assert context.has_more is False
@@ -68,7 +67,7 @@ class TestSearchContext:
             page_size=2,
             current_page=1,  # Second page
             all_results=products,
-            total_count=4
+            total_count=4,
         )
 
         page = context.get_current_page()
@@ -86,7 +85,7 @@ class TestSearchContext:
             page_size=2,
             current_page=0,
             all_results=products,
-            total_count=4
+            total_count=4,
         )
 
         next_page = context.get_next_page()
@@ -106,7 +105,7 @@ class TestSearchContext:
             page_size=2,
             current_page=0,
             all_results=products,
-            total_count=2
+            total_count=2,
         )
 
         next_page = context.get_next_page()
@@ -123,7 +122,7 @@ class TestSearchContext:
             page_size=2,
             current_page=0,  # Shown: 2, Remaining: 3
             all_results=products,
-            total_count=5
+            total_count=5,
         )
 
         assert context.remaining_count() == 3
@@ -138,7 +137,7 @@ class TestSearchContext:
             page_size=2,
             current_page=0,
             all_results=products,
-            total_count=2
+            total_count=2,
         )
 
         assert context.remaining_count() == 0
@@ -172,7 +171,7 @@ class TestSaveSearch:
             tool="search_products",
             query="gaming laptops",
             results=products,
-            page_size=2
+            page_size=2,
         )
 
         assert manager.has_context("laptops")
@@ -184,10 +183,7 @@ class TestSaveSearch:
         products = [{"id": 1}, {"id": 2}]
 
         manager.save_search(
-            category="test",
-            tool="search_products",
-            query="test",
-            results=products
+            category="test", tool="search_products", query="test", results=products
         )
 
         context = manager._contexts["test"]
@@ -502,7 +498,9 @@ class TestExtractCategoryFromQuery:
         """Test extracts first 4 meaningful words."""
         manager = PaginationManager()
 
-        category = manager.extract_category_from_query("gaming laptops high performance")
+        category = manager.extract_category_from_query(
+            "gaming laptops high performance"
+        )
         assert category == "gaming laptops high performance"
 
     def test_extract_category_filters_stopwords(self):
@@ -533,9 +531,18 @@ class TestExtractCategoryFromQuery:
         # Test cases demonstrating intent capture
         test_cases = [
             ("laptop gaming barato estudiante", "laptop gaming barato estudiante"),
-            ("bolsos de mujer para oficina ejecutiva", "bolsos mujer oficina ejecutiva"),
-            ("mouse inalámbrico gaming RGB profesional", "mouse inalámbrico gaming rgb"),
-            ("zapatillas running Nike baratas originales", "zapatillas running nike baratas"),
+            (
+                "bolsos de mujer para oficina ejecutiva",
+                "bolsos mujer oficina ejecutiva",
+            ),
+            (
+                "mouse inalámbrico gaming RGB profesional",
+                "mouse inalámbrico gaming rgb",
+            ),
+            (
+                "zapatillas running Nike baratas originales",
+                "zapatillas running nike baratas",
+            ),
         ]
 
         for query, expected in test_cases:
@@ -578,7 +585,9 @@ class TestPaginationFlow:
             {"id": 4, "name": "Product 4"},
             {"id": 5, "name": "Product 5"},
         ]
-        manager.save_search("test", "search_products", "test products", products, page_size=2)
+        manager.save_search(
+            "test", "search_products", "test products", products, page_size=2
+        )
 
         # Check initial state
         assert manager.get_total_count("test") == 5
@@ -610,7 +619,9 @@ class TestPaginationFlow:
         laptops = [{"id": 1}, {"id": 2}, {"id": 3}]
         phones = [{"id": 10}, {"id": 11}]
 
-        manager.save_search("laptops", "search_products", "laptops", laptops, page_size=2)
+        manager.save_search(
+            "laptops", "search_products", "laptops", laptops, page_size=2
+        )
         manager.save_search("phones", "search_products", "phones", phones, page_size=2)
 
         # Check both contexts exist independently
