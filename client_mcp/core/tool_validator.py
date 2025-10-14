@@ -38,7 +38,9 @@ class ToolValidator:
         model = self._create_model_from_schema(tool_name, input_schema)
         self._models_cache[tool_name] = model
 
-    def validate_parameters(self, tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
+    def validate_parameters(
+        self, tool_name: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
         """Validate and coerce parameters for a tool.
 
         Args:
@@ -74,7 +76,9 @@ class ToolValidator:
                 line_errors=e.errors(),  # type: ignore[arg-type]
             ) from e
 
-    def _preprocess_gemini_params(self, tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
+    def _preprocess_gemini_params(
+        self, tool_name: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
         """Preprocess parameters from Gemini to handle type mismatches.
 
         Gemini sometimes sends lists as RepeatedComposite or in formats
@@ -155,7 +159,9 @@ class ToolValidator:
 
         return sanitized.strip()
 
-    def _create_model_from_schema(self, tool_name: str, schema: dict) -> type[BaseModel]:
+    def _create_model_from_schema(
+        self, tool_name: str, schema: dict
+    ) -> type[BaseModel]:
         """Create a Pydantic model dynamically from JSON Schema.
 
         Args:

@@ -233,7 +233,9 @@ class ToolCache:
         valid_tools = len(self.get_all_tools())
         expired_tools = total_tools - valid_tools
 
-        snapshot_age = time.time() - self._snapshot.cached_at if self._snapshot else None
+        snapshot_age = (
+            time.time() - self._snapshot.cached_at if self._snapshot else None
+        )
 
         return {
             "total_tools_cached": total_tools,

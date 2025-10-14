@@ -1,9 +1,10 @@
 """Unit tests for Settings configuration using Pydantic BaseSettings v2."""
 
 import os
-import pytest
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from config.settings import Settings, settings
 
@@ -108,7 +109,7 @@ class TestSettings:
     def test_mcp_base_url_computed(self):
         """Test MCP_BASE_URL is computed from host and port."""
         expected_url = f"http://{settings.MCP_HOST}:{settings.MCP_PORT}/mcp"
-        assert settings.MCP_BASE_URL == expected_url
+        assert expected_url == settings.MCP_BASE_URL
 
 
 class TestSettingsEnvironmentVariables:
@@ -217,7 +218,7 @@ class TestSettingsValidation:
         valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR"]
         for level in valid_levels:
             test_settings = Settings(LOG_LEVEL=level)
-            assert test_settings.LOG_LEVEL == level
+            assert level == test_settings.LOG_LEVEL
 
     def test_log_level_validation_invalid(self):
         """Test log level validator rejects invalid values."""

@@ -9,8 +9,8 @@ from typing import Any
 
 from google.genai import types
 
-from utils.logger import get_logger
-from config.settings import settings
+from client_mcp.config.settings import settings
+from client_mcp.utils.logger import get_logger
 
 logger = get_logger("ResponseValidator", settings.LOG_LEVEL)
 
@@ -38,9 +38,7 @@ class ResponseValidator:
         self.conversation_history = conversation_history
         self.gemini_client = gemini_client
 
-    def validate_response_skus(
-        self, response_text: str, user_query: str
-    ) -> str | None:
+    def validate_response_skus(self, response_text: str, user_query: str) -> str | None:
         """Validate that all SKUs in response exist in tool results.
 
         This is a CODE-BASED defense against LLM hallucinations.
@@ -143,9 +141,7 @@ class ResponseValidator:
             logger.debug("📋 Tool returned 0 products - empty valid SKU set")
             return set()
 
-    async def regenerate_without_hallucinations(
-        self, user_query: str
-    ) -> str:
+    async def regenerate_without_hallucinations(self, user_query: str) -> str:
         """Regenerate response with strict constraint after hallucination detected.
 
         Args:
@@ -176,7 +172,7 @@ class ResponseValidator:
                         "REGLAS OBLIGATORIAS:\n"
                         '1. SOLO muestra productos del array tool_response["products"]\n'
                         '2. El SKU REAL está en products[i]["sku"] - NO en products[i]["name"]\n'
-                        '3. NUNCA uses códigos del nombre como SKUs\n'
+                        "3. NUNCA uses códigos del nombre como SKUs\n"
                         "4. Si no hay productos → Di 'No encontré productos'\n"
                         "5. VERIFICA cada SKU contra la lista de SKUs válidos arriba\n\n"
                         "Regenera tu respuesta mostrando SOLO productos con SKUs de la lista válida."
@@ -194,16 +190,33 @@ class ResponseValidator:
 
         # Extract text
         if hasattr(response, "candidates") and response.candidates:
-            parts = response.candidates[0].content.parts
-            text_parts = [part.text for part in parts if hasattr(part, "text") and part.text]
+            # Defensive check: content can be None
+            content = response.candidates[0].content
+            if content is None or not hasattr(content, "parts"):
+                logger.warning(
+                    "Response content is None or missing parts after regeneration"
+                )
+                return (
+                    "No pude generar una respuesta válida después de detectar un error. "
+                    "Por favor, intenta reformular tu consulta."
+                )
+
+            parts = content.parts
+            text_parts = [
+                part.text for part in parts if hasattr(part, "text") and part.text
+            ]
             if text_parts:
                 regenerated_text = " ".join(text_parts)
 
                 # Validate again (ONE retry only to prevent infinite loop)
-                final_validated = self.validate_response_skus(regenerated_text, user_query)
+                final_validated = self.validate_response_skus(
+                    regenerated_text, user_query
+                )
                 if final_validated is None:
                     # Still hallucinating after retry - force safe fallback
-                    logger.error("🚫 Model still hallucinating after retry - using fallback")
+                    logger.error(
+                        "🚫 Model still hallucinating after retry - using fallback"
+                    )
                     return (
                         "Encontré algunos productos, pero estoy teniendo dificultades técnicas para "
                         "mostrártelos correctamente. Por favor, reformula tu búsqueda o contacta con soporte."

@@ -1,9 +1,8 @@
 """Unit tests for RateLimiter."""
 
 import asyncio
+
 import pytest
-from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
 
 # Try to import, skip tests if aiolimiter not available
 pytest.importorskip("aiolimiter", reason="aiolimiter not installed")
@@ -16,11 +15,7 @@ class TestRateLimiter:
 
     def test_initialization(self):
         """Test RateLimiter initialization."""
-        limiter = RateLimiter(
-            rpm_limit=15,
-            rpd_limit=1500,
-            max_concurrent=3
-        )
+        limiter = RateLimiter(rpm_limit=15, rpd_limit=1500, max_concurrent=3)
 
         assert limiter.rpm_limit == 15
         assert limiter.rpd_limit == 1500
@@ -63,10 +58,7 @@ class TestRateLimiter:
                 await asyncio.sleep(0.1)
 
         # This should work fine (2 concurrent)
-        await asyncio.gather(
-            make_request(),
-            make_request()
-        )
+        await asyncio.gather(make_request(), make_request())
 
         assert limiter.total_requests == 2
 

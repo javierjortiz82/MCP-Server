@@ -229,7 +229,9 @@ class MCPConnector:
             for prompt in result.prompts
         ]
 
-    async def get_prompt(self, name: str, arguments: dict[str, str] | None = None) -> Any:
+    async def get_prompt(
+        self, name: str, arguments: dict[str, str] | None = None
+    ) -> Any:
         """Get an MCP prompt using official SDK.
 
         Args:

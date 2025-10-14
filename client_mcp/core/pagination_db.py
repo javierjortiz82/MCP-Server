@@ -51,8 +51,12 @@ class PaginationDB:
         """
         # Validate password when persistence is enabled
         if not settings.PAGINATION_DB_PASSWORD:
-            logger.error("❌ PAGINATION_DB_PASSWORD must be set when persistence is enabled")
-            logger.warning("⚠️  Pagination persistence disabled - password not configured")
+            logger.error(
+                "❌ PAGINATION_DB_PASSWORD must be set when persistence is enabled"
+            )
+            logger.warning(
+                "⚠️  Pagination persistence disabled - password not configured"
+            )
             self._enabled = False
             self._pool = None
             return
@@ -322,7 +326,9 @@ class PaginationDB:
 
                 deleted_count = cur.rowcount
                 logger.info(
-                    "🧹 Cleaned up %d contexts for session %s", deleted_count, session_id
+                    "🧹 Cleaned up %d contexts for session %s",
+                    deleted_count,
+                    session_id,
                 )
                 return deleted_count
 

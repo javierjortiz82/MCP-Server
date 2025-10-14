@@ -15,7 +15,7 @@ class TestMainModuleStructure:
 
     def test_main_file_has_content(self):
         """Test that __main__.py has expected content."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         # Verify key components exist
@@ -26,7 +26,7 @@ class TestMainModuleStructure:
 
     def test_main_imports_odiseo_bot(self):
         """Test that main imports OdiseoBot correctly."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         # Should have both relative and absolute import for compatibility
@@ -37,7 +37,7 @@ class TestMainModuleStructure:
 
     def test_main_has_error_handling(self):
         """Test that main has proper error handling."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         # Verify error handling exists
@@ -47,14 +47,14 @@ class TestMainModuleStructure:
 
     def test_main_has_cleanup(self):
         """Test that main calls cleanup."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         assert "await bot.cleanup()" in content
 
     def test_main_has_bot_lifecycle(self):
         """Test that main has complete bot lifecycle."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         assert "bot = OdiseoBot()" in content
@@ -64,7 +64,7 @@ class TestMainModuleStructure:
 
     def test_main_has_docstring(self):
         """Test that module has documentation."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         # Should start with docstring
@@ -73,7 +73,7 @@ class TestMainModuleStructure:
 
     def test_main_handles_keyboard_interrupt(self):
         """Test that KeyboardInterrupt is handled gracefully."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         # Should catch KeyboardInterrupt and print message
@@ -83,14 +83,14 @@ class TestMainModuleStructure:
 
     def test_main_handles_exceptions_with_exit(self):
         """Test that exceptions cause sys.exit(1)."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         assert "sys.exit(1)" in content
 
     def test_main_prints_startup_banner(self):
         """Test that startup banner is printed."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         # Should print banner in the if __name__ == "__main__" block
@@ -133,7 +133,7 @@ class TestMainModuleCodeQuality:
 
     def test_main_uses_asyncio(self):
         """Test that main uses asyncio for async execution."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         assert "import asyncio" in content
@@ -141,7 +141,7 @@ class TestMainModuleCodeQuality:
 
     def test_main_has_shebang(self):
         """Test that file has proper shebang for direct execution."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             first_line = f.readline()
 
         assert first_line.startswith("#!")
@@ -149,14 +149,14 @@ class TestMainModuleCodeQuality:
 
     def test_main_imports_sys(self):
         """Test that sys module is imported for exit handling."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         assert "import sys" in content
 
     def test_main_file_size_reasonable(self):
         """Test that __main__.py is concise (thin wrapper)."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             lines = f.readlines()
 
         # Should be a thin wrapper, not too large
@@ -175,7 +175,12 @@ class TestMainModuleExecution:
         # (We don't actually run it as it would start the interactive bot)
         # Just verify the file is properly formatted
         result = subprocess.run(
-            [sys.executable, "-m", "py_compile", "/home/javort/Lab01-MCP/client_mcp/__main__.py"],
+            [
+                sys.executable,
+                "-m",
+                "py_compile",
+                "/home/javort/Lab01-MCP/client_mcp/__main__.py",
+            ],
             capture_output=True,
         )
 
@@ -184,7 +189,7 @@ class TestMainModuleExecution:
 
     def test_main_entry_point_format(self):
         """Test that entry point has correct format."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         # Verify proper if __name__ == "__main__" format
@@ -206,7 +211,7 @@ class TestMainModuleErrorMessages:
 
     def test_keyboard_interrupt_message_friendly(self):
         """Test that KeyboardInterrupt shows friendly message."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         # Find the KeyboardInterrupt handler
@@ -230,7 +235,7 @@ class TestMainModuleErrorMessages:
 
     def test_error_message_shows_details(self):
         """Test that error messages show exception details."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         # Error handler should use {e} or str(e) to show error details
@@ -243,14 +248,14 @@ class TestMainModuleBestPractices:
 
     def test_main_function_is_async(self):
         """Test that main() is defined as async function."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         assert "async def main():" in content
 
     def test_cleanup_in_finally_block(self):
         """Test that cleanup is in finally block for guaranteed execution."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         # Should have finally block with cleanup
@@ -269,7 +274,7 @@ class TestMainModuleBestPractices:
 
     def test_uses_context_appropriate_imports(self):
         """Test that imports handle both direct and module execution."""
-        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py", "r") as f:
+        with open("/home/javort/Lab01-MCP/client_mcp/__main__.py") as f:
             content = f.read()
 
         # Should have try/except for import compatibility

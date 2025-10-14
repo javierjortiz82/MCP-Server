@@ -1,7 +1,8 @@
 """Integration tests for OdiseoBot initialization."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from core.odiseo_bot import OdiseoBot
 
@@ -23,6 +24,7 @@ class TestOdiseoBotInitialization:
         """Test successful bot initialization creates required components."""
         # Mock Settings instance with API key
         from config.settings import Settings
+
         test_settings = Settings(GOOGLE_API_KEY="test-key-12345")
 
         with patch("config.settings.settings", test_settings):
@@ -51,8 +53,8 @@ class TestOdiseoBotInitialization:
     @pytest.mark.asyncio
     async def test_bot_initialization_with_tools(self, sample_mcp_tools):
         """Test bot can create tool executor with sample tools."""
-        from core.tool_executor import ToolExecutor
         from core.mcp_connector import MCPConnector
+        from core.tool_executor import ToolExecutor
 
         # Create tool executor directly (bypass full bot initialization)
         mock_connector = MagicMock(spec=MCPConnector)
@@ -90,9 +92,9 @@ class TestOdiseoBotInitialization:
         """Test bot works without rate limiter when disabled."""
         # Create settings with rate limiting disabled and API key
         from config.settings import Settings
+
         test_settings = Settings(
-            GOOGLE_API_KEY="test-key-12345",
-            ENABLE_RATE_LIMITING=False
+            GOOGLE_API_KEY="test-key-12345", ENABLE_RATE_LIMITING=False
         )
 
         with patch("config.settings.settings", test_settings):

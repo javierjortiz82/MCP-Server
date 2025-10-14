@@ -43,7 +43,7 @@ class GeminiAgent:
             **generation_params: Override generation parameters (temperature, top_k, etc.)
         """
         self.api_key = api_key or settings.GOOGLE_API_KEY
-        self.model_name = model_name or settings.MODEL_NAME
+        self.model_name = model_name or settings.MODEL
         self.client: genai.Client | None = None
         self.conversation_history: list[types.Content] = []
         self.generation_config: types.GenerateContentConfig | None = None
@@ -60,7 +60,9 @@ class GeminiAgent:
         """Initialize the Gemini client."""
         logger.debug("Initializing Gemini client...")
         self.client = genai.Client(api_key=self.api_key)
-        self.generation_config = self._build_generation_config(**self._generation_params)
+        self.generation_config = self._build_generation_config(
+            **self._generation_params
+        )
         logger.info("Gemini client initialized successfully")
 
     def _build_generation_config(
@@ -85,7 +87,11 @@ class GeminiAgent:
         temp = temperature if temperature is not None else settings.TEMPERATURE
         k = top_k if top_k is not None else settings.TOP_K
         p = top_p if top_p is not None else settings.TOP_P
-        tokens = max_output_tokens if max_output_tokens is not None else settings.MAX_OUTPUT_TOKENS
+        tokens = (
+            max_output_tokens
+            if max_output_tokens is not None
+            else settings.MAX_OUTPUT_TOKENS
+        )
 
         logger.debug(
             "Generation config: temp=%s, top_k=%s, top_p=%s, max_tokens=%s",
@@ -179,7 +185,10 @@ class GeminiAgent:
 
                 # Maintain reasonable history size
                 if len(self.conversation_history) > 20:
-                    logger.debug("Trimming conversation history (was %d items)", len(self.conversation_history))
+                    logger.debug(
+                        "Trimming conversation history (was %d items)",
+                        len(self.conversation_history),
+                    )
                     self.conversation_history = self.conversation_history[-20:]
 
             return response
@@ -205,7 +214,10 @@ class GeminiAgent:
 
     def clear_history(self) -> None:
         """Clear conversation history."""
-        logger.debug("Clearing conversation history (had %d items)", len(self.conversation_history))
+        logger.debug(
+            "Clearing conversation history (had %d items)",
+            len(self.conversation_history),
+        )
         self.conversation_history = []
 
     def update_generation_config(self, **kwargs: Any) -> None:
@@ -218,7 +230,9 @@ class GeminiAgent:
             "temperature": kwargs.get("temperature", settings.TEMPERATURE),
             "top_k": kwargs.get("top_k", settings.TOP_K),
             "top_p": kwargs.get("top_p", settings.TOP_P),
-            "max_output_tokens": kwargs.get("max_output_tokens", settings.MAX_OUTPUT_TOKENS),
+            "max_output_tokens": kwargs.get(
+                "max_output_tokens", settings.MAX_OUTPUT_TOKENS
+            ),
         }
         self.generation_config = self._build_generation_config(**config_dict)
 
@@ -430,7 +444,9 @@ class GeminiAgent:
                     )
                     # Invalidate cache and rebuild config
                     self.cached_content = None
-                    self.generation_config = self._build_generation_config(**self._generation_params)
+                    self.generation_config = self._build_generation_config(
+                        **self._generation_params
+                    )
                     logger.info("✅ Config rebuilt in standard mode (no cache)")
                     continue
 
@@ -446,7 +462,7 @@ class GeminiAgent:
                             "⚠️ Rate limit hit (429). Retrying in %.1fs... (attempt %d/%d)",
                             wait_time,
                             attempt + 1,
-                            max_retries
+                            max_retries,
                         )
                         await asyncio.sleep(wait_time)
                         continue

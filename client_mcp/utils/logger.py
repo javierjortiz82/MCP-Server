@@ -44,7 +44,7 @@ class MCPLogger:
         log_to_file: bool = True,
         log_dir: str | Path = "logs",
         max_bytes: int = 10 * 1024 * 1024,  # 10MB
-        backup_count: int = 5
+        backup_count: int = 5,
     ):
         """Initialize the MCP logger.
 
@@ -185,7 +185,9 @@ class MCPLogger:
         tool_context = f"[{tool_name}] " if tool_name else ""
 
         if isinstance(result, list):
-            self.logger.info(f"✅ [MCP] {tool_context}Resultado: Encontrados {len(result)} elementos")
+            self.logger.info(
+                f"✅ [MCP] {tool_context}Resultado: Encontrados {len(result)} elementos"
+            )
             if len(result) > 0 and isinstance(result[0], dict):
                 for i, item in enumerate(result[:3], 1):
                     item_name = item.get("name", item.get("sku", f"Item {i}"))
@@ -245,10 +247,12 @@ def _get_global_logger() -> MCPLogger:
     """Get global logger with LOG_LEVEL from settings."""
     try:
         from config.settings import settings
+
         return MCPLogger(level=settings.LOG_LEVEL)
     except ImportError:
         # Fallback if settings not available
         return MCPLogger(level="INFO")
+
 
 logger = _get_global_logger()
 

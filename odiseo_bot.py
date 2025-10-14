@@ -18,12 +18,16 @@ from typing import Any
 try:
     from google.genai import types
 except ImportError:
-    raise RuntimeError("Instala la librería 'google-genai' con: pip install google-genai>=1.38.0")
+    raise RuntimeError(
+        "Instala la librería 'google-genai' con: pip install google-genai>=1.38.0"
+    )
 
 try:
     from gemini_agent import GeminiAgent
 except ImportError:
-    raise RuntimeError("Instala la librería 'gemini-agent' con: pip install -e ../agent")
+    raise RuntimeError(
+        "Instala la librería 'gemini-agent' con: pip install -e ../agent"
+    )
 
 try:
     from ..config.settings import settings
@@ -55,6 +59,22 @@ except ImportError:
     from core.tool_executor import ToolExecutor
     from utils.logger import get_logger
 
+# Import PromptManager for modular prompt management (Fase C integration)
+try:
+    import sys
+    from pathlib import Path
+
+    # Add agent src to path for PromptManager import
+    agent_src = Path(__file__).parent.parent.parent / "agent" / "src"
+    if str(agent_src) not in sys.path:
+        sys.path.insert(0, str(agent_src))
+    from multi_agent.prompt_manager import PromptManager
+
+    PROMPT_MANAGER_AVAILABLE = True
+except ImportError:
+    PROMPT_MANAGER_AVAILABLE = False
+    PromptManager = None  # type: ignore[assignment,misc]
+
 # Conditional import for rate limiting
 if settings.ENABLE_RATE_LIMITING:
     try:
@@ -80,11 +100,12 @@ class OdiseoBot:
     - Autodiscovery of MCP tools
     """
 
-    def __init__(self, debug_mode: bool = False):
+    def __init__(self, debug_mode: bool = False, user_id: str | None = None):
         """Initialize Odiseo Bot with MCP connector.
 
         Args:
             debug_mode: Enable debug mode for detailed logging
+            user_id: Optional user ID for A/B testing (deterministic bucketing)
         """
         self.debug_mode = debug_mode
         # Use LOG_LEVEL from settings (.env) instead of debug_mode
@@ -92,6 +113,9 @@ class OdiseoBot:
 
         # Session ID for persistence tracking
         self.session_id = uuid.uuid4()
+
+        # User ID for A/B testing (optional)
+        self.user_id = user_id or str(self.session_id)  # Fallback to session_id
 
         # Core components (orchestrator pattern)
         self.gemini_client: GeminiAgent | None = None
@@ -108,10 +132,16 @@ class OdiseoBot:
         self.mcp_tools_raw: list[dict] = []  # Store original MCP tool definitions
         self.tool_executor: ToolExecutor | None = None
 
+        # Prompt management (Fase C: modular prompts with A/B testing)
+        self.prompt_manager: PromptManager | None = None
+        self.use_modular_prompts = PROMPT_MANAGER_AVAILABLE  # Feature flag
+
         # Specialized managers
         self.pagination_manager = PaginationManager(session_id=self.session_id)
         self.thinking_manager = ThinkingManager(
-            settings.ENABLE_THINKING, settings.THINKING_BUDGET, settings.INCLUDE_THOUGHTS
+            settings.ENABLE_THINKING,
+            settings.THINKING_BUDGET,
+            settings.INCLUDE_THOUGHTS,
         )
 
         # Generation config (singleton pattern - built once in initialize())
@@ -131,10 +161,7 @@ class OdiseoBot:
         # Initialize Gemini Agent
         try:
             api_key = settings.get_api_key()
-            self.gemini_client = GeminiAgent(
-                api_key=api_key,
-                model_name=settings.MODEL
-            )
+            self.gemini_client = GeminiAgent(api_key=api_key, model_name=settings.MODEL)
             await self.gemini_client.initialize()
             self.logger.success("Gemini Agent configurado")
         except Exception as e:
@@ -145,12 +172,15 @@ class OdiseoBot:
         await self._connect_mcp_official()
 
         # Build system prompt with autodiscovered tools
-        self.system_prompt = PromptBuilder.build_dynamic_system_prompt(self.mcp_tools)
+        # Fase C: Use PromptManager (modular) with fallback to PromptBuilder (legacy)
+        self.system_prompt = await self._build_system_prompt()
 
         # ✅ Create cached content for system instruction + tools (if enabled)
         if settings.ENABLE_CONTEXT_CACHING and self.gemini_client:
             try:
-                self.logger.info("🔄 Creating context cache for system instruction + tools...")
+                self.logger.info(
+                    "🔄 Creating context cache for system instruction + tools..."
+                )
                 ttl_seconds = settings.CACHE_TTL_MINUTES * 60
 
                 # Prepare tools for cache
@@ -165,15 +195,12 @@ class OdiseoBot:
                         )
                     )
 
+                # Note: Gemini 2.5 Flash requires minimum 1024 tokens for caching
+                # system_prompt alone is usually sufficient (>1700 tokens with tools)
                 self.cached_content = self.gemini_client.client.caches.create(
                     model=settings.MODEL,
                     config=types.CreateCachedContentConfig(
-                        contents=[
-                            types.Content(
-                                role="user",
-                                parts=[types.Part(text="Cache initialization")]
-                            )
-                        ],
+                        # Don't include contents parameter - system_instruction + tools is enough
                         system_instruction=self.system_prompt,
                         tools=tools_for_cache,
                         tool_config=tool_config_for_cache,
@@ -191,7 +218,9 @@ class OdiseoBot:
                     f"{len(self.mcp_tools)} tools, {token_count} tokens, TTL: {settings.CACHE_TTL_MINUTES}min"
                 )
             except Exception as e:
-                self.logger.warning(f"⚠️ Context caching failed: {e}. Using standard mode.")
+                self.logger.warning(
+                    f"⚠️ Context caching failed: {e}. Using standard mode."
+                )
                 self.cached_content = None
 
         # ✅ Build generation config ONCE (singleton pattern) - REPLICATED FROM ORIGINAL
@@ -201,23 +230,27 @@ class OdiseoBot:
         if self.gemini_client:
             self.response_validator = ResponseValidator(
                 conversation_history=self.conversation_manager.get_history(),
-                gemini_client=self.gemini_client
+                gemini_client=self.gemini_client,
             )
 
             # Initialize response processor
             self.response_processor = ResponseProcessor(
                 response_validator=self.response_validator,
                 debug_formatter=self.debug_formatter,
-                tool_executor=None  # Will be set after tool executor initialization
+                tool_executor=None,  # Will be set after tool executor initialization
             )
 
         cache_status = "with context cache" if self.cached_content else "standard mode"
         self.logger.success("Sistema inicializado con nuevo SDK")
-        self.logger.info(f"📝 Sistema prompt: {len(self.system_prompt)} chars ({cache_status})")
+        self.logger.info(
+            f"📝 Sistema prompt: {len(self.system_prompt)} chars ({cache_status})"
+        )
         self.logger.info(
             f"🎛️  Parámetros optimizados: temp={settings.TEMPERATURE}, top_k={settings.TOP_K}, top_p={settings.TOP_P}"
         )
-        self.logger.info("🔧 Tools format: FunctionDeclaration (google-genai 1.41.0 compliant)")
+        self.logger.info(
+            "🔧 Tools format: FunctionDeclaration (google-genai 1.41.0 compliant)"
+        )
 
         # Log pagination persistence status
         if self.pagination_manager._db and self.pagination_manager._db.is_enabled:
@@ -247,7 +280,9 @@ class OdiseoBot:
             health = await MCPConnector.check_server_health(mcp_url)
 
             if health["status"] == "unreachable":
-                self.logger.error(f"❌ Servidor MCP no accesible: {health.get('error')}")
+                self.logger.error(
+                    f"❌ Servidor MCP no accesible: {health.get('error')}"
+                )
                 self.logger.error(f"   URL: {health.get('url')}")
                 raise RuntimeError(f"MCP server unreachable at {mcp_url}")
 
@@ -271,7 +306,9 @@ class OdiseoBot:
                         self.logger.warning(f"   Warning: {db_check['warning']}")
                     if "extensions" in db_check:
                         self.logger.warning(f"   Extensions: {db_check['extensions']}")
-                self.logger.warning("   Continuando conexión con capacidades limitadas...")
+                self.logger.warning(
+                    "   Continuando conexión con capacidades limitadas..."
+                )
 
             else:
                 # Healthy status
@@ -303,7 +340,11 @@ class OdiseoBot:
                 self._log_available_tools()
 
                 # Initialize ToolExecutor with all improvements
-                if settings.ENABLE_VALIDATION or settings.ENABLE_CACHE or settings.ENABLE_METRICS:
+                if (
+                    settings.ENABLE_VALIDATION
+                    or settings.ENABLE_CACHE
+                    or settings.ENABLE_METRICS
+                ):
                     self.tool_executor = ToolExecutor(self.mcp_client)
                     # Register tool schemas for validation
                     await self.tool_executor.register_tool_schemas(tools)
@@ -324,6 +365,42 @@ class OdiseoBot:
             self.logger.exception(f"Error conectando a MCP: {e}")
             self.logger.warning("Continuando sin herramientas MCP...")
 
+    async def _build_system_prompt(self) -> str:
+        """Build system prompt using PromptManager (modular) with fallback to PromptBuilder (legacy).
+
+        This method implements the Fase C integration, using the new modular prompt
+        system with A/B testing support when available, and gracefully falling back
+        to the legacy PromptBuilder if PromptManager is unavailable or fails.
+
+        Returns:
+            System prompt text with MCP tools context
+        """
+        # Try PromptManager first (modular prompts with A/B testing)
+        if self.use_modular_prompts and PROMPT_MANAGER_AVAILABLE:
+            try:
+                if self.prompt_manager is None:
+                    self.logger.info("🎨 Initializing PromptManager (modular prompts)")
+                    self.prompt_manager = PromptManager(use_templates=True)
+
+                # Get prompt with A/B testing support
+                prompt = self.prompt_manager.get_sales_prompt(
+                    mcp_tools=self.mcp_tools, user_id=self.user_id
+                )
+
+                self.logger.success(
+                    f"✅ Using modular prompt system ({len(prompt)} chars, user_id={self.user_id[:8]}...)"
+                )
+                return prompt
+
+            except Exception as e:
+                self.logger.warning(
+                    f"⚠️ PromptManager failed: {e}. Falling back to PromptBuilder."
+                )
+
+        # Fallback to legacy PromptBuilder
+        self.logger.info("📝 Using legacy PromptBuilder (monolithic prompt)")
+        return PromptBuilder.build_dynamic_system_prompt(self.mcp_tools)
+
     def _log_available_tools(self) -> None:
         """Log available MCP tools (FunctionDeclaration format)."""
         if not self.mcp_tools:
@@ -334,7 +411,11 @@ class OdiseoBot:
             tool_name = func_decl.name
             tool_description = func_decl.description or "Sin descripción"
             # Get first line of description
-            desc_first_line = tool_description.split("\n")[0] if tool_description else "Sin descripción"
+            desc_first_line = (
+                tool_description.split("\n")[0]
+                if tool_description
+                else "Sin descripción"
+            )
             self.logger.info(f"   {i}. {tool_name}: {desc_first_line}")
 
     def _configure_fallback_rules(self) -> None:
@@ -346,7 +427,10 @@ class OdiseoBot:
         available_tools = {func_decl.name for func_decl in self.mcp_tools or []}
 
         # Rule 1: search_products → fuzzy_search_smart
-        if "search_products" in available_tools and "fuzzy_search_smart" in available_tools:
+        if (
+            "search_products" in available_tools
+            and "fuzzy_search_smart" in available_tools
+        ):
             self.tool_executor.add_fallback_rule(
                 primary_tool="search_products",
                 fallback_tool="fuzzy_search_smart",
@@ -364,7 +448,10 @@ class OdiseoBot:
             self.logger.debug("Fallback: fetch_by_sku → fetch_by_id")
 
         # Rule 3: fuzzy_search_smart → search_products (reverse fallback)
-        if "fuzzy_search_smart" in available_tools and "search_products" in available_tools:
+        if (
+            "fuzzy_search_smart" in available_tools
+            and "search_products" in available_tools
+        ):
             self.tool_executor.add_fallback_rule(
                 primary_tool="fuzzy_search_smart",
                 fallback_tool="search_products",
@@ -463,8 +550,12 @@ class OdiseoBot:
                 error_str = str(e)
 
                 # ✅ Check if it's a cache-related 403 error (cache expired/not found)
-                if ("403" in error_str or "PERMISSION_DENIED" in error_str) and "CachedContent" in error_str:
-                    self.logger.warning("⚠️ Cache expired or not found. Fallback to standard mode...")
+                if (
+                    "403" in error_str or "PERMISSION_DENIED" in error_str
+                ) and "CachedContent" in error_str:
+                    self.logger.warning(
+                        "⚠️ Cache expired or not found. Fallback to standard mode..."
+                    )
 
                     # Invalidate cache and rebuild config without cache
                     self.cached_content = None
@@ -475,7 +566,11 @@ class OdiseoBot:
                     continue
 
                 # Check if it's a rate limit error (429)
-                if "429" in error_str or "quota" in error_str.lower() or "rate limit" in error_str.lower():
+                if (
+                    "429" in error_str
+                    or "quota" in error_str.lower()
+                    or "rate limit" in error_str.lower()
+                ):
                     if attempt < max_retries - 1:
                         wait_time = retry_delay * (2**attempt)  # Exponential backoff
                         self.logger.warning(
@@ -526,7 +621,9 @@ class OdiseoBot:
             self.conversation_manager.add_user_message(user_message)
 
             # ✅ Generate response with rate limiting
-            response = await self._generate_with_rate_limit(self.conversation_manager.get_history())
+            response = await self._generate_with_rate_limit(
+                self.conversation_manager.get_history()
+            )
 
             # Extract and log thoughts if enabled
             if self.thinking_manager.is_thinking_enabled():
@@ -539,7 +636,9 @@ class OdiseoBot:
 
             while iteration < self.function_call_handler.max_iterations:
                 iteration += 1
-                self.logger.debug(f"Function calling iteration {iteration}/{self.function_call_handler.max_iterations}")
+                self.logger.debug(
+                    f"Function calling iteration {iteration}/{self.function_call_handler.max_iterations}"
+                )
 
                 # Check if response has candidates
                 if not self.function_call_handler.has_candidates(response):
@@ -549,11 +648,15 @@ class OdiseoBot:
                 # Get parts from response
                 parts = self.function_call_handler.get_parts(response)
                 if parts is None:
-                    self.logger.warning("Response parts is None - cannot extract function calls or text")
+                    self.logger.warning(
+                        "Response parts is None - cannot extract function calls or text"
+                    )
                     break
 
                 # Extract function calls
-                function_calls = self.function_call_handler.extract_function_calls(parts)
+                function_calls = self.function_call_handler.extract_function_calls(
+                    parts
+                )
 
                 # If no function calls, extract and process text
                 if not function_calls:
@@ -563,22 +666,32 @@ class OdiseoBot:
                     if final_text:
                         # Process response with validation and debug info
                         # (ResponseProcessor handles anti-hallucination validation internally)
-                        processed_text = await self.response_processor.process_text_response(
-                            final_text, user_message
+                        processed_text = (
+                            await self.response_processor.process_text_response(
+                                final_text, user_message
+                            )
                         )
 
                         # Add to history
                         self.conversation_manager.add_model_message(processed_text)
-                        self.logger.debug(f"Extracted text from parts: {processed_text[:100]}...")
+                        self.logger.debug(
+                            f"Extracted text from parts: {processed_text[:100]}..."
+                        )
                         return processed_text
 
-                    self.logger.warning(f"No function calls and no text in iteration {iteration}")
+                    self.logger.warning(
+                        f"No function calls and no text in iteration {iteration}"
+                    )
                     break
 
-                self.logger.debug(f"Found {len(function_calls)} function calls in iteration {iteration}")
+                self.logger.debug(
+                    f"Found {len(function_calls)} function calls in iteration {iteration}"
+                )
 
                 # ✅ Execute function calls with structured JSON responses
-                function_response_parts = await self._execute_function_calls(function_calls)
+                function_response_parts = await self._execute_function_calls(
+                    function_calls
+                )
 
                 # Add function call parts to history as model response
                 self.conversation_manager.add_function_call(parts)
@@ -588,7 +701,9 @@ class OdiseoBot:
                 self.conversation_manager.add_function_response(function_response_parts)
 
                 # Generate next response with rate limiting
-                response = await self._generate_with_rate_limit(self.conversation_manager.get_history())
+                response = await self._generate_with_rate_limit(
+                    self.conversation_manager.get_history()
+                )
 
                 # Extract and log thoughts from function calling iteration
                 if self.thinking_manager.is_thinking_enabled():
@@ -597,7 +712,9 @@ class OdiseoBot:
                         self.thinking_manager.log_thoughts(thoughts)
 
             # If we exhausted iterations without getting text
-            self.logger.warning(f"Function calling loop exhausted after {iteration} iterations")
+            self.logger.warning(
+                f"Function calling loop exhausted after {iteration} iterations"
+            )
             return (
                 "No pude generar una respuesta final. Las herramientas se ejecutaron "
                 "pero no pude procesar el resultado."
@@ -607,7 +724,9 @@ class OdiseoBot:
             self.logger.exception(f"Error enviando mensaje: {e}")
             raise
 
-    async def _execute_function_calls(self, function_calls: list[Any]) -> list[types.Part]:
+    async def _execute_function_calls(
+        self, function_calls: list[Any]
+    ) -> list[types.Part]:
         """Execute function calls and return STRUCTURED responses.
 
         Args:
@@ -633,7 +752,11 @@ class OdiseoBot:
                 self.logger.debug(f"✅ Result type: {type(response_data).__name__}")
 
                 function_response_parts.append(
-                    types.Part(function_response=types.FunctionResponse(name=function_name, response=response_data))
+                    types.Part(
+                        function_response=types.FunctionResponse(
+                            name=function_name, response=response_data
+                        )
+                    )
                 )
 
             except Exception as e:
@@ -646,7 +769,11 @@ class OdiseoBot:
                 }
 
                 function_response_parts.append(
-                    types.Part(function_response=types.FunctionResponse(name=function_name, response=response_data))
+                    types.Part(
+                        function_response=types.FunctionResponse(
+                            name=function_name, response=response_data
+                        )
+                    )
                 )
 
         return function_response_parts
@@ -666,7 +793,9 @@ class OdiseoBot:
         """
         # Execute tool
         if self.tool_executor:
-            result = await self.tool_executor.execute_tool(tool_name, args, validate=settings.ENABLE_VALIDATION)
+            result = await self.tool_executor.execute_tool(
+                tool_name, args, validate=settings.ENABLE_VALIDATION
+            )
         elif self.mcp_client:
             result = await self.mcp_client.call_tool(tool_name, args)
         else:
@@ -702,7 +831,9 @@ class OdiseoBot:
 
             # ✅ Defensive check: ensure products is a list (not None)
             if products is None:
-                self.logger.warning(f"⚠️  Tool {tool_name} returned None for products - skipping pagination tracking")
+                self.logger.warning(
+                    f"⚠️  Tool {tool_name} returned None for products - skipping pagination tracking"
+                )
                 return
 
             # Only save if we have products
@@ -714,10 +845,12 @@ class OdiseoBot:
                     tool=tool_name,
                     query=query,
                     results=products,
-                    page_size=settings.PAGINATION_PAGE_SIZE
+                    page_size=settings.PAGINATION_PAGE_SIZE,
                 )
 
-                self.logger.debug(f"📋 Saved {len(products)} products for pagination (category: {category})")
+                self.logger.debug(
+                    f"📋 Saved {len(products)} products for pagination (category: {category})"
+                )
 
         except Exception as e:
             # Don't fail the tool execution if tracking fails
@@ -750,7 +883,10 @@ class OdiseoBot:
         # Check if we have more results to show
         if not self.pagination_manager.has_more_results(category):
             # Determine response language based on user message
-            if any(word in user_message.lower() for word in ["más", "siguiente", "muéstrame"]):
+            if any(
+                word in user_message.lower()
+                for word in ["más", "siguiente", "muéstrame"]
+            ):
                 return f"Ya te mostré todos los resultados disponibles para {category}. ¿Te gustaría buscar algo diferente?"
             else:
                 return f"I've already shown you all available results for {category}. Would you like to search for something different?"
@@ -762,7 +898,10 @@ class OdiseoBot:
             return None
 
         # Determine language for response
-        spanish_mode = any(word in user_message.lower() for word in ["más", "siguiente", "muéstrame", "opciones"])
+        spanish_mode = any(
+            word in user_message.lower()
+            for word in ["más", "siguiente", "muéstrame", "opciones"]
+        )
 
         # Get remaining count and format response
         remaining = self.pagination_manager.get_remaining_count(category)
@@ -771,7 +910,7 @@ class OdiseoBot:
             category=category,
             products=next_products,
             remaining=remaining,
-            spanish_mode=spanish_mode
+            spanish_mode=spanish_mode,
         )
 
     def _clean_json_artifacts(self, text: str) -> str:
@@ -808,7 +947,9 @@ class OdiseoBot:
         self.logger.info("\n" + "═" * 60)
         self.logger.info("🌟 ODISEO BOT - Tu Vendedor Inteligente")
         self.logger.info("═" * 60)
-        self.logger.info("💡 Soy Odiseo, experto en ayudarte a encontrar productos perfectos")
+        self.logger.info(
+            "💡 Soy Odiseo, experto en ayudarte a encontrar productos perfectos"
+        )
         self.logger.info("🔧 Comandos: /exit, /debug, /help, /metrics")
         self.logger.info("─" * 60)
         self.logger.info("👋 ¡Hola! ¿Qué producto buscas hoy?\n")
@@ -920,11 +1061,14 @@ class OdiseoBot:
         cache_stats = self.tool_executor.get_cache_stats()
         if cache_stats:
             print("\n💾 Estado del Cache:")
-            print(f"  Herramientas en cache: {cache_stats.get('total_tools_cached', 0)}")
-            print(f"  Cache válido: {'Sí' if cache_stats.get('has_valid_snapshot') else 'No'}")
+            print(
+                f"  Herramientas en cache: {cache_stats.get('total_tools_cached', 0)}"
+            )
+            print(
+                f"  Cache válido: {'Sí' if cache_stats.get('has_valid_snapshot') else 'No'}"
+            )
 
         print("─" * 60 + "\n")
-
 
     async def cleanup(self) -> None:
         """Cleanup resources and export metrics."""
@@ -932,7 +1076,9 @@ class OdiseoBot:
         if self.tool_executor and settings.ENABLE_METRICS:
             try:
                 self.tool_executor.export_metrics(settings.METRICS_EXPORT_PATH)
-                self.logger.info(f"📊 Métricas exportadas a: {settings.METRICS_EXPORT_PATH}")
+                self.logger.info(
+                    f"📊 Métricas exportadas a: {settings.METRICS_EXPORT_PATH}"
+                )
             except Exception as e:
                 self.logger.warning(f"Error exportando métricas: {e}")
 
@@ -951,7 +1097,9 @@ class OdiseoBot:
                 self.logger.info("🔌 Desconectado de servidor MCP")
             except asyncio.CancelledError:
                 # CancelledError is expected during shutdown, just log and suppress
-                self.logger.debug("🔌 Conexión MCP cancelada (esperado durante shutdown)")
+                self.logger.debug(
+                    "🔌 Conexión MCP cancelada (esperado durante shutdown)"
+                )
             except Exception as e:
                 self.logger.exception(f"Error cerrando conexión MCP: {e}")
 

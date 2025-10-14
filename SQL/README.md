@@ -103,6 +103,76 @@ The scripts are aligned with the PostgreSQL container configuration:
 
 ## Usage
 
+### Data Initialization Flow
+
+```mermaid
+flowchart TD
+    Start([🚀 Start Database Setup]) --> CheckDocker{Docker<br/>PostgreSQL<br/>Running?}
+
+    CheckDocker -->|❌ No| StartDocker["Start PostgreSQL<br/>cd DockerConfig<br/>docker-compose up -d"]
+    CheckDocker -->|✅ Yes| CheckEnv{".env File<br/>Configured?"}
+
+    StartDocker --> CheckEnv
+
+    CheckEnv -->|❌ No| ConfigEnv["📝 Configure .env<br/>- DATABASE_URL<br/>- GOOGLE_API_KEY<br/>- SCHEMA_NAME=test"]
+    CheckEnv -->|✅ Yes| InitDB["1️⃣ Initialize Database<br/>python3 src/init-db.py<br/>━━━━━━━━<br/>• Create schema 'test'<br/>• Create tables<br/>• Create indexes<br/>• Create functions"]
+
+    ConfigEnv --> InitDB
+
+    InitDB --> VerifySchema{Schema<br/>Created?}
+
+    VerifySchema -->|❌ Failed| Error1["❌ Check Logs<br/>- Connection errors?<br/>- Permission issues?<br/>- Extensions missing?"]
+    VerifySchema -->|✅ Success| LoadProducts["2️⃣ Load Products<br/>python3 src/populate-db.py<br/>━━━━━━━━<br/>Read 90 products<br/>from data/products.json"]
+
+    Error1 --> Troubleshoot1["🔧 Fix Issues<br/>- Verify DATABASE_URL<br/>- Install extensions<br/>- Check PostgreSQL logs"]
+    Troubleshoot1 --> InitDB
+
+    LoadProducts --> GenerateEmbeddings["3️⃣ Generate Embeddings<br/>Batch processing (8 products/batch)<br/>━━━━━━━━<br/>Google Gemini API<br/>gemini-embedding-001<br/>1536 dimensions"]
+
+    GenerateEmbeddings --> RateLimit{Rate Limit<br/>Hit?}
+
+    RateLimit -->|❌ No| InsertData["4️⃣ Insert to Database<br/>UPSERT operations<br/>━━━━━━━━<br/>• Products + embeddings<br/>• Update existing<br/>• Insert new"]
+    RateLimit -->|✅ Yes (429)| Wait["⏳ Exponential Backoff<br/>Retry with delay"]
+
+    Wait --> GenerateEmbeddings
+
+    InsertData --> VerifyData{Data<br/>Inserted?}
+
+    VerifyData -->|❌ Failed| Error2["❌ Database Error<br/>Check constraints,<br/>data types,<br/>unique violations"]
+    VerifyData -->|✅ Success| BuildIndexes["5️⃣ Build Indexes<br/>━━━━━━━━<br/>• IVFFlat vector index<br/>• Trigram GIN indexes<br/>• B-Tree indexes"]
+
+    Error2 --> Troubleshoot2["🔧 Fix Data Issues<br/>- Check SKU uniqueness<br/>- Validate JSON format<br/>- Review data types"]
+    Troubleshoot2 --> LoadProducts
+
+    BuildIndexes --> Analyze["6️⃣ Analyze Tables<br/>ANALYZE test.products<br/>━━━━━━━━<br/>Update query planner<br/>statistics"]
+
+    Analyze --> Verify["7️⃣ Verification<br/>━━━━━━━━<br/>SELECT COUNT(*)<br/>FROM test.products"]
+
+    Verify --> VerifyCount{Count = 90<br/>products?}
+
+    VerifyCount -->|❌ No| Error3["❌ Incomplete Data<br/>Missing products or<br/>embeddings"]
+    VerifyCount -->|✅ Yes| TestSearch["8️⃣ Test Searches<br/>━━━━━━━━<br/>• Test fuzzy search<br/>• Test vector search<br/>• Test pagination"]
+
+    Error3 --> Troubleshoot3["🔧 Re-run populate-db.py<br/>Check for API errors<br/>in logs"]
+    Troubleshoot3 --> LoadProducts
+
+    TestSearch --> Success["✅ Setup Complete!<br/>━━━━━━━━<br/>• 90 products loaded<br/>• 90 embeddings generated<br/>• 15 indexes created<br/>• All tests passed"]
+
+    Success --> Ready([🎉 Database Ready for Use])
+
+    style Start fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px
+    style Success fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px
+    style Ready fill:#a5d6a7,stroke:#388e3c,stroke-width:3px
+    style Error1 fill:#ffcdd2,stroke:#c62828,stroke-width:2px
+    style Error2 fill:#ffcdd2,stroke:#c62828,stroke-width:2px
+    style Error3 fill:#ffcdd2,stroke:#c62828,stroke-width:2px
+    style CheckDocker fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    style CheckEnv fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    style VerifySchema fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    style RateLimit fill:#fff59d,stroke:#f9a825,stroke-width:2px
+    style Wait fill:#ffe082,stroke:#ff8f00,stroke-width:2px
+```
+
 ### Quick Start
 
 ```bash
@@ -158,48 +228,215 @@ SQL/
 
 ## Database Schema
 
-### Tables Created
+### Entity-Relationship Diagram
+
+```mermaid
+erDiagram
+    PRODUCTS ||--o{ PRODUCT_EMBEDDINGS : has
+    PRODUCTS {
+        serial id PK "Auto-increment primary key"
+        text sku UK "Unique product identifier (COMP-001)"
+        text name "Product name"
+        text description "Detailed description"
+        text category "Product category"
+        text brand "Brand name"
+        text[] tags "Array of searchable tags"
+        text color "Product color"
+        text size "Product size"
+        numeric price "Price (12,2 precision)"
+        vector_1536 embedding "Gemini AI embedding vector"
+        timestamp created_at "Record creation time"
+        timestamp updated_at "Last update time"
+    }
+
+    PRODUCT_EMBEDDINGS {
+        int product_id FK "References products(id)"
+        vector_1536 embedding "1536-dimensional vector"
+        text model_version "gemini-embedding-001"
+        timestamp generated_at "Embedding generation time"
+    }
+
+    PAGINATION_CONTEXTS {
+        uuid session_id PK "Session identifier"
+        text category "Search category"
+        text tool_name "MCP tool used"
+        text query "Original search query"
+        jsonb results "Paginated results array"
+        int current_page "Current page number (1-based)"
+        int page_size "Items per page (default: 4)"
+        int total_items "Total result count"
+        timestamp created_at "Context creation time"
+        timestamp updated_at "Last access time"
+    }
+
+    USER_SESSIONS ||--o{ PAGINATION_CONTEXTS : creates
+    USER_SESSIONS {
+        uuid session_id PK "Unique session identifier"
+        text user_agent "Browser/client info"
+        inet ip_address "Client IP address"
+        timestamp started_at "Session start time"
+        timestamp last_activity "Last activity timestamp"
+    }
+```
+
+### Database Architecture
+
+```mermaid
+graph TB
+    subgraph Schema["📊 Database Schema: test"]
+        direction TB
+
+        subgraph Core["Core Tables"]
+            Products["🛍️ products<br/>━━━━━━━━<br/>90 product records<br/>15 optimized indexes"]
+            Pagination["📄 pagination_contexts<br/>━━━━━━━━<br/>Session-based pagination<br/>Auto-cleanup (24h TTL)"]
+        end
+
+        subgraph Indexes["🔍 Index Types"]
+            IVFFlat["Vector Index (IVFFlat)<br/>━━━━━━━━<br/>embedding column<br/>100 lists, L2 distance"]
+            Trigram["Trigram GIN Index<br/>━━━━━━━━<br/>name, description, brand<br/>Fuzzy text search"]
+            BTree["B-Tree Indexes<br/>━━━━━━━━<br/>SKU (unique), category,<br/>price, tags (GIN)"]
+        end
+
+        subgraph Functions["⚙️ PostgreSQL Functions"]
+            Normalize["normalize_text(text)<br/>━━━━━━━━<br/>Lowercase + unaccent<br/>Used in searches"]
+            Similarity["get_similarity_threshold()<br/>━━━━━━━━<br/>Returns: 0.3<br/>Configurable threshold"]
+            Cleanup["cleanup_expired_contexts()<br/>━━━━━━━━<br/>Removes old pagination<br/>Runs on schedule"]
+        end
+    end
+
+    subgraph Extensions["📦 PostgreSQL Extensions"]
+        Vector["vector<br/>pgvector 0.5+<br/>Vector operations"]
+        PgTrgm["pg_trgm<br/>Trigram similarity<br/>Fuzzy matching"]
+        Unaccent["unaccent<br/>Accent removal<br/>Normalization"]
+        UUIDOSSP["uuid-ossp<br/>UUID generation<br/>Session IDs"]
+        PgCrypto["pgcrypto<br/>Cryptographic funcs<br/>Security"]
+    end
+
+    Products --> IVFFlat
+    Products --> Trigram
+    Products --> BTree
+
+    Pagination --> Cleanup
+
+    Products -.->|Uses| Normalize
+    Products -.->|Uses| Similarity
+
+    IVFFlat -.->|Requires| Vector
+    Trigram -.->|Requires| PgTrgm
+    Normalize -.->|Requires| Unaccent
+    Pagination -.->|Uses| UUIDOSSP
+
+    style Core fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style Indexes fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    style Functions fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style Extensions fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+```
+
+### Table Specifications
 
 #### `test.products`
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | SERIAL | Primary key |
-| `sku` | TEXT | Unique product identifier |
-| `name` | TEXT | Product name |
-| `description` | TEXT | Product description |
-| `category` | TEXT | Product category |
-| `brand` | TEXT | Brand name |
-| `tags` | TEXT[] | Array of tags |
-| `color` | TEXT | Product color |
-| `size` | TEXT | Product size |
-| `price` | NUMERIC(12,2) | Product price |
-| `embedding` | VECTOR(1536) | Gemini embedding vector |
+**Primary Table for Product Catalog**
 
-**Indexes**: 15 optimized indexes including:
-- Trigram indexes for fuzzy search
-- Vector indexes (IVFFlat) for semantic search
-- Full-text search indexes
-- Tag and SKU indexes
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | SERIAL | PRIMARY KEY | Auto-increment primary key |
+| `sku` | TEXT | UNIQUE NOT NULL | Unique product identifier (e.g., COMP-001) |
+| `name` | TEXT | NOT NULL | Product name |
+| `description` | TEXT | | Detailed description |
+| `category` | TEXT | | Product category |
+| `brand` | TEXT | | Brand name |
+| `tags` | TEXT[] | | Array of searchable tags |
+| `color` | TEXT | | Product color |
+| `size` | TEXT | | Product size |
+| `price` | NUMERIC(12,2) | | Product price |
+| `embedding` | VECTOR(1536) | | Gemini AI embedding vector |
+| `created_at` | TIMESTAMP | DEFAULT NOW() | Record creation time |
+| `updated_at` | TIMESTAMP | DEFAULT NOW() | Last update time |
+
+**Indexes** (15 total):
+- `idx_products_sku` - B-Tree unique index on SKU
+- `idx_products_embedding_ivf` - IVFFlat vector index (100 lists, L2 distance)
+- `idx_products_name_trigram` - GIN trigram index for fuzzy name search
+- `idx_products_description_trigram` - GIN trigram index for description search
+- `idx_products_brand_trigram` - GIN trigram index for brand search
+- `idx_products_category` - B-Tree index on category
+- `idx_products_price` - B-Tree index on price
+- `idx_products_tags` - GIN index on tags array
+- ... and 7 more specialized indexes
 
 #### `test.pagination_contexts`
 
-Session-based pagination context storage with automatic cleanup.
+**Session-based Pagination Storage**
 
-### Functions Created
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `session_id` | UUID | PRIMARY KEY | Unique session identifier |
+| `category` | TEXT | NOT NULL | Search category |
+| `tool_name` | TEXT | | MCP tool used for search |
+| `query` | TEXT | | Original search query |
+| `results` | JSONB | | Paginated results array |
+| `current_page` | INTEGER | DEFAULT 1 | Current page number (1-based) |
+| `page_size` | INTEGER | DEFAULT 4 | Items per page |
+| `total_items` | INTEGER | | Total result count |
+| `created_at` | TIMESTAMP | DEFAULT NOW() | Context creation time |
+| `updated_at` | TIMESTAMP | DEFAULT NOW() | Last access time |
 
-- `normalize_text(text)` - Text normalization (lowercase, no accents)
-- `get_similarity_threshold()` - Returns configurable similarity threshold (0.3)
-- `cleanup_expired_pagination_contexts()` - Cleans expired pagination data
-- `update_pagination_timestamp()` - Auto-updates timestamps on updates
+**Auto-Cleanup:** Contexts older than 24 hours are automatically removed.
 
-### Extensions Enabled
+### Database Functions
 
-- `vector` - pgvector for embeddings
-- `pg_trgm` - Trigram similarity search
-- `unaccent` - Accent-insensitive search
-- `uuid-ossp` - UUID generation
-- `pgcrypto` - Cryptographic functions
+#### `normalize_text(text)`
+**Purpose:** Text normalization for consistent search
+```sql
+CREATE OR REPLACE FUNCTION normalize_text(input_text TEXT)
+RETURNS TEXT AS $$
+BEGIN
+    RETURN lower(unaccent(input_text));
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+```
+**Used in:** Fuzzy search queries, trigram matching
+
+#### `get_similarity_threshold()`
+**Purpose:** Returns configurable similarity threshold
+```sql
+CREATE OR REPLACE FUNCTION get_similarity_threshold()
+RETURNS FLOAT AS $$
+BEGIN
+    RETURN 0.3; -- Configurable threshold
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+```
+**Used in:** Fuzzy search filtering
+
+#### `cleanup_expired_pagination_contexts()`
+**Purpose:** Removes expired pagination contexts
+```sql
+CREATE OR REPLACE FUNCTION cleanup_expired_pagination_contexts()
+RETURNS INTEGER AS $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    DELETE FROM test.pagination_contexts
+    WHERE updated_at < NOW() - INTERVAL '24 hours';
+
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+```
+**Scheduled:** Run daily via cron job
+
+### PostgreSQL Extensions
+
+| Extension | Version | Purpose | Status |
+|-----------|---------|---------|--------|
+| **vector** | 0.5+ | Vector embeddings (pgvector) | ✅ Required |
+| **pg_trgm** | 1.6+ | Trigram similarity search | ✅ Required |
+| **unaccent** | 1.1+ | Accent-insensitive search | ✅ Required |
+| **uuid-ossp** | 1.1+ | UUID generation | ✅ Required |
+| **pgcrypto** | 1.3+ | Cryptographic functions | ⚠️ Optional |
 
 ## Product Dataset Statistics
 

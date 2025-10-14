@@ -41,7 +41,9 @@ class RetryStrategy:
         )
     """
 
-    def __init__(self, config: RetryConfig | None = None, logger: logging.Logger | None = None):
+    def __init__(
+        self, config: RetryConfig | None = None, logger: logging.Logger | None = None
+    ):
         """Initialize retry strategy.
 
         Args:
@@ -81,7 +83,9 @@ class RetryStrategy:
 
                 # Don't retry on last attempt
                 if attempt == self.config.max_attempts:
-                    self.logger.error(f"All {self.config.max_attempts} retry attempts failed. Last error: {e}")
+                    self.logger.error(
+                        f"All {self.config.max_attempts} retry attempts failed. Last error: {e}"
+                    )
                     break
 
                 # Calculate backoff delay
@@ -111,7 +115,9 @@ class RetryStrategy:
             Delay in milliseconds
         """
         # Exponential backoff: initial_delay * (base ^ (attempt - 1))
-        delay = self.config.initial_delay_ms * (self.config.exponential_base ** (attempt - 1))
+        delay = self.config.initial_delay_ms * (
+            self.config.exponential_base ** (attempt - 1)
+        )
 
         # Cap at max delay
         delay = min(delay, self.config.max_delay_ms)

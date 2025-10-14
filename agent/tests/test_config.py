@@ -1,7 +1,5 @@
 """Tests for configuration settings."""
 
-import pytest
-
 from gemini_agent.config import settings
 
 
@@ -12,10 +10,10 @@ class TestSettings:
         """Test that settings object is available."""
         assert settings is not None
 
-    def test_model_name_default(self):
-        """Test that MODEL_NAME has a default value."""
-        assert settings.MODEL_NAME is not None
-        assert isinstance(settings.MODEL_NAME, str)
+    def test_model_default(self):
+        """Test that MODEL has a default value."""
+        assert settings.MODEL is not None
+        assert isinstance(settings.MODEL, str)
 
     def test_temperature_default(self):
         """Test that TEMPERATURE has a valid default value."""
