@@ -8,7 +8,12 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import DEFAULT_NEGOTIATED_VERSION, LATEST_PROTOCOL_VERSION
 
 import utils.db as db
-from mcp_handlers import prompt_handlers, resource_handlers, tool_handlers
+from mcp_handlers import (
+    booking_handlers,
+    product_handlers,
+    prompt_handlers,
+    resource_handlers,
+)
 from utils.logger import setup_logging
 
 # Setup logger for MCP server
@@ -27,7 +32,8 @@ mcp = FastMCP(
 )
 
 # Initialize handlers with MCP instance
-tool_handlers.init_tool_handlers(mcp)
+product_handlers.init_product_handlers(mcp)
+booking_handlers.init_booking_handlers(mcp)  # Register booking tools
 resource_handlers.init_resource_handlers(mcp)
 prompt_handlers.init_prompt_handlers(mcp)
 
@@ -123,10 +129,17 @@ if __name__ == "__main__":
 
             # Check database connection
             try:
+                # Count products
                 result = db.fetchone(
                     f"SELECT COUNT(*) as count FROM {settings.SCHEMA_NAME}.products"
                 )
                 product_count = result["count"] if result else 0
+
+                # Count bookings/appointments
+                booking_result = db.fetchone(
+                    f"SELECT COUNT(*) as count FROM {settings.SCHEMA_NAME}.appointments"
+                )
+                booking_count = booking_result["count"] if booking_result else 0
 
                 # Check extensions
                 extensions = db.fetchall(
@@ -147,6 +160,7 @@ if __name__ == "__main__":
                     "status": "healthy",
                     "response_time_ms": round(db_response_time, 2),
                     "product_count": product_count,
+                    "booking_count": booking_count,
                     "schema": settings.SCHEMA_NAME,
                     "extensions": ext_names,
                     "normalize_text_available": has_normalize,

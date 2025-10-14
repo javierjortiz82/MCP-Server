@@ -1,8 +1,9 @@
 """Unit tests for FallbackStrategy."""
 
 import logging
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from strategies.fallback import (
     FallbackRule,
@@ -298,7 +299,9 @@ class TestFallbackStrategy:
             primary_tool="tool_a", fallback_tool="tool_b", condition=is_timeout
         )
 
-        rule = strategy._find_applicable_rule("tool_a", ValueError("Connection timeout"))
+        rule = strategy._find_applicable_rule(
+            "tool_a", ValueError("Connection timeout")
+        )
 
         assert rule is not None
         assert rule.fallback_tool == "tool_b"

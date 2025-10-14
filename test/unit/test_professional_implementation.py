@@ -1,11 +1,25 @@
 #!/usr/bin/env python3
 """
-Test Professional Implementation - Validates Critical Corrections
+DEPRECATED: Legacy OdiseoBot Professional Implementation Tests
 
-This script validates that all critical corrections from the professional audit
-have been properly implemented.
+⚠️  WARNING: This test file tests Legacy OdiseoBot internal implementation.
 
-Ref: PROFESSIONAL_AUDIT_REPORT.md
+Status: DEPRECATED as of 2025-10-12
+Replacement: agent/test_odiseo_bot_v2_integration.py
+Removal: Scheduled for Week 6-8 of Legacy elimination plan
+
+These tests validate Legacy OdiseoBot professional audit corrections
+(google-genai 1.41.0 compliance). They test internal methods that do
+not exist in OdiseoBotV2 due to BaseAgent architecture.
+
+For V2 testing, see:
+  - agent/test_odiseo_bot_v2_integration.py (8 integration tests)
+  - agent/test_odiseo_bot_v2.py (unit tests)
+
+See: agent/docs/TEST_MIGRATION_ANALYSIS.md for migration decision details.
+
+Original Purpose: Validates critical corrections from professional audit
+Ref: PROFESSIONAL_AUDIT_REPORT.md (Legacy only)
 
 NOTE: These tests require full MCP SDK installation and environment setup.
       Run from project root with proper PYTHONPATH.
@@ -13,8 +27,17 @@ NOTE: These tests require full MCP SDK installation and environment setup.
 
 import sys
 from pathlib import Path
+import warnings
 
 import pytest
+
+warnings.warn(
+    "test_professional_implementation.py tests deprecated Legacy OdiseoBot. "
+    "Use agent/test_odiseo_bot_v2_integration.py instead. "
+    "This file will be removed in Week 6-8 of Legacy elimination.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 # Add client_mcp to path (flat layout)
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))

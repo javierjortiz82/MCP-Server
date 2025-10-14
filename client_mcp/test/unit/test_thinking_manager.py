@@ -1,6 +1,5 @@
 """Unit tests for ThinkingManager."""
 
-import pytest
 from unittest.mock import MagicMock
 
 from core.thinking_manager import ThinkingManager
@@ -12,9 +11,7 @@ class TestThinkingManager:
     def test_initialization_enabled(self):
         """Test ThinkingManager initialization with thinking enabled."""
         manager = ThinkingManager(
-            enable_thinking=True,
-            thinking_budget=1024,
-            include_thoughts=False
+            enable_thinking=True, thinking_budget=1024, include_thoughts=False
         )
 
         assert manager.enable_thinking is True
@@ -24,9 +21,7 @@ class TestThinkingManager:
     def test_initialization_disabled(self):
         """Test ThinkingManager initialization with thinking disabled."""
         manager = ThinkingManager(
-            enable_thinking=False,
-            thinking_budget=0,
-            include_thoughts=False
+            enable_thinking=False, thinking_budget=0, include_thoughts=False
         )
 
         assert manager.enable_thinking is False
@@ -35,9 +30,7 @@ class TestThinkingManager:
     def test_get_thinking_config_enabled(self):
         """Test get_thinking_config returns ThinkingConfig when enabled."""
         manager = ThinkingManager(
-            enable_thinking=True,
-            thinking_budget=1024,
-            include_thoughts=False
+            enable_thinking=True, thinking_budget=1024, include_thoughts=False
         )
 
         config = manager.get_thinking_config()
@@ -49,9 +42,7 @@ class TestThinkingManager:
     def test_get_thinking_config_disabled(self):
         """Test get_thinking_config returns None when disabled."""
         manager = ThinkingManager(
-            enable_thinking=False,
-            thinking_budget=0,
-            include_thoughts=False
+            enable_thinking=False, thinking_budget=0, include_thoughts=False
         )
 
         config = manager.get_thinking_config()
@@ -61,9 +52,7 @@ class TestThinkingManager:
     def test_extract_thoughts_with_thoughts(self):
         """Test extracting thoughts from response with thoughts."""
         manager = ThinkingManager(
-            enable_thinking=True,
-            thinking_budget=1024,
-            include_thoughts=True
+            enable_thinking=True, thinking_budget=1024, include_thoughts=True
         )
 
         # Mock response with thoughts
@@ -88,9 +77,7 @@ class TestThinkingManager:
     def test_extract_thoughts_without_thoughts(self):
         """Test extracting thoughts from response without thoughts."""
         manager = ThinkingManager(
-            enable_thinking=True,
-            thinking_budget=1024,
-            include_thoughts=True
+            enable_thinking=True, thinking_budget=1024, include_thoughts=True
         )
 
         # Mock response without thoughts
@@ -114,9 +101,7 @@ class TestThinkingManager:
     def test_extract_thoughts_empty_response(self):
         """Test extracting thoughts from empty response."""
         manager = ThinkingManager(
-            enable_thinking=True,
-            thinking_budget=1024,
-            include_thoughts=True
+            enable_thinking=True, thinking_budget=1024, include_thoughts=True
         )
 
         thoughts = manager.extract_thoughts(None)
@@ -125,16 +110,10 @@ class TestThinkingManager:
     def test_format_thoughts_for_display(self):
         """Test formatting thoughts for display."""
         manager = ThinkingManager(
-            enable_thinking=True,
-            thinking_budget=1024,
-            include_thoughts=True
+            enable_thinking=True, thinking_budget=1024, include_thoughts=True
         )
 
-        thoughts = [
-            "First thought",
-            "Second thought",
-            "Third thought"
-        ]
+        thoughts = ["First thought", "Second thought", "Third thought"]
 
         formatted = manager.format_thoughts_for_display(thoughts)
 
@@ -146,9 +125,7 @@ class TestThinkingManager:
     def test_format_thoughts_empty_list(self):
         """Test formatting empty thoughts list."""
         manager = ThinkingManager(
-            enable_thinking=True,
-            thinking_budget=1024,
-            include_thoughts=True
+            enable_thinking=True, thinking_budget=1024, include_thoughts=True
         )
 
         formatted = manager.format_thoughts_for_display([])
@@ -157,32 +134,24 @@ class TestThinkingManager:
     def test_is_thinking_enabled(self):
         """Test is_thinking_enabled method."""
         manager_enabled = ThinkingManager(
-            enable_thinking=True,
-            thinking_budget=1024,
-            include_thoughts=False
+            enable_thinking=True, thinking_budget=1024, include_thoughts=False
         )
         assert manager_enabled.is_thinking_enabled() is True
 
         manager_disabled = ThinkingManager(
-            enable_thinking=False,
-            thinking_budget=0,
-            include_thoughts=False
+            enable_thinking=False, thinking_budget=0, include_thoughts=False
         )
         assert manager_disabled.is_thinking_enabled() is False
 
         manager_zero_budget = ThinkingManager(
-            enable_thinking=True,
-            thinking_budget=0,
-            include_thoughts=False
+            enable_thinking=True, thinking_budget=0, include_thoughts=False
         )
         assert manager_zero_budget.is_thinking_enabled() is False
 
     def test_get_stats(self):
         """Test get_stats returns correct statistics."""
         manager = ThinkingManager(
-            enable_thinking=True,
-            thinking_budget=1024,
-            include_thoughts=False
+            enable_thinking=True, thinking_budget=1024, include_thoughts=False
         )
 
         stats = manager.get_stats()
@@ -195,9 +164,7 @@ class TestThinkingManager:
     def test_get_stats_auto_budget(self):
         """Test get_stats with auto budget."""
         manager = ThinkingManager(
-            enable_thinking=True,
-            thinking_budget=-1,
-            include_thoughts=False
+            enable_thinking=True, thinking_budget=-1, include_thoughts=False
         )
 
         stats = manager.get_stats()
@@ -206,9 +173,7 @@ class TestThinkingManager:
     def test_get_stats_disabled(self):
         """Test get_stats when disabled."""
         manager = ThinkingManager(
-            enable_thinking=False,
-            thinking_budget=0,
-            include_thoughts=False
+            enable_thinking=False, thinking_budget=0, include_thoughts=False
         )
 
         stats = manager.get_stats()

@@ -36,8 +36,8 @@ class Settings(BaseSettings):
         description="Google API key for Gemini AI",
     )
 
-    MODEL_NAME: str = Field(
-        default="gemini-2.0-flash-exp",
+    MODEL: str = Field(
+        default="gemini-2.5-flash",
         description="Gemini model to use for generation",
     )
 

@@ -1,20 +1,32 @@
 #!/usr/bin/env python3
-"""
-Odiseo Bot - Intelligent Sales Agent
+"""Lab01-MCP Multi-Agent System.
 
-Main entry point for Odiseo Bot using the official Anthropic MCP SDK.
-This implementation is 100% compliant with MCP specifications.
+Main entry point for the Lab01-MCP system with multi-agent routing support.
+This implementation provides:
+- Feature flag for gradual rollout (ENABLE_AGENT_ROUTING)
+- Backward compatibility with OdiseoBot (legacy mode)
+- Multi-agent routing (sales, booking, general)
+- Full compliance with MCP specifications
 
 Usage:
-    python main.py
+    # Legacy mode (OdiseoBot only):
+    ENABLE_AGENT_ROUTING=false python -m client_mcp
+
+    # Multi-agent mode (Router + specialized agents):
+    ENABLE_AGENT_ROUTING=true python -m client_mcp
 
 Features:
-    - Odiseo Bot: Intelligent sales agent with emotional intelligence
+    - AgentRouter: Intent classification (sales/booking/general)
+    - Sales Agent: OdiseoBot for product queries
+    - Booking Agent: Appointment management
+    - General Agent: FAQ and company information
     - Official Anthropic MCP SDK
-    - Full compliance with MCP specifications
-    - Autodiscovery of MCP tools
-    - Advanced prompt engineering (600+ lines)
-    - Clean and maintainable code
+    - Gradual rollout capability
+    - Advanced prompt engineering
+
+Author: Lab01-MCP Team
+Updated: 2025-10-11
+Version: 2.0.0 (Multi-Agent)
 """
 
 import asyncio
@@ -22,22 +34,39 @@ import sys
 
 # Support both direct execution and module execution
 try:
-    from .core.odiseo_bot import OdiseoBot
+    from .config.settings import settings
+    from .core.agent_orchestrator import AgentOrchestrator
 except ImportError:
     # Fallback for direct execution: python __main__.py
-    from core.odiseo_bot import OdiseoBot
+    from config.settings import settings
+    from core.agent_orchestrator import AgentOrchestrator
 
 
 async def main():
-    """Main entry point for Odiseo Bot with official MCP SDK."""
-    bot = OdiseoBot()
+    """Main entry point with multi-agent orchestrator."""
+    # Create orchestrator (automatically checks ENABLE_AGENT_ROUTING flag)
+    orchestrator = AgentOrchestrator()
+
+    # Ask for customer email for persistent memory (optional)
+    print("\n💾 Sistema de Memoria Persistente")
+    print("=" * 70)
+    print("Para habilitar memoria persistente entre sesiones, ingresa tu email.")
+    print("Presiona Enter para continuar sin memoria persistente.")
+    print("=" * 70)
+
+    customer_email = input("📧 Tu email (opcional): ").strip()
+    if not customer_email:
+        customer_email = None
+        print("ℹ️  Continuando sin memoria persistente")
+    else:
+        print(f"✅ Memoria habilitada para: {customer_email}")
 
     try:
-        # Initialize bot
-        await bot.initialize()
+        # Initialize orchestrator and agents (with optional memory)
+        await orchestrator.initialize(customer_email=customer_email)
 
         # Run interactive chat
-        await bot.run_interactive()
+        await orchestrator.run_interactive()
 
     except KeyboardInterrupt:
         print("\n👋 ¡Hasta luego!")
@@ -48,10 +77,16 @@ async def main():
 
     finally:
         # Cleanup resources
-        await bot.cleanup()
+        await orchestrator.cleanup()
 
 
 if __name__ == "__main__":
-    print("🚀 Odiseo Bot - Intelligent Sales Agent")
-    print("=" * 50)
+    # Display startup banner
+    mode = "MULTI-AGENT" if settings.ENABLE_AGENT_ROUTING else "LEGACY (OdiseoBot)"
+
+    print("🚀 Lab01-MCP - Multi-Agent Sales & Booking System")
+    print("=" * 70)
+    print(f"Mode: {mode}")
+    print("=" * 70)
+
     asyncio.run(main())

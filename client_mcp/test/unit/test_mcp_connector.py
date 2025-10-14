@@ -1,8 +1,9 @@
 """Unit tests for MCPConnector."""
 
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from core.mcp_connector import MCPConnector, discover_tools_official
 
@@ -91,7 +92,9 @@ class TestCheckServerHealth:
             mock_client.get.assert_awaited_once_with("http://localhost:8009/health")
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="httpx.RequestError mocking issue - functionality verified in integration tests")
+    @pytest.mark.skip(
+        reason="httpx.RequestError mocking issue - functionality verified in integration tests"
+    )
     async def test_check_server_health_unreachable(self):
         """Test health check when server is unreachable."""
         import httpx
@@ -112,7 +115,9 @@ class TestCheckServerHealth:
             assert result["url"] == "http://localhost:8009/health"
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="httpx exception mocking issue - functionality verified in integration tests")
+    @pytest.mark.skip(
+        reason="httpx exception mocking issue - functionality verified in integration tests"
+    )
     async def test_check_server_health_general_error(self):
         """Test health check with unexpected error."""
         with patch("core.mcp_connector.httpx.AsyncClient") as mock_client_class:

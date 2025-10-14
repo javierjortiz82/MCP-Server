@@ -4,10 +4,10 @@ This module tests the Context Caching feature for Gemini 1.5+ models,
 which reduces cost by 4x when reusing system instructions across requests.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from config.settings import settings
+import pytest
+
 from core.odiseo_bot import OdiseoBot
 
 
@@ -27,7 +27,9 @@ class TestContextCaching:
 
                     # Setup client.caches.create mock
                     mock_client_instance = MagicMock()
-                    mock_client_instance.caches.create = AsyncMock(return_value=mock_cached)
+                    mock_client_instance.caches.create = AsyncMock(
+                        return_value=mock_cached
+                    )
                     mock_client_class.return_value = mock_client_instance
 
                     bot = OdiseoBot()
@@ -77,7 +79,9 @@ class TestContextCaching:
                     mock_cached.usage_metadata.total_token_count = 1700
 
                     mock_client_instance = MagicMock()
-                    mock_client_instance.caches.create = AsyncMock(return_value=mock_cached)
+                    mock_client_instance.caches.create = AsyncMock(
+                        return_value=mock_cached
+                    )
                     mock_client_class.return_value = mock_client_instance
 
                     bot = OdiseoBot()
@@ -91,7 +95,10 @@ class TestContextCaching:
                     # Verify generation config uses cached content
                     assert bot._generation_config is not None
                     # Cached content should be used instead of system_instruction
-                    assert bot._generation_config.cached_content == "cachedContents/test-456"
+                    assert (
+                        bot._generation_config.cached_content
+                        == "cachedContents/test-456"
+                    )
 
     @pytest.mark.asyncio
     async def test_generation_config_fallback_without_cache(self):
@@ -113,7 +120,9 @@ class TestContextCaching:
                     # Verify generation config uses system_instruction
                     assert bot._generation_config is not None
                     assert bot._generation_config.system_instruction is not None
-                    assert bot._generation_config.system_instruction == bot.system_prompt
+                    assert (
+                        bot._generation_config.system_instruction == bot.system_prompt
+                    )
 
     @pytest.mark.asyncio
     async def test_cache_cleanup_on_bot_cleanup(self):
@@ -128,7 +137,9 @@ class TestContextCaching:
                     mock_cached.delete = AsyncMock()
 
                     mock_client_instance = MagicMock()
-                    mock_client_instance.caches.create = AsyncMock(return_value=mock_cached)
+                    mock_client_instance.caches.create = AsyncMock(
+                        return_value=mock_cached
+                    )
                     mock_client_class.return_value = mock_client_instance
 
                     bot = OdiseoBot()
@@ -160,7 +171,9 @@ class TestContextCaching:
                         mock_cached.usage_metadata.total_token_count = 1700
 
                         mock_client_instance = MagicMock()
-                        mock_client_instance.caches.create = AsyncMock(return_value=mock_cached)
+                        mock_client_instance.caches.create = AsyncMock(
+                            return_value=mock_cached
+                        )
                         mock_client_class.return_value = mock_client_instance
 
                         bot = OdiseoBot()
@@ -176,7 +189,9 @@ class TestContextCaching:
                         # TTL should be timedelta(minutes=120)
                         ttl_arg = call_args.kwargs.get("ttl")
                         assert ttl_arg is not None
-                        assert ttl_arg.total_seconds() == 120 * 60  # 120 minutes in seconds
+                        assert (
+                            ttl_arg.total_seconds() == 120 * 60
+                        )  # 120 minutes in seconds
 
     @pytest.mark.asyncio
     async def test_cache_creation_failure_graceful_fallback(self):
@@ -186,7 +201,9 @@ class TestContextCaching:
                 with patch("core.odiseo_bot.genai.Client") as mock_client_class:
                     # Simulate cache creation failure
                     mock_client_instance = MagicMock()
-                    mock_client_instance.caches.create = AsyncMock(side_effect=Exception("Cache creation failed"))
+                    mock_client_instance.caches.create = AsyncMock(
+                        side_effect=Exception("Cache creation failed")
+                    )
                     mock_client_class.return_value = mock_client_instance
 
                     bot = OdiseoBot()

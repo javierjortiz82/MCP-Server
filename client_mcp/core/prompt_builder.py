@@ -9,8 +9,8 @@ This module handles dynamic system prompt construction by:
 
 from google.genai import types
 
-from config.settings import settings
-from utils.logger import get_logger
+from client_mcp.config.settings import settings
+from client_mcp.utils.logger import get_logger
 
 logger = get_logger("PromptBuilder", settings.LOG_LEVEL)
 
@@ -56,11 +56,9 @@ class PromptBuilder:
             )
 
             # Inject tools context and pagination config into prompt
-            final_prompt = (
-                system_prompt_template
-                .replace("{TOOLS_CONTEXT}", tools_context)
-                .replace("{PAGINATION_PAGE_SIZE}", str(settings.PAGINATION_PAGE_SIZE))
-            )
+            final_prompt = system_prompt_template.replace(
+                "{TOOLS_CONTEXT}", tools_context
+            ).replace("{PAGINATION_PAGE_SIZE}", str(settings.PAGINATION_PAGE_SIZE))
 
             logger.debug(f"Sistema prompt construido: {len(final_prompt)} caracteres")
             return final_prompt
@@ -106,7 +104,9 @@ class PromptBuilder:
             tool_description = func_decl.description or "Sin descripción disponible"
 
             # Clean up description
-            desc_lines = [line.strip() for line in tool_description.split("\n") if line.strip()]
+            desc_lines = [
+                line.strip() for line in tool_description.split("\n") if line.strip()
+            ]
             first_line = desc_lines[0] if desc_lines else "Sin descripción"
 
             tools_info.append(f"\n### {i}. `{tool_name}`")
@@ -120,7 +120,9 @@ class PromptBuilder:
                     param_desc = param_schema.description or ""
                     is_required = param_name in (func_decl.parameters.required or [])
                     required_marker = " (required)" if is_required else " (optional)"
-                    tools_info.append(f"  - `{param_name}` ({param_type}){required_marker}: {param_desc}")
+                    tools_info.append(
+                        f"  - `{param_name}` ({param_type}){required_marker}: {param_desc}"
+                    )
                 tools_info.append("")
 
             # Additional details if available
@@ -129,13 +131,23 @@ class PromptBuilder:
 
         # ✅ CRITICAL: Generic instruction, NO hardcoded tool names
         tools_info.append("\n💡 **Estrategia de Inferencia Automática**:")
-        tools_info.append("1. Analiza la INTENCIÓN del cliente (buscar, consultar, comparar)")
-        tools_info.append("2. Detecta si hay MÚLTIPLES intenciones/categorías diferentes en una consulta")
-        tools_info.append("3. Para múltiples intenciones: haz MÚLTIPLES llamadas (una por categoría)")
+        tools_info.append(
+            "1. Analiza la INTENCIÓN del cliente (buscar, consultar, comparar)"
+        )
+        tools_info.append(
+            "2. Detecta si hay MÚLTIPLES intenciones/categorías diferentes en una consulta"
+        )
+        tools_info.append(
+            "3. Para múltiples intenciones: haz MÚLTIPLES llamadas (una por categoría)"
+        )
         tools_info.append("4. Identifica PALABRAS CLAVE relevantes en cada intención")
-        tools_info.append("5. Selecciona la herramienta MÁS APROPIADA para cada categoría")
+        tools_info.append(
+            "5. Selecciona la herramienta MÁS APROPIADA para cada categoría"
+        )
         tools_info.append("6. Si la consulta es ambigua, PREGUNTA para clarificar")
-        tools_info.append("7. Si ninguna herramienta aplica, responde con tu conocimiento general")
+        tools_info.append(
+            "7. Si ninguna herramienta aplica, responde con tu conocimiento general"
+        )
 
         return "\n".join(tools_info)
 

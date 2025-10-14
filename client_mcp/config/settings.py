@@ -295,6 +295,21 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # Multi-Agent System Configuration
+    # ============================================================================
+    ENABLE_AGENT_ROUTING: bool = Field(
+        default=False,
+        description="Enable multi-agent routing (sales, booking, general)",
+    )
+
+    ROUTER_TEMPERATURE: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=0.5,
+        description="Temperature for intent classification (0.0 = deterministic)",
+    )
+
+    # ============================================================================
     # Pagination Persistence Configuration
     # ============================================================================
     PAGINATION_PERSISTENCE_ENABLED: bool = Field(
@@ -354,7 +369,9 @@ class Settings(BaseSettings):
 
         if not self.GOOGLE_API_KEY:
             # Use getpass for masked input (prevents terminal history leakage)
-            self.GOOGLE_API_KEY = getpass.getpass("🔑 Introduce tu GOOGLE_API_KEY: ").strip()
+            self.GOOGLE_API_KEY = getpass.getpass(
+                "🔑 Introduce tu GOOGLE_API_KEY: "
+            ).strip()
 
             if not self.GOOGLE_API_KEY:
                 raise ValueError("❌ API key es requerida para continuar")
@@ -402,7 +419,6 @@ class Settings(BaseSettings):
         if not prompt_path.exists():
             raise FileNotFoundError(f"System prompt not found at: {prompt_path}")
         return prompt_path.read_text(encoding="utf-8")
-
 
     def get_retry_config(self) -> dict[str, float | int | bool]:
         """Get retry configuration as dictionary.

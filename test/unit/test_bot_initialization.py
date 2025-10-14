@@ -1,10 +1,35 @@
 #!/usr/bin/env python3
 """
-Test Bot Initialization - Verifica inicialización completa del bot
+DEPRECATED: Legacy OdiseoBot Initialization Tests
+
+⚠️  WARNING: This test file tests Legacy OdiseoBot internal implementation.
+
+Status: DEPRECATED as of 2025-10-12
+Replacement: agent/test_odiseo_bot_v2_integration.py
+Removal: Scheduled for Week 6-8 of Legacy elimination plan
+
+These tests check Legacy OdiseoBot constructor and internal methods.
+OdiseoBotV2 has different architecture (BaseAgent-based) and these
+internal methods do not exist in V2.
+
+For V2 testing, see:
+  - agent/test_odiseo_bot_v2_integration.py (8 integration tests)
+  - agent/test_odiseo_bot_v2.py (unit tests)
+
+See: agent/docs/TEST_MIGRATION_ANALYSIS.md for migration decision details.
 """
 
 import sys
 from pathlib import Path
+import warnings
+
+warnings.warn(
+    "test_bot_initialization.py tests deprecated Legacy OdiseoBot. "
+    "Use agent/test_odiseo_bot_v2_integration.py instead. "
+    "This file will be removed in Week 6-8 of Legacy elimination.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))

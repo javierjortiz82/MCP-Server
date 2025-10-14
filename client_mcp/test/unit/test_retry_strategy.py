@@ -1,8 +1,6 @@
 """Unit tests for RetryStrategy."""
 
-import asyncio
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from strategies.retry import RetryConfig, RetryStrategy, retry_with_backoff
 
@@ -148,9 +146,7 @@ class TestRetryStrategy:
 
     def test_calculate_backoff_exponential(self):
         """Test exponential backoff calculation."""
-        config = RetryConfig(
-            initial_delay_ms=100.0, exponential_base=2.0, jitter=False
-        )
+        config = RetryConfig(initial_delay_ms=100.0, exponential_base=2.0, jitter=False)
         strategy = RetryStrategy(config)
 
         delay1 = strategy._calculate_backoff(1)

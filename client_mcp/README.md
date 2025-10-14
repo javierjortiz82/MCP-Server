@@ -491,40 +491,83 @@ curl http://localhost:8080/health
 
 SmartBot follows a **modular, SOLID-principles architecture** with clear separation of concerns:
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         User Input                               │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     OdiseoBot (Orchestrator)                     │
-│  • Conversation management                                       │
-│  • Response coordination                                         │
-│  • State management                                             │
-└──────┬──────────────┬──────────────┬──────────────┬─────────────┘
-       │              │              │              │
-       ▼              ▼              ▼              ▼
-┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐
-│  Prompt  │  │  Result  │  │   Tool   │  │  Pagination  │
-│ Builder  │  │Serializer│  │ Executor │  │   Manager    │
-└──────────┘  └──────────┘  └─────┬────┘  └──────────────┘
-                                   │
-                                   ▼
-                    ┌──────────────────────────┐
-                    │   MCP Connector          │
-                    │  • Health checks         │
-                    │  • Tool discovery        │
-                    │  • API communication     │
-                    └────────┬─────────────────┘
-                             │
-                             ▼
-                    ┌──────────────────────────┐
-                    │   MCP Server (External)  │
-                    │  • Product search        │
-                    │  • Fuzzy matching        │
-                    │  • Database queries      │
-                    └──────────────────────────┘
+```mermaid
+graph TB
+    subgraph UserInterface["👤 User Interface"]
+        UserInput["User Input<br/>━━━━━━━━<br/>Natural language<br/>queries"]
+    end
+
+    subgraph Orchestrator["🎯 Orchestration Layer"]
+        OdiseoBot["🤖 OdiseoBot<br/>━━━━━━━━<br/>Main orchestrator (844 lines)<br/>• Conversation management<br/>• Response coordination<br/>• State management"]
+    end
+
+    subgraph CoreComponents["⚙️ Core Components (SOLID Refactored)"]
+        direction LR
+
+        PromptBuilder["📝 Prompt Builder<br/>━━━━━━━━<br/>169 lines<br/>• Dynamic system prompts<br/>• Tool context generation"]
+
+        ResultSerializer["🔄 Result Serializer<br/>━━━━━━━━<br/>123 lines<br/>• Anti-hallucination format<br/>• SKU validation"]
+
+        ToolExecutor["🛠️ Tool Executor<br/>━━━━━━━━<br/>• Validation (Pydantic v2)<br/>• Caching (TTL-based)<br/>• Retry logic"]
+
+        PaginationMgr["📄 Pagination Manager<br/>━━━━━━━━<br/>• Client-side chunking<br/>• Optional PostgreSQL<br/>• Session management"]
+    end
+
+    subgraph Integration["🔌 Integration Layer"]
+        MCPConnector["MCP Connector<br/>━━━━━━━━<br/>• Health checks<br/>• Tool discovery<br/>• API communication<br/>• HTTP/JSON-RPC"]
+
+        GeminiClient["Gemini Client<br/>━━━━━━━━<br/>• AI requests<br/>• Thinking Mode<br/>• History tracking"]
+    end
+
+    subgraph Supporting["🔧 Supporting Services"]
+        RateLimiter["🚦 Rate Limiter<br/>━━━━━━━━<br/>Leaky Bucket<br/>15 RPM / 1500 RPD"]
+
+        ThinkingMgr["🧠 Thinking Manager<br/>━━━━━━━━<br/>Gemini 2.5+<br/>Reasoning budget"]
+
+        Cache["💨 Tool Cache<br/>━━━━━━━━<br/>TTL: 5 minutes<br/>In-memory"]
+
+        ConvMgr["💬 Conversation Manager<br/>━━━━━━━━<br/>History tracking<br/>Context limits"]
+    end
+
+    subgraph External["🌐 External Services"]
+        MCPServer["MCP Server<br/>━━━━━━━━<br/>• Product search<br/>• Fuzzy matching<br/>• Database queries<br/>Port: 3000"]
+
+        GeminiAPI["Google Gemini API<br/>━━━━━━━━<br/>gemini-2.5-flash<br/>Natural language<br/>processing"]
+
+        PostgreSQL["PostgreSQL<br/>━━━━━━━━<br/>Pagination<br/>persistence<br/>(optional)"]
+    end
+
+    UserInput --> OdiseoBot
+
+    OdiseoBot --> PromptBuilder
+    OdiseoBot --> ResultSerializer
+    OdiseoBot --> ToolExecutor
+    OdiseoBot --> PaginationMgr
+    OdiseoBot --> MCPConnector
+    OdiseoBot --> GeminiClient
+
+    OdiseoBot --> RateLimiter
+    OdiseoBot --> ThinkingMgr
+    OdiseoBot --> Cache
+    OdiseoBot --> ConvMgr
+
+    MCPConnector --> MCPServer
+    GeminiClient --> GeminiAPI
+    PaginationMgr -.->|"Optional"| PostgreSQL
+    ToolExecutor --> Cache
+
+    MCPConnector -->|"Results"| ResultSerializer
+    ResultSerializer -->|"Formatted"| PaginationMgr
+    PaginationMgr -->|"Paginated"| OdiseoBot
+
+    OdiseoBot -->|"Response"| UserInput
+
+    style UserInterface fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    style Orchestrator fill:#f3e5f5,stroke:#4a148c,stroke-width:3px
+    style CoreComponents fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style Integration fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style Supporting fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    style External fill:#fff9c4,stroke:#f57f17,stroke-width:2px
 ```
 
 ### Project Structure
@@ -644,38 +687,85 @@ client_mcp/
 - **Builder**: PromptBuilder for dynamic system prompts
 - **Serializer**: ResultSerializer for structured responses
 
-### Data Flow
+### Data Flow Diagram
 
-```
-User Input
-    ↓
-OdiseoBot.send_message()
-    ↓
-Rate Limiter (Leaky Bucket)
-    ↓
-PromptBuilder (Dynamic system prompt)
-    ↓
-Gemini API (with Thinking Mode)
-    ↓
-Function Call Detection
-    ↓
-ToolExecutor.execute_tool()
-    ├─→ ToolValidator (Pydantic v2)
-    ├─→ ToolCache (TTL-based)
-    ├─→ RetryStrategy (Exponential backoff)
-    └─→ FallbackStrategy (Alternative tools)
-    ↓
-MCP Server (via MCPConnector)
-    ↓
-Tool Response
-    ↓
-ResultSerializer (Anti-hallucination format)
-    ↓
-Response Validation (SKU verification)
-    ↓
-PaginationManager (Client-side chunking)
-    ↓
-Final Response to User
+```mermaid
+flowchart TD
+    Start([👤 User Input<br/>'Busco una laptop gaming']) --> SendMessage["🤖 OdiseoBot.send_message()<br/>━━━━━━━━<br/>Entry point"]
+
+    SendMessage --> RateLimit{🚦 Rate Limiter<br/>Leaky Bucket<br/>15 RPM?}
+
+    RateLimit -->|"❌ Limit exceeded"| Wait["⏳ Wait<br/>Exponential backoff"]
+    RateLimit -->|"✅ Allowed"| BuildPrompt["📝 PromptBuilder<br/>━━━━━━━━<br/>• Load system prompt<br/>• Add tool context<br/>• Build dynamic prompt"]
+
+    Wait --> RateLimit
+
+    BuildPrompt --> CheckCache{💨 Cache Hit?<br/>TTL: 5 min}
+
+    CheckCache -->|"✅ Cache hit"| FormatCached["🔄 Format from cache"]
+    CheckCache -->|"❌ Cache miss"| GeminiAPI["🧠 Gemini API Call<br/>━━━━━━━━<br/>Model: gemini-2.5-flash<br/>Thinking Mode: ON<br/>Temperature: 0.2"]
+
+    GeminiAPI --> ThinkingMode["💭 Thinking Mode<br/>━━━━━━━━<br/>Internal reasoning<br/>Budget: 1024 tokens"]
+
+    ThinkingMode --> DetectFunction{🔍 Function Call<br/>Detected?}
+
+    DetectFunction -->|"❌ No tool needed"| DirectResponse["💬 Direct text response"]
+    DetectFunction -->|"✅ Tool required"| ToolExecution["🛠️ ToolExecutor.execute_tool()<br/>━━━━━━━━<br/>Tool: search_products"]
+
+    ToolExecution --> Validate["✓ Pydantic v2 Validation<br/>━━━━━━━━<br/>Check parameters"]
+
+    Validate -->|"❌ Invalid"| ValidationError["❌ ValidationError<br/>Return error message"]
+    Validate -->|"✅ Valid"| CallMCP["🔌 MCP Connector<br/>━━━━━━━━<br/>HTTP POST to MCP Server<br/>Port: 3000"]
+
+    CallMCP --> Retry{🔄 Retry Logic?<br/>Max: 5 attempts}
+
+    Retry -->|"❌ Failed"| Fallback["🔄 Fallback Strategy<br/>━━━━━━━━<br/>Try alternative tool"]
+    Retry -->|"✅ Success"| MCPResponse["📦 MCP Server Response<br/>━━━━━━━━<br/>Product data (JSON)"]
+
+    Fallback -->|"Still failed"| FallbackError["❌ Error response<br/>'No se encontraron resultados'"]
+    Fallback -->|"Success"| MCPResponse
+
+    MCPResponse --> CacheResult["💨 Cache Result<br/>━━━━━━━━<br/>Store for 5 minutes"]
+
+    CacheResult --> Serialize["🔄 ResultSerializer<br/>━━━━━━━━<br/>• Anti-hallucination format<br/>• SKU validation<br/>• Native arrays"]
+
+    FormatCached --> Serialize
+
+    Serialize --> ValidateSKU{✓ SKU Validation<br/>Real products?}
+
+    ValidateSKU -->|"❌ Hallucinated SKUs"| FilterSKU["🚫 Filter invalid SKUs<br/>━━━━━━━━<br/>Keep only real products"]
+    ValidateSKU -->|"✅ All valid"| Paginate["📄 PaginationManager<br/>━━━━━━━━<br/>• Page size: 4 items<br/>• Client-side chunking<br/>• Optional DB persistence"]
+
+    FilterSKU --> Paginate
+
+    Paginate --> CheckMore{More Results?<br/>Total > Page size}
+
+    CheckMore -->|"✅ Yes"| AddPrompt["💡 Add continuation prompt<br/>'Escribe más para ver más'"]
+    CheckMore -->|"❌ No"| FormatFinal["📝 Format Final Response<br/>━━━━━━━━<br/>Natural language + products"]
+
+    AddPrompt --> FormatFinal
+
+    DirectResponse --> FormatFinal
+    ValidationError --> FormatFinal
+    FallbackError --> FormatFinal
+
+    FormatFinal --> UpdateHistory["💬 Update Conversation History<br/>━━━━━━━━<br/>User + Assistant messages"]
+
+    UpdateHistory --> ReturnResponse["✅ Return to User<br/>━━━━━━━━<br/>Final formatted response"]
+
+    ReturnResponse --> End([🎉 Response Complete])
+
+    style Start fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px
+    style End fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px
+    style GeminiAPI fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style ThinkingMode fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
+    style ToolExecution fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style Serialize fill:#ffe0b2,stroke:#ef6c00,stroke-width:2px
+    style Paginate fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    style ValidationError fill:#ffcdd2,stroke:#c62828,stroke-width:2px
+    style FallbackError fill:#ffcdd2,stroke:#c62828,stroke-width:2px
+    style CheckCache fill:#fff59d,stroke:#f9a825,stroke-width:2px
+    style RateLimit fill:#fff59d,stroke:#f9a825,stroke-width:2px
 ```
 
 ---

@@ -21,11 +21,31 @@ logger = setup_logging("mcp_tool_handlers")
 mcp = None
 
 
-def init_tool_handlers(mcp_instance):
-    """Initialize tool handlers with MCP instance."""
+def init_product_handlers(mcp_instance):
+    """Initialize product handlers with MCP instance."""
     global mcp
     mcp = mcp_instance
     register_tools()
+
+
+def get_product_tool_names() -> list[str]:
+    """
+    Return list of registered product tool names.
+
+    This function provides dynamic tool discovery without hardcoding tool lists
+    in client code. Tools are defined here in the handler module and exposed
+    via MCP resources for client-side filtering.
+
+    Returns:
+        List of product tool names registered in this module
+    """
+    return [
+        "fetch_by_sku",
+        "fetch_by_id",
+        "search_products",
+        "fuzzy_search_smart",
+        "ingest_products",
+    ]
 
 
 def register_tools():

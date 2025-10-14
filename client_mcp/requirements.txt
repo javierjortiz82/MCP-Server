@@ -32,3 +32,6 @@ psycopg2-binary>=2.9.0        # PostgreSQL adapter for pagination persistence
 
 # Environment Variables
 python-dotenv>=1.0.0          # Load environment variables from .env file
+
+# Template Engine
+jinja2>=3.1.0                 # Template engine for PromptManager (modular prompts)
