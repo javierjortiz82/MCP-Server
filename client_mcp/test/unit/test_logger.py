@@ -1,11 +1,10 @@
 """Unit tests for MCPLogger enhanced logging utility."""
 
 import logging
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 from io import StringIO
+from unittest.mock import patch
 
-from utils.logger import MCPLogger, LogLevel, get_logger, logger
+from utils.logger import LogLevel, MCPLogger, get_logger, logger
 
 
 class TestLogLevel:

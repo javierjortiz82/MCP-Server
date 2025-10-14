@@ -8,8 +8,8 @@ from typing import Any
 
 from google.genai import types
 
-from config.settings import settings
-from utils.logger import get_logger
+from client_mcp.config.settings import settings
+from client_mcp.utils.logger import get_logger
 
 logger = get_logger("FunctionCallHandler", settings.LOG_LEVEL)
 
@@ -103,4 +103,10 @@ class FunctionCallHandler:
         if not self.has_candidates(response):
             return None
 
-        return response.candidates[0].content.parts
+        # Defensive check: content can be None
+        content = response.candidates[0].content
+        if content is None or not hasattr(content, "parts"):
+            logger.warning("Response content is None or missing parts - cannot extract")
+            return None
+
+        return content.parts

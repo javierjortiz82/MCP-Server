@@ -1,9 +1,8 @@
 """Unit tests for core/odiseo_bot.py."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
-from datetime import timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from google.genai import types
 
 from core.odiseo_bot import OdiseoBot
@@ -66,8 +65,12 @@ class TestOdiseoBotInitialize:
                 mock_client_class.return_value = mock_client
 
                 with patch.object(bot, "_connect_mcp_official", new_callable=AsyncMock):
-                    with patch.object(bot, "_build_dynamic_system_prompt", return_value="test prompt"):
-                        with patch.object(bot, "_build_generation_config", return_value=MagicMock()):
+                    with patch.object(
+                        bot, "_build_dynamic_system_prompt", return_value="test prompt"
+                    ):
+                        with patch.object(
+                            bot, "_build_generation_config", return_value=MagicMock()
+                        ):
                             await bot.initialize()
 
         assert bot.client is not None
@@ -106,8 +109,12 @@ class TestOdiseoBotInitialize:
                 mock_client_class.return_value = mock_client
 
                 with patch.object(bot, "_connect_mcp_official", new_callable=AsyncMock):
-                    with patch.object(bot, "_build_dynamic_system_prompt", return_value="test prompt"):
-                        with patch.object(bot, "_build_generation_config", return_value=MagicMock()):
+                    with patch.object(
+                        bot, "_build_dynamic_system_prompt", return_value="test prompt"
+                    ):
+                        with patch.object(
+                            bot, "_build_generation_config", return_value=MagicMock()
+                        ):
                             await bot.initialize()
 
         assert bot.cached_content is not None
@@ -128,12 +135,18 @@ class TestOdiseoBotInitialize:
             with patch("core.odiseo_bot.genai.Client") as mock_client_class:
                 mock_client = MagicMock()
                 # caches.create is NOT async (fixed earlier)
-                mock_client.caches.create = MagicMock(side_effect=Exception("Cache error"))
+                mock_client.caches.create = MagicMock(
+                    side_effect=Exception("Cache error")
+                )
                 mock_client_class.return_value = mock_client
 
                 with patch.object(bot, "_connect_mcp_official", new_callable=AsyncMock):
-                    with patch.object(bot, "_build_dynamic_system_prompt", return_value="test prompt"):
-                        with patch.object(bot, "_build_generation_config", return_value=MagicMock()):
+                    with patch.object(
+                        bot, "_build_dynamic_system_prompt", return_value="test prompt"
+                    ):
+                        with patch.object(
+                            bot, "_build_generation_config", return_value=MagicMock()
+                        ):
                             await bot.initialize()
 
         assert bot.cached_content is None  # Should be None but initialization continues
@@ -157,19 +170,25 @@ class TestConnectMCPOfficial:
                     "database": {
                         "status": "healthy",
                         "product_count": 100,
-                        "extensions": ["unaccent", "pg_trgm"]
+                        "extensions": ["unaccent", "pg_trgm"],
                     }
-                }
+                },
             }
 
             with patch("core.odiseo_bot.MCPConnector") as mock_connector_class:
-                mock_connector_class.check_server_health = AsyncMock(return_value=health_response)
+                mock_connector_class.check_server_health = AsyncMock(
+                    return_value=health_response
+                )
                 mock_connector = MagicMock()
                 mock_connector.__aenter__ = AsyncMock()
-                mock_connector.list_tools = AsyncMock(return_value=[{"name": "test_tool"}])
+                mock_connector.list_tools = AsyncMock(
+                    return_value=[{"name": "test_tool"}]
+                )
                 mock_connector_class.return_value = mock_connector
 
-                with patch.object(bot, "_convert_tools_to_genai", return_value=[MagicMock()]):
+                with patch.object(
+                    bot, "_convert_tools_to_genai", return_value=[MagicMock()]
+                ):
                     await bot._connect_mcp_official()
 
         assert bot.mcp_client is not None
@@ -187,11 +206,13 @@ class TestConnectMCPOfficial:
             health_response = {
                 "status": "unreachable",
                 "error": "Connection refused",
-                "url": "http://localhost:3000/mcp"
+                "url": "http://localhost:3000/mcp",
             }
 
             with patch("core.odiseo_bot.MCPConnector") as mock_connector_class:
-                mock_connector_class.check_server_health = AsyncMock(return_value=health_response)
+                mock_connector_class.check_server_health = AsyncMock(
+                    return_value=health_response
+                )
 
                 # Should NOT raise - graceful degradation
                 await bot._connect_mcp_official()
@@ -212,15 +233,14 @@ class TestConnectMCPOfficial:
             health_response = {
                 "status": "unhealthy",
                 "checks": {
-                    "database": {
-                        "status": "unhealthy",
-                        "error": "Connection failed"
-                    }
-                }
+                    "database": {"status": "unhealthy", "error": "Connection failed"}
+                },
             }
 
             with patch("core.odiseo_bot.MCPConnector") as mock_connector_class:
-                mock_connector_class.check_server_health = AsyncMock(return_value=health_response)
+                mock_connector_class.check_server_health = AsyncMock(
+                    return_value=health_response
+                )
 
                 # Should NOT raise - graceful degradation
                 await bot._connect_mcp_official()
@@ -243,13 +263,15 @@ class TestConnectMCPOfficial:
                 "checks": {
                     "database": {
                         "status": "degraded",
-                        "warning": "Some extensions missing"
+                        "warning": "Some extensions missing",
                     }
-                }
+                },
             }
 
             with patch("core.odiseo_bot.MCPConnector") as mock_connector_class:
-                mock_connector_class.check_server_health = AsyncMock(return_value=health_response)
+                mock_connector_class.check_server_health = AsyncMock(
+                    return_value=health_response
+                )
                 mock_connector = MagicMock()
                 mock_connector.__aenter__ = AsyncMock()
                 mock_connector.list_tools = AsyncMock(return_value=[])
@@ -273,17 +295,19 @@ class TestConvertToolsToGenai:
     def test_convert_single_tool(self):
         """Test converting single tool."""
         bot = OdiseoBot()
-        tools = [{
-            "name": "search_products",
-            "description": "Search for products",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Search query"}
+        tools = [
+            {
+                "name": "search_products",
+                "description": "Search for products",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query"}
+                    },
+                    "required": ["query"],
                 },
-                "required": ["query"]
             }
-        }]
+        ]
 
         result = bot._convert_tools_to_genai(tools)
         assert len(result) == 1
@@ -296,21 +320,13 @@ class TestConvertToolsToGenai:
             {
                 "name": "tool1",
                 "description": "Tool 1",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                }
+                "inputSchema": {"type": "object", "properties": {}, "required": []},
             },
             {
                 "name": "tool2",
                 "description": "Tool 2",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                }
-            }
+                "inputSchema": {"type": "object", "properties": {}, "required": []},
+            },
         ]
 
         result = bot._convert_tools_to_genai(tools)
@@ -325,7 +341,7 @@ class TestBuildDynamicSystemPrompt:
         bot = OdiseoBot()
         bot.mcp_tools = [
             MagicMock(name="search_products"),
-            MagicMock(name="get_product_details")
+            MagicMock(name="get_product_details"),
         ]
 
         prompt = bot._build_dynamic_system_prompt()
@@ -359,10 +375,12 @@ class TestBuildGenerationConfig:
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
-                        "query": types.Schema(type=types.Type.STRING, description="Query param")
+                        "query": types.Schema(
+                            type=types.Type.STRING, description="Query param"
+                        )
                     },
-                    required=["query"]
-                )
+                    required=["query"],
+                ),
             )
         ]
         bot.cached_content = None
@@ -392,10 +410,12 @@ class TestBuildGenerationConfig:
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
-                        "query": types.Schema(type=types.Type.STRING, description="Query param")
+                        "query": types.Schema(
+                            type=types.Type.STRING, description="Query param"
+                        )
                     },
-                    required=["query"]
-                )
+                    required=["query"],
+                ),
             )
         ]
 

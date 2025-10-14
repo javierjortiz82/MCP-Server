@@ -1,10 +1,10 @@
 """Unit tests for monitoring/client_health.py."""
 
-import asyncio
 import os
-import pytest
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from monitoring.client_health import (
     ClientHealthMonitor,
@@ -177,7 +177,9 @@ class TestCheckBotStatus:
         mock_bot.client = MagicMock()
         # Force an exception by making hasattr raise
         monitor.bot_instance = mock_bot
-        with patch("monitoring.client_health.hasattr", side_effect=Exception("Test error")):
+        with patch(
+            "monitoring.client_health.hasattr", side_effect=Exception("Test error")
+        ):
             result = await monitor.check_bot_status()
         assert result.status == HealthStatus.UNHEALTHY
         assert "failed" in result.message.lower()
@@ -236,7 +238,9 @@ class TestCheckMCPConnectivity:
         mock_bot = MagicMock()
         mock_bot.mcp_client = MagicMock()
         monitor.set_bot_instance(mock_bot)
-        with patch("monitoring.client_health.hasattr", side_effect=Exception("Test error")):
+        with patch(
+            "monitoring.client_health.hasattr", side_effect=Exception("Test error")
+        ):
             result = await monitor.check_mcp_connectivity()
         assert result.status == HealthStatus.UNHEALTHY
 
@@ -306,7 +310,9 @@ class TestCheckSystemResources:
         with patch("psutil.Process") as mock_process:
             mock_proc = MagicMock()
             mock_proc.cpu_percent.return_value = 10.0
-            mock_proc.memory_info.return_value = MagicMock(rss=100 * 1024 * 1024)  # 100 MB
+            mock_proc.memory_info.return_value = MagicMock(
+                rss=100 * 1024 * 1024
+            )  # 100 MB
             mock_process.return_value = mock_proc
             with patch("psutil.virtual_memory") as mock_vm:
                 mock_vm.return_value = MagicMock(percent=50.0)
@@ -324,7 +330,9 @@ class TestCheckSystemResources:
         with patch("psutil.Process") as mock_process:
             mock_proc = MagicMock()
             mock_proc.cpu_percent.return_value = 10.0
-            mock_proc.memory_info.return_value = MagicMock(rss=1500 * 1024 * 1024)  # 1500 MB
+            mock_proc.memory_info.return_value = MagicMock(
+                rss=1500 * 1024 * 1024
+            )  # 1500 MB
             mock_process.return_value = mock_proc
             with patch("psutil.virtual_memory") as mock_vm:
                 mock_vm.return_value = MagicMock(percent=50.0)

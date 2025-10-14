@@ -1,11 +1,12 @@
 """Unit tests for ToolExecutor."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from core.tool_cache import ToolCache
 from core.tool_executor import ToolExecutor
 from core.tool_validator import ToolValidator
-from core.tool_cache import ToolCache
 from observability.tracker import ToolTracker
 
 
@@ -130,6 +131,7 @@ class TestToolExecutor:
 
         # Create fresh tracker to avoid counting previous test executions
         from observability.tracker import ToolTracker
+
         custom_tracker = ToolTracker()
 
         executor = ToolExecutor(mock_connector, tracker=custom_tracker)
@@ -414,9 +416,7 @@ class TestToolExecutorFallback:
         mock_connector = AsyncMock()
 
         # Both calls return empty
-        mock_connector.call_tool = AsyncMock(
-            return_value=[]
-        )
+        mock_connector.call_tool = AsyncMock(return_value=[])
 
         executor = ToolExecutor(mock_connector)
 

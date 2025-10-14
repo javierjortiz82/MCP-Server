@@ -368,9 +368,7 @@ class TestToolValidatorIntegration:
 
         # Get search_products tool
         search_tool = sample_mcp_tools[0]
-        validator.register_tool_schema(
-            search_tool["name"], search_tool["inputSchema"]
-        )
+        validator.register_tool_schema(search_tool["name"], search_tool["inputSchema"])
 
         # Valid parameters
         params = {"query": "laptop", "limit": 5}
@@ -384,9 +382,7 @@ class TestToolValidatorIntegration:
         validator = ToolValidator()
 
         search_tool = sample_mcp_tools[0]
-        validator.register_tool_schema(
-            search_tool["name"], search_tool["inputSchema"]
-        )
+        validator.register_tool_schema(search_tool["name"], search_tool["inputSchema"])
 
         # Only required parameter
         params = {"query": "laptop"}

@@ -4,7 +4,10 @@ Resource endpoints for MCP protocol.
 Provides URI-based access to data resources.
 """
 
+import json
+
 from config import settings
+from mcp_handlers import booking_handlers, product_handlers
 from tools import fetch as fetch_tool
 
 # Global mcp instance - will be injected from server.py
@@ -78,3 +81,37 @@ Schema: {settings.SCHEMA_NAME}
             return "Unable to retrieve database statistics."
         except Exception as e:
             return f"Error retrieving database stats: {str(e)}"
+
+    @mcp.resource("tool-categories://products")  # type: ignore[union-attr]
+    def get_product_tool_categories() -> str:
+        """
+        Resource providing list of product tool names for dynamic filtering.
+
+        This resource enables clients to dynamically discover which tools belong
+        to the product category without hardcoding tool lists in client code.
+
+        Returns:
+            JSON string containing list of product tool names
+        """
+        try:
+            tool_names = product_handlers.get_product_tool_names()
+            return json.dumps({"category": "products", "tools": tool_names, "count": len(tool_names)})
+        except Exception as e:
+            return json.dumps({"error": f"Error retrieving product tool names: {str(e)}"})
+
+    @mcp.resource("tool-categories://bookings")  # type: ignore[union-attr]
+    def get_booking_tool_categories() -> str:
+        """
+        Resource providing list of booking tool names for dynamic filtering.
+
+        This resource enables clients to dynamically discover which tools belong
+        to the booking category without hardcoding tool lists in client code.
+
+        Returns:
+            JSON string containing list of booking tool names
+        """
+        try:
+            tool_names = booking_handlers.get_booking_tool_names()
+            return json.dumps({"category": "bookings", "tools": tool_names, "count": len(tool_names)})
+        except Exception as e:
+            return json.dumps({"error": f"Error retrieving booking tool names: {str(e)}"})

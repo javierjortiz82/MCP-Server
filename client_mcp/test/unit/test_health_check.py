@@ -1,16 +1,17 @@
 """Unit tests for health check CLI."""
 
 import argparse
-import asyncio
 import json
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
-from io import StringIO
 
 # Import the module under test
 import sys
+from datetime import datetime
+from io import StringIO
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from cli import health_check
@@ -43,11 +44,13 @@ class TestHealthCheckCLI:
         """Test main with default arguments."""
         # Setup mock
         mock_monitor = MagicMock()
-        mock_monitor.get_full_health = AsyncMock(return_value={
-            "status": "healthy",
-            "timestamp": datetime.now().isoformat(),
-            "checks": [],
-        })
+        mock_monitor.get_full_health = AsyncMock(
+            return_value={
+                "status": "healthy",
+                "timestamp": datetime.now().isoformat(),
+                "checks": [],
+            }
+        )
         mock_monitor.print_health_status = MagicMock()
         mock_monitor_class.return_value = mock_monitor
 
@@ -254,7 +257,11 @@ class TestHealthCheckArgumentParsing:
         """Test default argument values."""
         parser = argparse.ArgumentParser()
         parser.add_argument("--format", choices=["human", "json"], default="human")
-        parser.add_argument("--component", choices=["bot", "mcp", "gemini", "resources", "all"], default="all")
+        parser.add_argument(
+            "--component",
+            choices=["bot", "mcp", "gemini", "resources", "all"],
+            default="all",
+        )
         parser.add_argument("--exit-code", action="store_true")
 
         args = parser.parse_args([])
@@ -277,7 +284,11 @@ class TestHealthCheckArgumentParsing:
     def test_component_argument(self):
         """Test --component argument."""
         parser = argparse.ArgumentParser()
-        parser.add_argument("--component", choices=["bot", "mcp", "gemini", "resources", "all"], default="all")
+        parser.add_argument(
+            "--component",
+            choices=["bot", "mcp", "gemini", "resources", "all"],
+            default="all",
+        )
 
         args = parser.parse_args(["--component", "bot"])
 
@@ -301,10 +312,16 @@ class TestHealthCheckComponentMapping:
     async def test_component_method_mapping_exists(self):
         """Test that all component mappings are defined."""
         # This tests the structure in main() function
-        check_methods = ["check_bot_status", "check_mcp_connectivity", "check_gemini_api", "check_system_resources"]
+        check_methods = [
+            "check_bot_status",
+            "check_mcp_connectivity",
+            "check_gemini_api",
+            "check_system_resources",
+        ]
 
         # All methods should exist in ClientHealthMonitor
         from monitoring.client_health import ClientHealthMonitor
+
         monitor = ClientHealthMonitor()
 
         for method_name in check_methods:
@@ -316,7 +333,10 @@ class TestHealthCheckEdgeCases:
 
     @pytest.mark.asyncio
     @patch("cli.health_check.ClientHealthMonitor")
-    @patch("sys.argv", ["health_check.py", "--component", "bot", "--format", "json", "--exit-code"])
+    @patch(
+        "sys.argv",
+        ["health_check.py", "--component", "bot", "--format", "json", "--exit-code"],
+    )
     @patch("sys.stdout", new_callable=StringIO)
     async def test_all_flags_combined(self, mock_stdout, mock_monitor_class):
         """Test all flags combined."""
@@ -344,7 +364,9 @@ class TestHealthCheckEdgeCases:
         """Test ClientHealthMonitor is instantiated correctly."""
         # Setup mock
         mock_monitor = MagicMock()
-        mock_monitor.get_full_health = AsyncMock(return_value={"status": "healthy", "checks": []})
+        mock_monitor.get_full_health = AsyncMock(
+            return_value={"status": "healthy", "checks": []}
+        )
         mock_monitor.print_health_status = MagicMock()
         mock_monitor_class.return_value = mock_monitor
 
@@ -359,10 +381,14 @@ class TestHealthCheckEdgeCases:
     @patch("cli.health_check.ClientHealthMonitor")
     @patch("sys.argv", ["health_check.py", "--component", "bot"])
     @patch("sys.stdout", new_callable=StringIO)
-    async def test_specific_component_health_data_structure(self, mock_stdout, mock_monitor_class):
+    async def test_specific_component_health_data_structure(
+        self, mock_stdout, mock_monitor_class
+    ):
         """Test health data structure for specific component check."""
         # Setup mock
-        mock_result = MockHealthResult(status="healthy", timestamp=datetime(2025, 1, 1, 12, 0, 0))
+        mock_result = MockHealthResult(
+            status="healthy", timestamp=datetime(2025, 1, 1, 12, 0, 0)
+        )
         mock_monitor = MagicMock()
         mock_monitor.check_bot_status = AsyncMock(return_value=mock_result)
         mock_monitor.print_health_status = MagicMock()

@@ -15,13 +15,8 @@ from typing import Any
 
 from aiolimiter import AsyncLimiter
 
-try:
-    from ..config.settings import settings
-    from ..utils.logger import get_logger
-except ImportError:
-    # Fallback for test environment
-    from config.settings import settings
-    from utils.logger import get_logger
+from client_mcp.config.settings import settings
+from client_mcp.utils.logger import get_logger
 
 
 class RateLimiter:
@@ -76,7 +71,9 @@ class RateLimiter:
         self.requests_today = 0
         self.last_reset = datetime.now(UTC)
 
-        self.logger.info(f"🚦 Rate Limiter initialized: {rpm_limit} RPM, {rpd_limit} RPD")
+        self.logger.info(
+            f"🚦 Rate Limiter initialized: {rpm_limit} RPM, {rpd_limit} RPD"
+        )
         self.logger.info(f"🔢 Max concurrent requests: {max_concurrent}")
 
     @asynccontextmanager
@@ -147,7 +144,11 @@ class RateLimiter:
             "total_requests": self.total_requests,
             "requests_today": self.requests_today,
             "remaining_daily_quota": self.get_remaining_daily_quota(),
-            "avg_wait_time_ms": (self.total_wait_time_ms / self.total_requests if self.total_requests > 0 else 0.0),
+            "avg_wait_time_ms": (
+                self.total_wait_time_ms / self.total_requests
+                if self.total_requests > 0
+                else 0.0
+            ),
             "rpm_limit": self.rpm_limit,
             "rpd_limit": self.rpd_limit,
             "max_concurrent": self.max_concurrent,
@@ -180,7 +181,9 @@ class RateLimiter:
 
         wait_seconds = (next_midnight - now).total_seconds()
 
-        self.logger.warning(f"⏳ Daily quota exhausted. Waiting {wait_seconds / 3600:.1f}h until reset...")
+        self.logger.warning(
+            f"⏳ Daily quota exhausted. Waiting {wait_seconds / 3600:.1f}h until reset..."
+        )
 
         await asyncio.sleep(wait_seconds)
         self.reset_daily_counter()

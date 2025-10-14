@@ -32,7 +32,9 @@ async def main():
         default="all",
         help="Component to check (default: all)",
     )
-    parser.add_argument("--exit-code", action="store_true", help="Exit with non-zero code if unhealthy")
+    parser.add_argument(
+        "--exit-code", action="store_true", help="Exit with non-zero code if unhealthy"
+    )
 
     args = parser.parse_args()
 
@@ -54,7 +56,9 @@ async def main():
         check_result = await check_method()
         health_data = {
             "status": check_result.status.value,
-            "timestamp": (check_result.timestamp.isoformat() if check_result.timestamp else None),
+            "timestamp": (
+                check_result.timestamp.isoformat() if check_result.timestamp else None
+            ),
             "checks": [check_result.to_dict()],
         }
 

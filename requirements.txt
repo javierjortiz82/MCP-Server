@@ -17,12 +17,19 @@ uvicorn>=0.22.0           # ASGI server
 pydantic>=2.0.0           # Data validation
 httpx>=0.24.0             # Async HTTP client
 
+# Google Services
+google-api-python-client>=2.100.0  # Google Calendar API
+google-auth>=2.23.0                # Google authentication
+google-auth-httplib2>=0.1.1        # HTTP transport for Google Auth
+google-auth-oauthlib>=1.0.0        # OAuth library for Google Auth
+
 # Utilities
 python-dotenv>=1.1.1      # Environment variables management
 tenacity>=9.1.2           # Retry logic with backoff
 aiolimiter>=1.1.0         # Async rate limiting (Leaky Bucket)
 rich>=13.0.0              # Rich terminal output
 typer>=0.9.0              # CLI interface
+jinja2>=3.1.0             # Template engine for modular prompts
 
 # Development & Testing
 pytest>=7.4.0             # Testing framework

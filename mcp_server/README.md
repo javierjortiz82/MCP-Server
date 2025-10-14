@@ -860,9 +860,10 @@ mcp_server/
 │   └── settings.py              # Pydantic v2 settings (187 lines)
 ├── mcp_handlers/                # MCP protocol handlers
 │   ├── __init__.py
-│   ├── tool_handlers.py         # Async MCP tool wrappers
-│   ├── resource_handlers.py    # URI-based resource access
-│   └── prompt_handlers.py      # AI assistant templates
+│   ├── product_handlers.py      # Product tool handlers (SalesAgent)
+│   ├── booking_handlers.py      # Booking tool handlers (BookingAgent)
+│   ├── resource_handlers.py     # URI-based resource access
+│   └── prompt_handlers.py       # AI assistant templates
 ├── tools/                       # Business logic (pure Python)
 │   ├── __init__.py
 │   ├── fetch.py                 # Product fetching by SKU/ID

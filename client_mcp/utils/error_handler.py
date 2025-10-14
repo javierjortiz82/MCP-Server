@@ -296,7 +296,9 @@ def safe_fallback(default_value: Any = None):
             try:
                 return await func(*args, **kwargs)  # type: ignore[misc]
             except Exception as e:
-                logger.warning(f"Function {func.__name__} failed, returning default: {e}")
+                logger.warning(
+                    f"Function {func.__name__} failed, returning default: {e}"
+                )
                 return default_value
 
         @wraps(func)
@@ -304,7 +306,9 @@ def safe_fallback(default_value: Any = None):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                logger.warning(f"Function {func.__name__} failed, returning default: {e}")
+                logger.warning(
+                    f"Function {func.__name__} failed, returning default: {e}"
+                )
                 return default_value
 
         import asyncio
