@@ -175,12 +175,61 @@ flowchart TD
 
 ### Quick Start
 
+#### ✨ **NEW: Master Initialization Script (Recommended)**
+
+Initialize **all database schemas** with a single command:
+
 ```bash
-# 1. Initialize database (create schema, tables, indexes)
+# Initialize all schemas (products, memory, bookings, email queue)
+python3 src/init_all_schemas.py
+```
+
+This master script executes all initialization scripts in the correct dependency order:
+1. **Products schema** (`init-db.py`) - Base tables, extensions, vector search
+2. **Memory system** (`init_memory_system.py`) - Agent memory, sessions, context transfers
+3. **Bookings schema** (`init_bookings.py`) - Appointments, business hours, services
+4. **Email queue** (`init_email_queue.py`) - Email notification system
+
+**Advanced Usage:**
+
+```bash
+# Initialize only specific schemas
+python3 src/init_all_schemas.py --only products,memory
+
+# Skip specific schemas
+python3 src/init_all_schemas.py --skip email
+
+# Dry run (show what would be executed)
+python3 src/init_all_schemas.py --dry-run
+
+# Verbose output
+python3 src/init_all_schemas.py -v
+```
+
+#### Individual Schema Initialization
+
+```bash
+# 1. Initialize products schema only
 python3 src/init-db.py
 
-# 2. Populate with products and embeddings
+# 2. Initialize memory system
+python3 src/init_memory_system.py
+
+# 3. Initialize bookings
+python3 src/init_bookings.py
+
+# 4. Initialize email queue
+python3 src/init_email_queue.py
+```
+
+#### Populate with Data
+
+```bash
+# Populate products with embeddings
 python3 src/populate-db.py
+
+# Seed booking data (optional)
+python3 src/seed_booking_data.py
 ```
 
 ### Using Shell Scripts
@@ -212,9 +261,16 @@ SQL/
 ├── data/
 │   └── products.json          # 90 products dataset (laptops, electronics)
 ├── src/
-│   ├── init-db.py             # Database initialization script (324 lines)
-│   └── populate-db.py         # Data population with embeddings (221 lines)
+│   ├── init_all_schemas.py    # ✨ MASTER SCRIPT - Initialize all schemas (NEW)
+│   ├── init-db.py             # Products schema initialization (324 lines)
+│   ├── init_memory_system.py  # Agent memory system initialization
+│   ├── init_bookings.py       # Bookings schema initialization
+│   ├── init_email_queue.py    # Email queue system initialization
+│   ├── populate-db.py         # Data population with embeddings (221 lines)
+│   └── seed_booking_data.py   # Seed booking test data
 ├── scripts/
+│   ├── create_bookings_schema.sql  # Bookings SQL DDL
+│   ├── create_email_queue.sql      # Email queue SQL DDL
 │   ├── init-db.sh             # Shell wrapper for init-db.py
 │   └── populate-db.sh         # Shell wrapper for populate-db.py
 ├── examples/

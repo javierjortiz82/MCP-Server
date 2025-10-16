@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recordatorio: Cita en 1 Hora - Lab01</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: #ffffff;
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .reminder-badge {
+            background-color: rgba(255,255,255,0.2);
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 20px;
+            margin-top: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .content {
+            padding: 30px 20px;
+        }
+        .booking-details {
+            background-color: #fffbf0;
+            border-left: 4px solid #fa709a;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .booking-details h2 {
+            margin-top: 0;
+            color: #d63384;
+            font-size: 20px;
+        }
+        .detail-row {
+            display: flex;
+            padding: 8px 0;
+            border-bottom: 1px solid #fff4e6;
+        }
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+        .detail-label {
+            font-weight: 600;
+            width: 140px;
+            color: #495057;
+        }
+        .detail-value {
+            color: #212529;
+        }
+        .urgent-box {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: #ffffff;
+            padding: 25px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .urgent-box .time {
+            font-size: 48px;
+            font-weight: 700;
+            margin: 15px 0;
+        }
+        .urgent-box .message {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .alert-message {
+            background-color: #fff3cd;
+            border: 2px solid #ffc107;
+            color: #664d03;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            text-align: center;
+            font-weight: 600;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 14px;
+            color: #6c757d;
+        }
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        @media only screen and (max-width: 600px) {
+            .container {
+                margin: 0;
+                border-radius: 0;
+            }
+            .detail-row {
+                flex-direction: column;
+            }
+            .detail-label {
+                width: 100%;
+                margin-bottom: 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⏰ ¡Cita Pronto!</h1>
+            <div class="reminder-badge">URGENTE - Tu cita es en 1 hora</div>
+        </div>
+
+        <div class="content">
+            <p>Hola <strong>{{ customer_name }}</strong>,</p>
+
+            <p>Este es un recordatorio <strong>urgente</strong>: tu cita es en <strong>1 hora</strong>.</p>
+
+            <div class="urgent-box">
+                <div class="message">Tu cita comienza en</div>
+                <div class="time">1 HORA</div>
+                <div>{{ booking_time }}</div>
+            </div>
+
+            <div class="alert-message">
+                ⚠️ Procura estar listo y llegar 5-10 minutos antes
+            </div>
+
+            <div class="booking-details">
+                <h2>📅 Detalles de tu Cita</h2>
+                <div class="detail-row">
+                    <div class="detail-label">Servicio:</div>
+                    <div class="detail-value">{{ service_type }}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Fecha:</div>
+                    <div class="detail-value">{{ booking_date }}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Hora:</div>
+                    <div class="detail-value">{{ booking_time }}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Duración:</div>
+                    <div class="detail-value">{{ duration_minutes }} minutos</div>
+                </div>
+                {% if booking_id %}
+                <div class="detail-row">
+                    <div class="detail-label">ID de Reserva:</div>
+                    <div class="detail-value">#{{ booking_id }}</div>
+                </div>
+                {% endif %}
+            </div>
+
+            <p><strong>📋 Checklist de último momento:</strong></p>
+            <ul>
+                <li>✅ Confirma que tienes todo lo necesario para la cita</li>
+                <li>✅ Verifica la dirección o enlace de conexión</li>
+                <li>✅ Llega con 5-10 minutos de anticipación</li>
+            </ul>
+
+            <p>Si tienes alguna emergencia y no puedes asistir, <strong>contáctanos inmediatamente</strong>.</p>
+
+            <p><strong>¡Nos vemos muy pronto! 🚀</strong></p>
+        </div>
+
+        <div class="footer">
+            <p><strong>Lab01 - AI Sales Platform</strong></p>
+            <p>Impulsado por tecnología de inteligencia artificial</p>
+            <p>
+                <a href="#">Política de Privacidad</a> |
+                <a href="#">Términos de Servicio</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
