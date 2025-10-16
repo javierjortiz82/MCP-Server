@@ -7,6 +7,14 @@ Parses user responses for booking operations with fuzzy matching:
 - Confirmation (Yes/No)
 - Service selections
 
+Configuration thresholds are loaded from environment or mcp_server settings:
+- BOOKING_CHOICE_CONFIDENCE_THRESHOLD: Minimum confidence for reschedule/cancel
+- BOOKING_PARTIAL_MATCH_CONFIDENCE: Confidence for partial word matches
+- BOOKING_MIN_KEYWORD_LENGTH: Minimum length for substring matching
+- BOOKING_FUZZY_MATCH_THRESHOLD: Minimum score for fuzzy matching
+- BOOKING_CONFIRMATION_THRESHOLD: Minimum confidence for yes/no
+- BOOKING_CLARIFICATION_THRESHOLD: Below which to ask for clarification
+
 Author: Lab01-MCP Team
 Created: 2025-10-16
 Version: 1.0
@@ -14,9 +22,41 @@ Version: 1.0
 
 import logging
 import re
+import sys
 from difflib import SequenceMatcher
 from enum import Enum
+from pathlib import Path
 from typing import Tuple
+
+# Try to import settings from mcp_server
+try:
+    from config.settings import settings
+
+    CHOICE_CONFIDENCE_THRESHOLD = settings.BOOKING_CHOICE_CONFIDENCE_THRESHOLD
+    PARTIAL_MATCH_CONFIDENCE = settings.BOOKING_PARTIAL_MATCH_CONFIDENCE
+    MIN_KEYWORD_LENGTH = settings.BOOKING_MIN_KEYWORD_LENGTH
+    FUZZY_MATCH_THRESHOLD = settings.BOOKING_FUZZY_MATCH_THRESHOLD
+    CONFIRMATION_THRESHOLD = settings.BOOKING_CONFIRMATION_THRESHOLD
+    CLARIFICATION_THRESHOLD = settings.BOOKING_CLARIFICATION_THRESHOLD
+except (ImportError, ModuleNotFoundError):
+    # Fallback to hardcoded defaults if mcp_server settings not available
+    CHOICE_CONFIDENCE_THRESHOLD = 0.6
+    PARTIAL_MATCH_CONFIDENCE = 0.95
+    MIN_KEYWORD_LENGTH = 3
+    FUZZY_MATCH_THRESHOLD = 0.75
+    CONFIRMATION_THRESHOLD = 0.6
+    CLARIFICATION_THRESHOLD = 0.6
+
+# Try to import keyword constants
+try:
+    from config.booking_constants import BOOKING_CHOICE_OPTIONS
+
+    RESCHEDULE_OPTIONS = set(BOOKING_CHOICE_OPTIONS.get("option_a", []))
+    CANCEL_OPTIONS = set(BOOKING_CHOICE_OPTIONS.get("option_b", []))
+except (ImportError, ModuleNotFoundError):
+    # Fallback if constants not available
+    RESCHEDULE_OPTIONS = {"a", "1", "opcion a", "opcion 1", "opción a", "opción 1"}
+    CANCEL_OPTIONS = {"b", "2", "opcion b", "opcion b", "opción b", "opción b"}
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -121,20 +161,20 @@ class BookingInputParser:
         normalized = cls._normalize_input(user_input)
 
         # Check exact matches first (highest confidence)
-        if normalized in {"a", "1", "opcion a", "opcion 1"}:
+        if normalized in RESCHEDULE_OPTIONS:
             return BookingChoice.RESCHEDULE, 1.0
 
-        if normalized in {"b", "2", "opcion b", "opcion 2"}:
+        if normalized in CANCEL_OPTIONS:
             return BookingChoice.CANCEL, 1.0
 
         # Check keyword matches
         reschedule_score = cls._calculate_match_score(normalized, cls.RESCHEDULE_KEYWORDS)
         cancel_score = cls._calculate_match_score(normalized, cls.CANCEL_KEYWORDS)
 
-        if reschedule_score > cancel_score and reschedule_score > 0.6:
+        if reschedule_score > cancel_score and reschedule_score > CHOICE_CONFIDENCE_THRESHOLD:
             return BookingChoice.RESCHEDULE, reschedule_score
 
-        if cancel_score > reschedule_score and cancel_score > 0.6:
+        if cancel_score > reschedule_score and cancel_score > CHOICE_CONFIDENCE_THRESHOLD:
             return BookingChoice.CANCEL, cancel_score
 
         logger.warning(
@@ -167,10 +207,10 @@ class BookingInputParser:
         confirm_score = cls._calculate_match_score(normalized, cls.CONFIRM_KEYWORDS)
         deny_score = cls._calculate_match_score(normalized, cls.DENY_KEYWORDS)
 
-        if confirm_score > deny_score and confirm_score > 0.6:
+        if confirm_score > deny_score and confirm_score > CONFIRMATION_THRESHOLD:
             return BookingChoice.CONFIRM, confirm_score
 
-        if deny_score > confirm_score and deny_score > 0.6:
+        if deny_score > confirm_score and deny_score > CONFIRMATION_THRESHOLD:
             return BookingChoice.DENY, deny_score
 
         return BookingChoice.UNKNOWN, max(confirm_score, deny_score)
@@ -246,12 +286,12 @@ class BookingInputParser:
 
             # Check for partial word matches in multi-word inputs
             if len(keyword_words) > 1 and input_words.issubset(keyword_words):
-                best_score = max(best_score, 0.95)
+                best_score = max(best_score, PARTIAL_MATCH_CONFIDENCE)
                 continue
 
             # Substring match (only for multi-word keywords)
             # For short single-word inputs, require length match to avoid matching "no" in "bueno"
-            if len(keyword) >= 3 and len(normalized_input) >= 3:
+            if len(keyword) >= MIN_KEYWORD_LENGTH and len(normalized_input) >= MIN_KEYWORD_LENGTH:
                 if keyword in normalized_input or normalized_input in keyword:
                     # For longer keywords, substring match is very confident
                     return 1.0
@@ -262,23 +302,25 @@ class BookingInputParser:
             ).ratio()
 
             # Only accept fuzzy matches above a threshold
-            if score > 0.75:
+            if score > FUZZY_MATCH_THRESHOLD:
                 best_score = max(best_score, score)
 
         return best_score
 
     @classmethod
-    def should_show_error(cls, confidence: float, threshold: float = 0.6) -> bool:
+    def should_show_error(cls, confidence: float, threshold: float = None) -> bool:
         """
         Determine if agent should ask for clarification.
 
         Args:
             confidence: Confidence score (0.0 to 1.0)
-            threshold: Minimum confidence threshold (default: 0.6)
+            threshold: Minimum confidence threshold (default: from CLARIFICATION_THRESHOLD)
 
         Returns:
             True if agent should ask for clarification
         """
+        if threshold is None:
+            threshold = CLARIFICATION_THRESHOLD
         return confidence < threshold
 
 
