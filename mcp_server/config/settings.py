@@ -125,8 +125,8 @@ class Settings(BaseSettings):
     )
 
     GOOGLE_CALENDAR_TIMEZONE: str = Field(
-        default="America/New_York",
-        description="Timezone for Google Calendar events",
+        default="America/Costa_Rica",
+        description="Timezone for Google Calendar events and availability checks (default: America/Costa_Rica)",
     )
 
     # ============================================================================
@@ -151,10 +151,11 @@ class Settings(BaseSettings):
         description="Maximum days in advance for booking",
     )
 
-    BOOKING_MIN_ADVANCE_HOURS: int = Field(
-        default=2,
+    BOOKING_MIN_ADVANCE_MINUTES: int = Field(
+        default=60,
         ge=0,
-        description="Minimum hours in advance required for booking",
+        le=1440,  # Max 24 hours = 1440 minutes
+        description="Minimum minutes in advance required for booking (default: 60 = 1 hour)",
     )
 
     BOOKING_MAX_DAILY_APPOINTMENTS: int = Field(
@@ -468,7 +469,7 @@ class Settings(BaseSettings):
             "default_duration_minutes": self.BOOKING_DEFAULT_DURATION_MINUTES,
             "slot_interval_minutes": self.BOOKING_SLOT_INTERVAL_MINUTES,
             "advance_booking_days": self.BOOKING_ADVANCE_BOOKING_DAYS,
-            "min_advance_hours": self.BOOKING_MIN_ADVANCE_HOURS,
+            "min_advance_minutes": self.BOOKING_MIN_ADVANCE_MINUTES,
             "max_daily_appointments": self.BOOKING_MAX_DAILY_APPOINTMENTS,
         }
 
