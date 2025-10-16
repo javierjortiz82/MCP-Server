@@ -42,10 +42,53 @@ services:
       postgres:
         condition: service_healthy
 
+  email-worker:
+    build:
+      context: ../email_service
+      dockerfile: Dockerfile
+    container_name: mcp-email-worker
+    restart: unless-stopped
+    environment:
+      # Database connection
+      DATABASE_URL: postgresql://mcp_user:mcp_password@postgres:5432/mcpdb
+      SCHEMA_NAME: test
+
+      # SMTP configuration (REQUIRED - set in .env file)
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@lab01.com}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Lab01 Bookings}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+
+      # Worker configuration
+      EMAIL_WORKER_POLL_INTERVAL: ${EMAIL_WORKER_POLL_INTERVAL:-10}
+      EMAIL_WORKER_BATCH_SIZE: ${EMAIL_WORKER_BATCH_SIZE:-50}
+      EMAIL_RETRY_MAX_ATTEMPTS: ${EMAIL_RETRY_MAX_ATTEMPTS:-3}
+      EMAIL_RETRY_BACKOFF_SECONDS: ${EMAIL_RETRY_BACKOFF_SECONDS:-300}
+
+      # Reminders
+      REMINDER_24H_ENABLED: ${REMINDER_24H_ENABLED:-true}
+      REMINDER_1H_ENABLED: ${REMINDER_1H_ENABLED:-true}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ../email_service:/app/email_service
+      - email_logs:/app/email_service/logs
+    networks:
+      - mcp-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres_data:
     driver: local
   pgadmin_data:
+    driver: local
+  email_logs:
     driver: local
 
 networks:

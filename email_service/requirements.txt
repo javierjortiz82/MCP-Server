@@ -1,0 +1,30 @@
+# ============================================================================
+# Email Service Dependencies
+# ============================================================================
+# Production dependencies for email queue worker
+#
+# Core components:
+#   - PostgreSQL database client
+#   - SMTP email delivery
+#   - Jinja2 template rendering
+#   - Pydantic data validation
+#
+# Author: Lab01-MCP Team
+# Version: 1.0.0
+# ============================================================================
+
+# Database
+psycopg2-binary>=2.9.9  # PostgreSQL adapter (binary for easy deployment)
+
+# Configuration & Validation
+pydantic>=2.5.0  # Data validation with Pydantic v2
+pydantic-settings>=2.1.0  # Settings management
+
+# Template Rendering
+Jinja2>=3.1.2  # HTML email templates
+
+# Utilities
+python-dotenv>=1.0.0  # Load .env files
+
+# Optional: Email validation
+email-validator>=2.1.0  # Validate email addresses
