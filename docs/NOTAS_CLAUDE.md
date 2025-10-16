@@ -23459,3 +23459,112 @@ if current_status in ("cancelled", "completed", "no_show"):
 
 ### Archivos Modificados
 - `mcp_server/mcp_handlers/booking_handlers.py`: +32 líneas de validación defensiva
+
+---
+
+## 🔧 UX: No mostrar opciones de reschedule/cancel en citas pasadas
+
+**Fecha:** 2025-10-16
+**Estado:** ✅ IMPLEMENTADO
+**Tipo:** UX Improvement
+
+### Problema
+El agente mostraba opciones para "reprogramar o cancelar" citas que ya habían pasado:
+```
+📋 TUS RESERVAS (1 reservas)
+1️⃣ Demostración de Producto - Reserva #7
+   📆 Jueves, 16 de octubre a las 13:00
+   📍 Estado: Reprogramada
+
+💡 ¿Quieres cancelar o reprogramar alguna?
+```
+Esto ocurrió incluso cuando la hora actual era 14:00 (la cita ya había pasado).
+
+### Causa Raíz
+La función `list_customer_bookings()` no verificaba si la cita ya había pasado. Solo devolvía todas las citas sin información temporal.
+
+### Solución Implementada
+
+#### 1. Enhanced `list_customer_bookings()` (bookings.py:864-959)
+```python
+# Añadido cálculo de is_past para cada cita
+now = datetime.now()
+current_date = now.date()
+current_time = now.time()
+
+for booking in bookings:
+    booking_date = datetime.fromisoformat(booking["booking_date"]).date()
+    booking_time = datetime.fromisoformat(f"1970-01-01T{booking['booking_time']}").time()
+    
+    # Una cita es pasada si:
+    # 1. La fecha es anterior a hoy, O
+    # 2. Es hoy pero la hora ya pasó
+    is_past = (
+        booking_date < current_date or
+        (booking_date == current_date and booking_time < current_time)
+    )
+    booking["is_past"] = is_past
+```
+
+#### 2. Nuevo formato de respuesta
+```json
+{
+    "bookings": [
+        {
+            "id": 7,
+            "booking_date": "2025-10-16",
+            "booking_time": "13:00",
+            "is_past": true,
+            "status": "confirmed"
+        }
+    ],
+    "count": 1,
+    "active_count": 1,
+    "future_count": 0
+}
+```
+
+### Reglas para el Agente
+Agregadas al template `examples.jinja2`:
+- ✅ NUNCA ofreces reprogramar/cancelar citas pasadas (is_past=true)
+- ✅ SIEMPRE separa citas próximas de citas pasadas en listados
+- ✅ SIEMPRE revisa el flag "is_past" de cada cita antes de ofrecer opciones
+
+### Ejemplos de Respuesta Mejorada
+
+**Con citas futuras y pasadas:**
+```
+👉 PRÓXIMAS CITAS (puedes cancelar o reprogramar):
+1️⃣ Consulta General - Reserva #8
+   📆 Viernes, 17 de octubre a las 10:00
+
+📋 CITAS PASADAS (solo para referencia):
+2️⃣ Demostración - Reserva #7 ✓ Completada
+   📆 Jueves, 16 de octubre a las 13:00
+
+💡 ¿Quieres cancelar o reprogramar alguna de las próximas?
+```
+
+**Solo citas pasadas:**
+```
+Todas tus citas pasadas han sido completadas. ✓
+
+CITAS COMPLETADAS:
+1️⃣ Demostración - Reserva #7 ✓
+   📆 Jueves, 16 de octubre a las 13:00
+
+💡 ¿Quieres agendar una nueva cita?
+```
+
+### Archivos Modificados
+- `mcp_server/tools/bookings.py`: +177 líneas con lógica temporal
+  - Cálculo automático de `is_past` 
+  - Nueva métrica `future_count`
+  - Parsing robusto de fecha/hora
+
+### Beneficios
+1. **UX mejorada**: Nunca se ofrecen acciones inválidas en citas pasadas
+2. **Lógica clara**: El agente ve explícitamente qué citas están disponibles para cambiar
+3. **Historial visual**: Citas pasadas se muestran pero no con opciones de edición
+4. **Prevención de confusión**: No hay prompts confusos para modificar eventos históricos
+
