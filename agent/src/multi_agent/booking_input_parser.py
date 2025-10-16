@@ -12,11 +12,11 @@ Created: 2025-10-16
 Version: 1.0
 """
 
-import re
-from enum import Enum
-from typing import Optional, Tuple
-from difflib import SequenceMatcher
 import logging
+import re
+from difflib import SequenceMatcher
+from enum import Enum
+from typing import Tuple
 
 # Setup logger
 logger = logging.getLogger(__name__)
