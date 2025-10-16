@@ -28,6 +28,30 @@ from config.settings import settings
 from utils.db import fetchall, fetchone
 from utils.logger import setup_logging
 
+# Conditional import of Email Queue Manager
+try:
+    import sys
+    from pathlib import Path
+
+    # Add email_service to path
+    email_service_path = Path(__file__).parent.parent.parent / "email_service"
+    if email_service_path.exists():
+        sys.path.insert(0, str(email_service_path.parent))
+        from email_service.queue_manager import EmailQueueManager
+        from email_service.models import EmailType
+
+        EMAIL_QUEUE_AVAILABLE = True
+        logger_init = logging.getLogger("bookings_init")
+        logger_init.info("✅ Email queue integration enabled")
+    else:
+        EMAIL_QUEUE_AVAILABLE = False
+        EmailQueueManager = None  # type: ignore[misc,assignment]
+        EmailType = None  # type: ignore[misc,assignment]
+except ImportError:
+    EMAIL_QUEUE_AVAILABLE = False
+    EmailQueueManager = None  # type: ignore[misc,assignment]
+    EmailType = None  # type: ignore[misc,assignment]
+
 # Conditional import of Google Calendar client
 if settings.GOOGLE_CALENDAR_ENABLED:
     try:
@@ -134,6 +158,72 @@ def _get_timezone_offset() -> str:
         "UTC": "+00:00",
     }
     return timezone_offsets.get(settings.GOOGLE_CALENDAR_TIMEZONE, "-06:00")  # Default Costa Rica
+
+
+def _enqueue_email(
+    email_type: str,
+    booking_data: dict[str, Any],
+    calendar_link: str | None = None,
+    old_date: str | None = None,
+    old_time: str | None = None,
+) -> None:
+    """Enqueue email notification for booking event.
+
+    Args:
+        email_type: Type of email (booking_created, booking_cancelled, etc.)
+        booking_data: Booking details dict.
+        calendar_link: Google Calendar event link (optional).
+        old_date: Old date for rescheduled bookings (optional).
+        old_time: Old time for rescheduled bookings (optional).
+
+    Note:
+        This is a fire-and-forget operation. Failures are logged but don't
+        block booking operations.
+    """
+    if not EMAIL_QUEUE_AVAILABLE or not EmailQueueManager:
+        logger.debug("Email queue not available - skipping email notification")
+        return
+
+    try:
+        queue_manager = EmailQueueManager()
+
+        # Build template context based on email type
+        context = {
+            "customer_name": booking_data.get("customer_name", "Cliente"),
+            "booking_id": booking_data.get("booking_id") or booking_data.get("id"),
+            "service_type": booking_data.get("service_type", "Servicio"),
+            "booking_date": booking_data.get("booking_date", ""),
+            "booking_time": booking_data.get("booking_time", ""),
+            "duration_minutes": booking_data.get("duration_minutes", 60),
+            "google_calendar_link": calendar_link,
+        }
+
+        # Add specific fields for different email types
+        if email_type == "booking_cancelled":
+            context["cancellation_reason"] = booking_data.get("cancellation_reason")
+        elif email_type == "booking_rescheduled":
+            context["old_date"] = old_date
+            context["old_time"] = old_time
+            context["new_date"] = booking_data.get("booking_date")
+            context["new_time"] = booking_data.get("booking_time")
+
+        # Enqueue email (rendered by worker using templates)
+        email_id = queue_manager.enqueue_email(
+            email_type=EmailType(email_type),
+            recipient_email=booking_data["customer_email"],
+            recipient_name=booking_data.get("customer_name"),
+            subject=f"Confirmación: {booking_data.get('service_type', 'Servicio')}",
+            body_html="",  # Will be rendered by worker from template
+            template_context=context,
+            booking_id=booking_data.get("booking_id") or booking_data.get("id"),
+            priority=5,
+        )
+
+        logger.info(f"📧 Email queued: type={email_type}, email_id={email_id}")
+
+    except Exception as exc:
+        logger.warning(f"Failed to enqueue email notification: {exc}")
+        # Don't raise - email is optional, shouldn't block booking
 
 
 # ============================================================================
@@ -284,7 +374,7 @@ def create_booking(
         booking_id = result["id"]
         logger.info(f"✅ Booking created successfully: ID={booking_id}")
 
-        return {
+        booking_response = {
             "booking_id": booking_id,
             "status": result["status"],
             "google_calendar_event_id": calendar_event_id,
@@ -294,6 +384,23 @@ def create_booking(
             "duration_minutes": duration_minutes,
             "created_at": str(result["created_at"]),
         }
+
+        # Enqueue confirmation email
+        _enqueue_email(
+            email_type="booking_created",
+            booking_data={
+                "booking_id": booking_id,
+                "customer_name": customer_name,
+                "customer_email": customer_email,
+                "service_type": service_type,
+                "booking_date": booking_date,
+                "booking_time": booking_time,
+                "duration_minutes": duration_minutes,
+            },
+            calendar_link=calendar_link,
+        )
+
+        return booking_response
 
     except Exception as exc:
         logger.exception(f"Failed to create booking in database: {exc}")
@@ -398,12 +505,28 @@ def cancel_booking(
 
         logger.info(f"✅ Booking cancelled successfully: ID={booking_id}")
 
-        return {
+        cancellation_response = {
             "booking_id": booking_id,
             "status": "cancelled",
             "cancelled_at": str(result["cancelled_at"]),
             "calendar_event_deleted": calendar_deleted,
         }
+
+        # Enqueue cancellation email
+        _enqueue_email(
+            email_type="booking_cancelled",
+            booking_data={
+                "booking_id": booking_id,
+                "customer_name": booking["customer_name"],
+                "customer_email": booking["customer_email"],
+                "service_type": booking["service_type"],
+                "booking_date": str(booking["booking_date"]),
+                "booking_time": str(booking["booking_time"]),
+                "cancellation_reason": cancellation_reason,
+            },
+        )
+
+        return cancellation_response
 
     except Exception as exc:
         logger.exception(f"Failed to cancel booking in database: {exc}")
@@ -530,13 +653,31 @@ def reschedule_booking(
 
         logger.info(f"✅ Booking rescheduled successfully: ID={booking_id}")
 
-        return {
+        reschedule_response = {
             "booking_id": booking_id,
             "status": result["status"],
             "new_date": str(result["booking_date"]),
             "new_time": str(result["booking_time"]),
             "calendar_event_updated": calendar_updated,
         }
+
+        # Enqueue rescheduled email
+        _enqueue_email(
+            email_type="booking_rescheduled",
+            booking_data={
+                "booking_id": booking_id,
+                "customer_name": booking["customer_name"],
+                "customer_email": booking["customer_email"],
+                "service_type": booking["service_type"],
+                "booking_date": new_date,
+                "booking_time": new_time,
+            },
+            calendar_link=booking.get("google_calendar_link"),
+            old_date=str(booking["booking_date"]),
+            old_time=str(booking["booking_time"]),
+        )
+
+        return reschedule_response
 
     except Exception as exc:
         logger.exception(f"Failed to reschedule booking in database: {exc}")
@@ -736,7 +877,8 @@ def list_customer_bookings(
             "customer_email": str,
             "bookings": list[dict],
             "count": int,
-            "active_count": int
+            "active_count": int,
+            "future_count": int (bookings not yet passed)
         }
 
     Example:
@@ -763,22 +905,51 @@ def list_customer_bookings(
 
         bookings = fetchall(query, (customer_email,))
 
-        # Convert dates to strings
+        # Get current datetime for past/future filtering
+        from datetime import datetime, date as date_type, time as time_type
+        now = datetime.now()
+        current_date = now.date()
+        current_time = now.time()
+
+        # Convert dates to strings and add is_past flag
         for booking in bookings:
             booking["booking_date"] = str(booking["booking_date"])
             booking["booking_time"] = str(booking["booking_time"])
             booking["created_at"] = str(booking["created_at"])
 
+            # Parse booking date and time
+            try:
+                booking_date = datetime.fromisoformat(str(booking["booking_date"])).date()
+                booking_time = datetime.fromisoformat(f"1970-01-01T{booking['booking_time']}").time()
+
+                # Determine if booking is in the past
+                is_past = (
+                    booking_date < current_date or
+                    (booking_date == current_date and booking_time < current_time)
+                )
+                booking["is_past"] = is_past
+
+            except (ValueError, AttributeError) as exc:
+                logger.warning(f"Could not parse booking datetime: {exc}")
+                booking["is_past"] = False  # Default to not past if parsing fails
+
         # Count active bookings
         active_count = sum(1 for b in bookings if b.get("status") != "cancelled")
 
-        logger.info(f"Found {len(bookings)} bookings for {customer_email} ({active_count} active)")
+        # Count future bookings (not yet passed)
+        future_count = sum(1 for b in bookings if not b.get("is_past", False) and b.get("status") != "cancelled")
+
+        logger.info(
+            f"Found {len(bookings)} bookings for {customer_email} "
+            f"({active_count} active, {future_count} future)"
+        )
 
         return {
             "customer_email": customer_email,
             "bookings": bookings,
             "count": len(bookings),
             "active_count": active_count,
+            "future_count": future_count,
         }
 
     except Exception as exc:
