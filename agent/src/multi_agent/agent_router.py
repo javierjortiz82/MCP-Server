@@ -47,6 +47,12 @@ from gemini_agent.config import settings
 from gemini_agent.utils.logger import setup_logging
 from multi_agent.prompt_manager import PromptManager
 
+# Try to import MCP server settings for memory configuration
+try:
+    from mcp_server.config.settings import settings as mcp_settings
+except (ImportError, ModuleNotFoundError):
+    mcp_settings = None
+
 # Setup logger for agent router
 logger = setup_logging("agent_router")
 
@@ -228,6 +234,13 @@ NO agregues explicaciones ni puntuación adicional."""
         Includes both session-level memory (short-term) and user-level memory
         (cross-session, long-term) for better context understanding.
 
+        Memory thresholds and limits are configurable via settings:
+        - MEMORY_PRIORITY_HIGH_THRESHOLD: Priority threshold for high-priority blocks (default: 7)
+        - MEMORY_PRIORITY_MEDIUM_MIN/MAX: Range for medium-priority blocks (default: 5-7)
+        - MEMORY_HIGH_PRIORITY_LIMIT: Max high-priority blocks in context (default: 3)
+        - MEMORY_MEDIUM_PRIORITY_LIMIT: Max medium-priority blocks in context (default: 2)
+        - MEMORY_USER_BLOCKS_LIMIT: Max user-level blocks in context (default: 5)
+
         Returns:
             Formatted memory context string, or empty string if no memory available.
         """
@@ -235,6 +248,22 @@ NO agregues explicaciones ni puntuación adicional."""
             return ""
 
         try:
+            # Load configurable thresholds from settings (with fallbacks)
+            high_threshold = 7
+            medium_min = 5
+            medium_max = 7
+            high_limit = 3
+            medium_limit = 2
+            user_limit = 5
+
+            if mcp_settings:
+                high_threshold = mcp_settings.MEMORY_PRIORITY_HIGH_THRESHOLD
+                medium_min = mcp_settings.MEMORY_PRIORITY_MEDIUM_MIN
+                medium_max = mcp_settings.MEMORY_PRIORITY_MEDIUM_MAX
+                high_limit = mcp_settings.MEMORY_HIGH_PRIORITY_LIMIT
+                medium_limit = mcp_settings.MEMORY_MEDIUM_PRIORITY_LIMIT
+                user_limit = mcp_settings.MEMORY_USER_BLOCKS_LIMIT
+
             memory_lines = []
 
             # 1. Get session-level memory blocks (shared scope)
@@ -244,20 +273,20 @@ NO agregues explicaciones ni puntuación adicional."""
 
             if session_blocks:
                 memory_lines.append("[MEMORIA DE LA SESIÓN ACTUAL]:")
-                # Prioritize high-priority blocks (7+)
-                high_priority = [b for b in session_blocks if b.get("priority", 0) >= 7]
+                # Prioritize high-priority blocks (configurable threshold)
+                high_priority = [b for b in session_blocks if b.get("priority", 0) >= high_threshold]
                 medium_priority = [
-                    b for b in session_blocks if 5 <= b.get("priority", 0) < 7
+                    b for b in session_blocks if medium_min <= b.get("priority", 0) < medium_max
                 ]
 
-                # Add high-priority session memories
-                for block in high_priority[:3]:  # Top 3 high-priority
+                # Add high-priority session memories (configurable limit)
+                for block in high_priority[:high_limit]:
                     label = block.get("block_label", "unknown")
                     value = block.get("block_value", "")
                     memory_lines.append(f"- {label}: {value[:100]}")
 
-                # Add medium-priority if space allows
-                for block in medium_priority[:2]:  # Top 2 medium-priority
+                # Add medium-priority if space allows (configurable limit)
+                for block in medium_priority[:medium_limit]:
                     label = block.get("block_label", "unknown")
                     value = block.get("block_value", "")
                     memory_lines.append(f"- {label}: {value[:100]}")
@@ -276,8 +305,8 @@ NO agregues explicaciones ni puntuación adicional."""
                             memory_lines.append("")
                         memory_lines.append("[MEMORIA HISTÓRICA DEL USUARIO]:")
 
-                        # Take top 5 user-level blocks (already sorted by priority in DB)
-                        for block in user_blocks[:5]:
+                        # Take top user-level blocks (configurable limit, already sorted by priority in DB)
+                        for block in user_blocks[:user_limit]:
                             label = block.get("block_label", "unknown")
                             value = block.get("block_value", "")
                             priority = block.get("priority", 0)
@@ -302,7 +331,8 @@ NO agregues explicaciones ni puntuación adicional."""
             logger.debug(
                 f"Loaded {total_blocks} total memory blocks "
                 f"({len(session_blocks)} session + {len(user_blocks) if 'user_blocks' in locals() else 0} user) "
-                f"for classification context"
+                f"for classification context (thresholds: high={high_threshold}, "
+                f"medium={medium_min}-{medium_max}, limits: high={high_limit}, medium={medium_limit}, user={user_limit})"
             )
 
             return memory_context
