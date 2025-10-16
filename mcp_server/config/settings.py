@@ -280,6 +280,27 @@ class Settings(BaseSettings):
             return Path(__file__).parent.parent / products_path
         return products_path
 
+    @property
+    def google_calendar_credentials_path(self) -> Path:
+        """Get absolute path to Google Calendar service account credentials.
+
+        Resolves relative paths to project root, handles absolute paths as-is.
+        This ensures the credentials file can be found regardless of MCP server
+        working directory.
+
+        Returns:
+            Absolute Path to credentials file
+        """
+        creds_path = Path(self.GOOGLE_CALENDAR_CREDENTIALS_PATH)
+        if not creds_path.is_absolute():
+            # Resolve relative to project root
+            # Path(__file__) = /home/javort/Lab01-MCP/mcp_server/config/settings.py
+            # .parent = /home/javort/Lab01-MCP/mcp_server/config
+            # .parent.parent = /home/javort/Lab01-MCP/mcp_server
+            # .parent.parent.parent = /home/javort/Lab01-MCP (project root)
+            return Path(__file__).parent.parent.parent / creds_path
+        return creds_path
+
     # ============================================================================
     # Helper Methods
     # ============================================================================

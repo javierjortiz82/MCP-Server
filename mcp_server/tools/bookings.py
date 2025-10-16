@@ -89,7 +89,7 @@ def _get_calendar_client() -> Any | None:
 
     try:
         return GoogleCalendarClient(
-            credentials_path=settings.GOOGLE_CALENDAR_CREDENTIALS_PATH,
+            credentials_path=str(settings.google_calendar_credentials_path),
             calendar_id=settings.GOOGLE_CALENDAR_ID,
             timezone=settings.GOOGLE_CALENDAR_TIMEZONE,
         )
