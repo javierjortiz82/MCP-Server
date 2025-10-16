@@ -23675,3 +23675,136 @@ Esta cita ya ha pasado. Solo se muestra como referencia.
   - Sección CANCELAR: +30 líneas con validación temporal
   - Sección REPROGRAMAR: +30 líneas con validación temporal
 
+
+---
+
+## 🔧 SOLUCIÓN FINAL: Validación Completa de is_past en Todos los Niveles
+
+**Fecha:** 2025-10-16
+**Estado:** ✅ COMPLETADO (Requiere reinicio para aplicar cambios)
+**Niveles de Validación:** 3 (Backend + Prompt + MCP Documentation)
+
+### Problema Original
+El agente mostraba "¿Quieres cancelar o reprogramar?" para citas que ya habían pasado:
+```
+📆 Jueves, 16 de octubre a las 13:00 (1:00 PM)
+💡 ¿Quieres cancelar o reprogramar alguna?
+```
+
+### Solución Implementada en 3 Niveles
+
+#### NIVEL 1: Backend (✅ Activo)
+**Archivo:** `mcp_server/tools/bookings.py:864-959`
+- ✅ Calcula `is_past` automáticamente
+- ✅ Compara `booking_date` y `booking_time` vs `datetime.now()`
+- ✅ Devuelve flag `is_past: true/false` para cada cita
+- ✅ Devuelve `future_count` (citas no pasadas)
+
+#### NIVEL 2: Prompt Instructions (✅ Activo)
+**Archivo:** `prompts/templates/booking_agent/modules/confirmation_flow.jinja2`
+- ✅ Línea 138-152: Instrucciones CRÍTICAS para CANCELAR
+  - "SI is_past = true: → NO ofrezcas cancelar/reprogramar"
+  - Muestra ejemplos concretos
+- ✅ Línea 203-222: Instrucciones CRÍTICAS para REPROGRAMAR
+  - "SI is_past = true: → NO PERMITAS reprogramar"
+  - Muestra cómo rechazar operaciones inválidas
+
+#### NIVEL 3: MCP Tool Documentation (✅ Activo - Commit 8c560d3)
+**Archivo:** `mcp_server/mcp_handlers/booking_handlers.py:743-747`
+- ✅ Documenta que devuelve `is_past` flag
+- ✅ Documenta `future_count` métrica
+- ✅ **CRÍTICO:** Incluye instrucciones explícitas:
+  ```
+  CRITICAL FOR AGENT LOGIC:
+  - Use "is_past" flag to decide whether to show reschedule/cancel options
+  - If is_past=true: Show booking as reference only, NO action buttons
+  - If is_past=false: Show cancel/reschedule options
+  ```
+
+### Flujo de Ejecución Correcto
+
+```
+1. Usuario: "Lista mis citas"
+   ↓
+2. Backend: list_customer_bookings()
+   - Calcula is_past para cada cita
+   - Devuelve: {"is_past": true/false, "future_count": N}
+   ↓
+3. MCP Tool recibe respuesta
+   - Documentación indica: "Use is_past to decide what to show"
+   ↓
+4. Agente (Gemini) recibe:
+   - Prompt instruction: "SI is_past=true NO ofreces opciones"
+   - MCP Tool docs: "Use is_past flag for logic"
+   - Booking data: [{"id": 7, "is_past": true}, ...]
+   ↓
+5. Agente decisión:
+   - Verifica is_past flag PARA CADA CITA
+   - Si is_past=true → Muestra como referencia
+   - Si is_past=false → Muestra opciones
+   ↓
+6. Salida CORRECTA:
+   📋 CITAS PASADAS (solo referencia):
+   #7 Demostración a las 13:00 ✓
+   
+   (Sin opciones de cancelar/reprogramar)
+```
+
+### Commits Realizados
+1. `fix: prevent showing reschedule/cancel options for past bookings`
+   - Backend: +177 líneas con is_past flag
+   
+2. `docs: document past booking filtering UX improvement`
+   - Documentación de la solución
+   
+3. `docs: document enhanced prompt instructions for past booking validation`
+   - Prompt explícito: SI/NO basado en is_past
+   
+4. `docs: document is_past flag in list_customer_bookings MCP tool`
+   - MCP docstring: CRITICAL instructions para agente
+
+### ⚠️ IMPORTANTE: Próximos Pasos
+
+Para que los cambios se apliquen:
+
+1. **Reiniciar el servidor MCP**
+   - Esto asegura que las nuevas definiciones de tools se carguen
+   - También limpia caché de Gemini si aplica
+
+2. **Limpiar caché de prompts**
+   - Si estás usando PromptManager con caché, debe reiniciar
+   - Los cambios en confirmation_flow.jinja2 se cargarán en próxima llamada
+
+3. **Probar de nuevo**
+   ```
+   usuario: "Lista mis reservas"
+   
+   RESULTADO ESPERADO:
+   📋 Citas futuras: (lista)
+   📋 Citas pasadas: (lista sin opciones de acción)
+   ```
+
+### Validación de la Solución
+
+Para verificar que funciona:
+
+```python
+# Backend devuelve:
+{
+    "bookings": [
+        {"id": 7, "is_past": true, "booking_date": "2025-10-16", "booking_time": "13:00"},
+        {"id": 8, "is_past": false, "booking_date": "2025-10-17", "booking_time": "10:00"}
+    ],
+    "future_count": 1
+}
+
+# Agente debe mostrar:
+👉 PRÓXIMAS CITAS (puedes cancelar o reprogramar):
+1️⃣ Consulta General - #8 - Viernes 17 a las 10:00
+   [opciones de cancelar/reprogramar]
+
+📋 CITAS PASADAS (solo referencia):
+2️⃣ Demostración - #7 - Jueves 16 a las 13:00 ✓
+   [SIN opciones]
+```
+
