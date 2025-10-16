@@ -352,6 +352,60 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # SalesAgent Function Calling Configuration
+    # ============================================================================
+    FUNCTION_CALL_MAX_ITERATIONS: int = Field(
+        default=10,
+        gt=0,
+        le=50,
+        description="Maximum iterations for function calling loop in SalesAgent",
+    )
+
+    # ============================================================================
+    # SalesAgent Tool Configuration
+    # ============================================================================
+    SEARCH_TOOL_NAMES: str = Field(
+        default="search_products,fuzzy_search_smart",
+        description="Comma-separated list of search tool names for pagination tracking",
+    )
+
+    # ============================================================================
+    # SalesAgent Pagination Keywords (Internationalization)
+    # ============================================================================
+    PAGINATION_KEYWORDS_ES: str = Field(
+        default="más,siguiente,muéstrame,opciones",
+        description="Spanish keywords for detecting pagination requests",
+    )
+
+    PAGINATION_KEYWORDS_EN: str = Field(
+        default="more,next,show,additional,options",
+        description="English keywords for detecting pagination requests",
+    )
+
+    # ============================================================================
+    # SalesAgent Error Handling & Fallback Messages
+    # ============================================================================
+    FALLBACK_ERROR_MESSAGE_ES: str = Field(
+        default="No pude generar una respuesta final. Las herramientas se ejecutaron pero no pude procesar el resultado.",
+        description="Spanish fallback error message when function calling exhausts iterations",
+    )
+
+    FALLBACK_ERROR_MESSAGE_EN: str = Field(
+        default="I couldn't generate a final response. Tools were executed but I couldn't process the result.",
+        description="English fallback error message",
+    )
+
+    CACHE_ERROR_PATTERNS: str = Field(
+        default="403,PERMISSION_DENIED,CachedContent",
+        description="Error patterns indicating cache expiry (comma-separated)",
+    )
+
+    RATE_LIMIT_ERROR_PATTERNS: str = Field(
+        default="429,quota,rate limit",
+        description="Error patterns indicating rate limiting (comma-separated)",
+    )
+
+    # ============================================================================
     # Helper Methods (backward compatibility)
     # ============================================================================
 

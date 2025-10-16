@@ -157,7 +157,9 @@ class SalesAgent(BaseAgent):
         # Advanced features (orchestration)
         self.conversation_manager = ConversationManager()  # For compatibility
         self.debug_formatter = DebugFormatter()
-        self.function_call_handler = FunctionCallHandler(max_iterations=10)
+        self.function_call_handler = FunctionCallHandler(
+            max_iterations=settings.FUNCTION_CALL_MAX_ITERATIONS
+        )
         self.response_validator: ResponseValidator | None = None
         self.response_processor: ResponseProcessor | None = None
         self.tool_executor: ToolExecutor | None = None
@@ -596,10 +598,7 @@ class SalesAgent(BaseAgent):
         self.logger.warning(
             f"Function calling loop exhausted after {iteration} iterations"
         )
-        return (
-            "No pude generar una respuesta final. Las herramientas se ejecutaron "
-            "pero no pude procesar el resultado."
-        )
+        return settings.FALLBACK_ERROR_MESSAGE_ES
 
     async def _process_single_iteration(
         self, response: Any, user_message: str, iteration: int
@@ -718,6 +717,12 @@ class SalesAgent(BaseAgent):
     async def _generate_with_rate_limit(self, contents: list[types.Content]) -> Any:
         """Generate content with rate limiting and retry logic.
 
+        Configuration-driven retry and error handling:
+        - RETRY_MAX_ATTEMPTS: Maximum retry attempts (default: 3)
+        - RETRY_INITIAL_DELAY_MS: Initial backoff delay (default: 100ms)
+        - CACHE_ERROR_PATTERNS: Cache error patterns (comma-separated)
+        - RATE_LIMIT_ERROR_PATTERNS: Rate limit patterns (comma-separated)
+
         Args:
             contents: Conversation history.
 
@@ -731,8 +736,12 @@ class SalesAgent(BaseAgent):
         if self.client is None:
             raise RuntimeError("Client not initialized")
 
-        max_retries = 3
-        retry_delay = 1.0
+        max_retries = settings.RETRY_MAX_ATTEMPTS
+        retry_delay = settings.RETRY_INITIAL_DELAY_MS / 1000.0  # Convert to seconds
+
+        # Parse error patterns from settings
+        cache_error_patterns = settings.CACHE_ERROR_PATTERNS.split(",")
+        rate_limit_patterns = settings.RATE_LIMIT_ERROR_PATTERNS.split(",")
 
         for attempt in range(max_retries):
             try:
@@ -755,10 +764,9 @@ class SalesAgent(BaseAgent):
             except Exception as e:
                 error_str = str(e)
 
-                # Check if cache-related 403 error
-                if (
-                    "403" in error_str or "PERMISSION_DENIED" in error_str
-                ) and "CachedContent" in error_str:
+                # Check if cache-related error (configurable patterns)
+                cache_match = any(pattern in error_str for pattern in cache_error_patterns)
+                if cache_match and "CachedContent" in error_str:
                     self.logger.warning("⚠️ Cache expired. Fallback to standard mode...")
 
                     # Invalidate cache and rebuild config
@@ -769,16 +777,13 @@ class SalesAgent(BaseAgent):
                     # Retry immediately
                     continue
 
-                # Check if rate limit error (429)
-                if (
-                    "429" in error_str
-                    or "quota" in error_str.lower()
-                    or "rate limit" in error_str.lower()
-                ):
+                # Check if rate limit error (configurable patterns)
+                rate_limit_match = any(pattern.lower() in error_str.lower() for pattern in rate_limit_patterns)
+                if rate_limit_match:
                     if attempt < max_retries - 1:
                         wait_time = retry_delay * (2**attempt)
                         self.logger.warning(
-                            f"⚠️ Rate limit hit (429). Retrying in {wait_time:.1f}s... "
+                            f"⚠️ Rate limit hit. Retrying in {wait_time:.1f}s... "
                             f"(attempt {attempt + 1}/{max_retries})"
                         )
                         await asyncio.sleep(wait_time)
@@ -870,7 +875,8 @@ class SalesAgent(BaseAgent):
             raise RuntimeError("No tool executor or MCP client available")
 
         # ✅ PAGINATION: Track search results for client-side pagination
-        if tool_name in ["search_products", "fuzzy_search_smart"]:
+        search_tools = settings.SEARCH_TOOL_NAMES.split(",")
+        if tool_name in search_tools:
             self._track_search_results(tool_name, args, result)
 
         return result
@@ -949,13 +955,18 @@ class SalesAgent(BaseAgent):
             # User said "más" but we don't have context
             return None
 
+        # Parse language-specific keywords from configuration
+        spanish_keywords = settings.PAGINATION_KEYWORDS_ES.split(",")
+        english_keywords = settings.PAGINATION_KEYWORDS_EN.split(",")
+
         # Check if we have more results to show
         if not self.pagination_manager.has_more_results(category):
             # Determine response language
-            if any(
-                word in user_message.lower()
-                for word in ["más", "siguiente", "muéstrame"]
-            ):
+            is_spanish = any(
+                word.strip() in user_message.lower()
+                for word in spanish_keywords
+            )
+            if is_spanish:
                 return (
                     f"Ya te mostré todos los resultados disponibles para {category}. "
                     "¿Te gustaría buscar algo diferente?"
@@ -972,10 +983,10 @@ class SalesAgent(BaseAgent):
         if not next_products:
             return None
 
-        # Determine language for response
+        # Determine language for response (configurable keywords)
         spanish_mode = any(
-            word in user_message.lower()
-            for word in ["más", "siguiente", "muéstrame", "opciones"]
+            word.strip() in user_message.lower()
+            for word in spanish_keywords
         )
 
         # Get remaining count and format response
