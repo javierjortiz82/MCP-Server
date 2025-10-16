@@ -23568,3 +23568,110 @@ CITAS COMPLETADAS:
 3. **Historial visual**: Citas pasadas se muestran pero no con opciones de edición
 4. **Prevención de confusión**: No hay prompts confusos para modificar eventos históricos
 
+
+---
+
+## 🔒 CRÍTICO: Enhanced Prompt Instructions para Validación de Citas Pasadas
+
+**Fecha:** 2025-10-16
+**Estado:** ✅ IMPLEMENTADO
+**Impacto:** Ahora el agente DEBE verificar is_past antes de ofrecer opciones
+
+### Problema Detectado
+Aunque el backend devolvía `is_past: true` para citas pasadas, el agente (Gemini) **no estaba respetando este flag** y seguía mostrando opciones de cancelar/reprogramar.
+
+### Causa
+El prompt original NO incluía instrucciones explícitas para:
+1. Verificar el flag `is_past` 
+2. Cambiar el comportamiento basado en es flag
+3. Ejemplos concretos de qué mostrar en cada caso
+
+### Solución: Enhanced Prompt Instructions
+
+#### Archivo Modificado:
+`prompts/templates/booking_agent/modules/confirmation_flow.jinja2`
+
+#### Cambios Específicos:
+
+**1. Sección CANCELAR (líneas 134-197):**
+```
+3. Si quiere CANCELAR:
+   a. Busca sus reservas con list_customer_bookings
+      → IMPORTANTE: Esta herramienta devuelve CADA reserva con un flag "is_past" (true/false)
+
+   b. ⚠️ VALIDACIÓN TEMPORAL - CRÍTICO ANTES DE OFRECER OPCIONES:
+      Revisa el flag "is_past" para CADA reserva:
+
+      SI is_past = true:
+         → NO ofrezcas cancelar ni reprogramar
+         → Muestra SOLO como referencia histórica
+         → Pregunta: "¿Te gustaría agendar una nueva cita?"
+
+      SI is_past = false:
+         → SÍ ofrece las opciones de cancelar/reprogramar
+         → Procede normalmente
+```
+
+**2. Sección REPROGRAMAR (líneas 199-261):**
+```
+4. Si quiere REPROGRAMAR:
+   a. Busca la reserva actual con list_customer_bookings
+
+   b. ⚠️ VALIDACIÓN TEMPORAL - CRÍTICO ANTES DE PROCEDER:
+      
+      SI is_past = true:
+         → NO PERMITAS reprogramar
+         → Muestra: "⚠️ Esta cita ya ha pasó y no se puede reprogramar"
+         → Pregunta: "¿Te gustaría agendar una NUEVA cita?"
+
+      SI is_past = false:
+         → SÍ PERMITE reprogramar
+         → Procede normalmente
+```
+
+### Instrucciones Clave Añadidas
+
+| Escenario | Acción | Respuesta |
+|-----------|--------|----------|
+| Usuario pide cancelar + is_past=true | RECHAZAR | "Esta cita ya ha pasado" |
+| Usuario pide cancelar + is_past=false | PERMITIR | Mostrar opciones |
+| Usuario pide reprogramar + is_past=true | RECHAZAR | "Esta cita ya ha pasado" |
+| Usuario pide reprogramar + is_past=false | PERMITIR | Mostrar opciones |
+
+### Ejemplos de Respuestas Correctas (Después)
+
+**Caso 1: Cita Pasada - Usuario pide cancelar**
+```
+📅 Tu reserva (ya completada):
+- Reserva #7 ✓
+- Demostración de Producto
+- Jueves, 16 de octubre a las 13:00
+
+Esta cita ya ha pasado. Solo se muestra como referencia.
+
+💡 ¿Te gustaría agendar una nueva cita?
+```
+
+**Caso 2: Cita Futura - Usuario pide cancelar**
+```
+📅 Tu próxima reserva:
+- Reserva #8
+- Consulta General
+- Viernes, 17 de octubre a las 10:00
+
+¿Qué prefieres?
+1️⃣ Reprogramar para otra fecha/hora
+2️⃣ Cancelar definitivamente
+```
+
+### Validación Implementada
+✅ Flag `is_past` ahora es **validado explícitamente**
+✅ Comportamiento diferente basado en el valor del flag
+✅ Ejemplos claros de qué mostrar en cada caso
+✅ Instrucciones imperativas para el agente
+
+### Archivos Modificados (no versionados en git por gitignore)
+- `prompts/templates/booking_agent/modules/confirmation_flow.jinja2`
+  - Sección CANCELAR: +30 líneas con validación temporal
+  - Sección REPROGRAMAR: +30 líneas con validación temporal
+
