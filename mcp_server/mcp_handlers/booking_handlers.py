@@ -335,12 +335,14 @@ def register_booking_tools():
         ❌ Customer is checking availability first (use get_available_slots)
         ❌ New time slot is not available
         ❌ Booking ID is unknown (use list_customer_bookings first)
+        ❌ Booking is already cancelled (cannot reschedule cancelled appointments)
 
         ** WHAT IT DOES **:
-        1. Validates new time slot availability
-        2. Updates booking record in database with new date/time
-        3. Updates Google Calendar event if it exists
-        4. Returns reschedule confirmation
+        1. Validates booking exists and is not cancelled/completed
+        2. Validates new time slot availability
+        3. Updates booking record in database with new date/time
+        4. Updates Google Calendar event if it exists
+        5. Returns reschedule confirmation
 
         ** PERFORMANCE **: ~150-300ms (depending on calendar integration)
 
@@ -378,25 +380,47 @@ def register_booking_tools():
             await ctx.info(
                 f"Rescheduling booking ID: {booking_id} to {new_date} at {new_time}"
             )
-            await ctx.report_progress(0, 3, "Validating booking")
+            await ctx.report_progress(0, 4, "Validating booking status")
 
             logger.info(
                 f"reschedule_booking called: booking_id={booking_id}, new_date={new_date}, new_time={new_time}"
             )
 
+            # First, fetch booking to check status (defensive validation)
+            await ctx.report_progress(1, 4, "Fetching booking details")
+            booking = booking_tool.get_booking_by_id(booking_id)
+
+            if not booking:
+                error_msg = f"Booking {booking_id} not found"
+                await ctx.debug(error_msg)
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            # Check if booking is in a valid state for rescheduling
+            current_status = booking.get("status")
+            if current_status in ("cancelled", "completed", "no_show"):
+                error_msg = f"Cannot reschedule {current_status} booking (ID: {booking_id})"
+                await ctx.debug(error_msg)
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            await ctx.info(
+                f"Booking status validated: {current_status} (customer: {booking.get('customer_name')})"
+            )
+
             # Call business logic
-            await ctx.report_progress(1, 3, "Checking new slot availability")
+            await ctx.report_progress(2, 4, "Checking new slot availability")
             result = booking_tool.reschedule_booking(
                 booking_id=booking_id,
                 new_date=new_date,
                 new_time=new_time,
             )
 
-            await ctx.report_progress(2, 3, "Updating booking and calendar")
+            await ctx.report_progress(3, 4, "Updating booking and calendar")
             await ctx.info(
                 f"✅ Booking {booking_id} rescheduled to {new_date} at {new_time}"
             )
-            await ctx.report_progress(3, 3, "Reschedule completed")
+            await ctx.report_progress(4, 4, "Reschedule completed")
             logger.info(f"Booking rescheduled successfully: ID={booking_id}")
 
             return result
