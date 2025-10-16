@@ -730,13 +730,21 @@ def register_booking_tools():
                         "status": str,
                         "notes": str,
                         "google_calendar_link": str | None,
-                        "created_at": str (ISO 8601)
+                        "created_at": str (ISO 8601),
+                        "is_past": bool (true if booking date/time has already passed)
                     },
                     ...
                 ],
                 "count": int,
-                "active_count": int (confirmed bookings only)
+                "active_count": int (non-cancelled bookings),
+                "future_count": int (bookings not yet passed)
             }
+
+            CRITICAL FOR AGENT LOGIC:
+            - Use "is_past" flag to decide whether to show reschedule/cancel options
+            - If is_past=true: Show booking as reference only, NO action buttons
+            - If is_past=false: Show cancel/reschedule options
+            - Use "future_count" to decide what message to show ("próximas citas" vs "citas pasadas")
 
         Example:
             >>> result = await list_customer_bookings(
