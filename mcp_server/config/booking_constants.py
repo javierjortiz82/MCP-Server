@@ -127,7 +127,7 @@ BOOKING_CHOICE_OPTIONS = {
     # Option A: Reschedule
     "option_a": ["a", "1", "opcion a", "opcion 1", "opción a", "opción 1"],
     # Option B: Cancel
-    "option_b": ["b", "2", "opcion b", "opcion b", "opción b", "opción b"],
+    "option_b": ["b", "2", "opcion b", "opcion 2", "opción b", "opción 2"],
 }
 
 
