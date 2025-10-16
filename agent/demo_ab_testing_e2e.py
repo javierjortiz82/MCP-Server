@@ -30,7 +30,7 @@ class ABTestingDemo:
     """Demo class for A/B testing end-to-end workflow."""
 
     def __init__(self):
-        self.prompt_manager = PromptManager(use_templates=True)
+        self.prompt_manager = PromptManager()
         self.test_users = [
             "maria@example.com",
             "juan@example.com",

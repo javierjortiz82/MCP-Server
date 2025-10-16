@@ -110,68 +110,6 @@ class BookingAgent(BaseAgent):
             else None
         )
 
-    # Legacy system prompt for backward compatibility (DEPRECATED - use PromptManager)
-    SYSTEM_PROMPT = """Eres un asistente especializado en RESERVAS Y CITAS para Lab01-MCP.
-
-Tu ÚNICA función es ayudar a los clientes con:
-✅ Crear nuevas reservas/citas
-✅ Consultar disponibilidad de horarios
-✅ Cancelar citas existentes
-✅ Reprogramar/cambiar citas
-✅ Ver el estado de sus reservas
-✅ Información sobre servicios disponibles
-
-SERVICIOS DISPONIBLES:
-1. Consulta General (30-60 min) - Asesoría personalizada
-2. Soporte Técnico (45-90 min) - Ayuda con productos
-3. Demostración de Producto (60 min) - Ver productos en acción
-4. Sesión de Capacitación (90-120 min) - Aprender a usar productos
-5. Instalación (60-120 min) - Instalación profesional
-
-FLUJO DE CONVERSACIÓN:
-1. Saluda amablemente y pregunta cómo puedes ayudar
-2. Si el cliente quiere reservar:
-   a. Pregunta qué servicio necesita
-   b. Pregunta qué fecha prefiere
-   c. Muestra horarios disponibles usando get_available_slots
-   d. Confirma datos: nombre, email, teléfono
-   e. Crea la reserva usando create_booking
-   f. Proporciona confirmación con número de reserva
-3. Si quiere cancelar:
-   a. Busca sus reservas con list_customer_bookings
-   b. Confirma qué reserva quiere cancelar
-   c. Cancela usando cancel_booking
-4. Si quiere reprogramar:
-   a. Busca la reserva actual
-   b. Muestra nuevos horarios disponibles
-   c. Confirma y reprograma con reschedule_booking
-
-REGLAS IMPORTANTES:
-❌ NO vendas productos - redirige a ventas si preguntan por productos
-❌ NO respondas preguntas generales - redirige al agente general
-✅ Siempre confirma datos antes de crear/cancelar reservas
-✅ Usa los tools disponibles para operaciones en tiempo real
-✅ Sé empático si el cliente necesita cancelar
-✅ Ofrece alternativas si no hay disponibilidad
-✅ Proporciona información clara sobre el proceso
-
-FORMATO DE RESPUESTAS:
-- Usa lenguaje natural y amigable
-- Sé conciso pero completo
-- Confirma siempre los detalles importantes
-- Proporciona números de confirmación cuando corresponda
-
-DATOS REQUERIDOS PARA RESERVAR:
-- Nombre completo del cliente
-- Email de contacto
-- Teléfono
-- Tipo de servicio
-- Fecha (YYYY-MM-DD)
-- Hora (HH:MM formato 24h)
-- Duración (opcional, depende del servicio)
-
-Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o información general, indica amablemente que pueden consultar con otro agente."""
-
     @property
     def agent_name(self) -> str:
         """Return agent name for logging.
@@ -207,16 +145,14 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
     def get_system_prompt(
         self,
         customer_email: str | None = None,
-        use_template: bool = True,
         **kwargs: Any,
     ) -> str:
-        """Get system prompt for BookingAgent using PromptManager.
+        """Get system prompt for BookingAgent using PromptManager (Jinja2).
 
         Implements BaseAgent's abstract method.
 
         Args:
             customer_email: Optional customer email for personalization.
-            use_template: Whether to use PromptManager templates (True) or legacy prompt (False).
             **kwargs: Additional parameters (user_id for A/B testing, etc.).
 
         Returns:
@@ -225,43 +161,29 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
         Example:
             >>> prompt = agent.get_system_prompt(customer_email="maria@example.com")
         """
-        try:
-            if use_template:
-                # Initialize PromptManager if not already done
-                if self._prompt_manager is None:
-                    self.logger.debug("Initializing PromptManager for BookingAgent")
-                    self._prompt_manager = PromptManager()
+        # Initialize PromptManager if not already done
+        if self._prompt_manager is None:
+            self.logger.debug("Initializing PromptManager for BookingAgent (Jinja2)")
+            self._prompt_manager = PromptManager()
 
-                # Get prompt from PromptManager (supports A/B testing)
-                prompt = self._prompt_manager.get_booking_prompt(
-                    customer_email=customer_email, user_id=kwargs.get("user_id")
-                )
-                prompt_size = len(prompt)
-                estimated_tokens = prompt_size // 4  # Rough estimate: 1 token ≈ 4 chars
-                self.logger.debug(
-                    f"Loaded booking prompt from PromptManager "
-                    f"({prompt_size} chars, ~{estimated_tokens} tokens)"
-                )
+        # Get prompt from PromptManager (supports A/B testing)
+        prompt = self._prompt_manager.get_booking_prompt(
+            customer_email=customer_email, user_id=kwargs.get("user_id")
+        )
+        prompt_size = len(prompt)
+        estimated_tokens = prompt_size // 4  # Rough estimate: 1 token ≈ 4 chars
+        self.logger.debug(
+            f"Loaded booking prompt from Jinja2 "
+            f"({prompt_size} chars, ~{estimated_tokens} tokens)"
+        )
 
-                # Warn if prompt is very long
-                if prompt_size > 30000:
-                    self.logger.warning(
-                        f"⚠️ Prompt is very long: {prompt_size} chars (~{estimated_tokens} tokens)\n"
-                        f"   This may cause issues with Gemini API (recommended < 30k chars)"
-                    )
-
-                return prompt
-
-        except Exception as e:
+        # Warn if prompt is very long
+        if prompt_size > 30000:
             self.logger.warning(
-                f"Failed to load prompt from PromptManager: {e}. Using legacy prompt."
+                f"⚠️ Prompt is very long: {prompt_size} chars (~{estimated_tokens} tokens)\n"
+                f"   This may cause issues with Gemini API (recommended < 30k chars)"
             )
 
-        # Fallback to legacy prompt
-        self.logger.debug("Using legacy SYSTEM_PROMPT")
-        prompt = self.SYSTEM_PROMPT
-        if customer_email:
-            prompt += f"\n\nCLIENTE ACTUAL: {customer_email}"
         return prompt
 
     async def generate_response(

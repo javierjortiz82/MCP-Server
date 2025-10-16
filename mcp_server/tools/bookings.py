@@ -25,6 +25,12 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from config.settings import settings
+from config.booking_constants import (
+    BookingStatus,
+    EmailNotificationType,
+    ServiceType,
+    get_timezone_offset,
+)
 from utils.db import fetchall, fetchone
 from utils.logger import setup_logging
 
@@ -131,33 +137,11 @@ def _get_timezone_offset() -> str:
         Timezone offset string (e.g., "-05:00", "+01:00").
 
     Note:
+        Timezone offsets are centralized in config/booking_constants.py.
         This is a simplified implementation. In production,
         use proper timezone library (pytz, zoneinfo).
     """
-    # Simplified mapping - should use pytz/zoneinfo in production
-    timezone_offsets = {
-        # North America
-        "America/New_York": "-05:00",  # EST (UTC-5 winter, UTC-4 summer)
-        "America/Chicago": "-06:00",  # CST (UTC-6 winter, UTC-5 summer)
-        "America/Denver": "-07:00",  # MST (UTC-7 winter, UTC-6 summer)
-        "America/Los_Angeles": "-08:00",  # PST (UTC-8 winter, UTC-7 summer)
-
-        # Central America (no DST - always UTC-6)
-        "America/Costa_Rica": "-06:00",  # CST (UTC-6 year-round)
-        "America/Guatemala": "-06:00",  # CST (UTC-6 year-round)
-        "America/El_Salvador": "-06:00",  # CST (UTC-6 year-round)
-        "America/Tegucigalpa": "-06:00",  # Honduras CST (UTC-6 year-round)
-        "America/Managua": "-06:00",  # Nicaragua CST (UTC-6 year-round)
-        "America/Panama": "-05:00",  # EST (UTC-5 year-round)
-
-        # Europe
-        "Europe/Madrid": "+01:00",  # CET (UTC+1 winter, UTC+2 summer)
-        "Europe/London": "+00:00",  # GMT (UTC+0 winter, UTC+1 summer)
-
-        # Other
-        "UTC": "+00:00",
-    }
-    return timezone_offsets.get(settings.GOOGLE_CALENDAR_TIMEZONE, "-06:00")  # Default Costa Rica
+    return get_timezone_offset(settings.GOOGLE_CALENDAR_TIMEZONE)
 
 
 def _enqueue_email(
@@ -347,7 +331,7 @@ def create_booking(
         (customer_name, customer_email, customer_phone, service_type,
          booking_date, booking_time, duration_minutes, notes,
          google_calendar_event_id, google_calendar_link, status)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'confirmed')
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id, status, created_at
         """
 
@@ -364,6 +348,7 @@ def create_booking(
                 notes,
                 calendar_event_id,
                 calendar_link,
+                BookingStatus.CONFIRMED.value,
             ),
             commit=True,  # INSERT requires commit
         )
@@ -387,7 +372,7 @@ def create_booking(
 
         # Enqueue confirmation email
         _enqueue_email(
-            email_type="booking_created",
+            email_type=EmailNotificationType.BOOKING_CREATED.value,
             booking_data={
                 "booking_id": booking_id,
                 "customer_name": customer_name,
@@ -459,7 +444,7 @@ def cancel_booking(
         if not booking:
             raise ValueError(f"Booking {booking_id} not found")
 
-        if booking["status"] == "cancelled":
+        if booking["status"] == BookingStatus.CANCELLED.value:
             raise ValueError(f"Booking {booking_id} is already cancelled")
 
         logger.debug(
@@ -491,14 +476,18 @@ def cancel_booking(
     try:
         update_sql = f"""
         UPDATE {settings.SCHEMA_NAME}.appointments
-        SET status = 'cancelled',
+        SET status = %s,
             cancellation_reason = %s,
             cancelled_at = CURRENT_TIMESTAMP
         WHERE id = %s
         RETURNING cancelled_at
         """
 
-        result = fetchone(update_sql, (cancellation_reason, booking_id), commit=True)  # UPDATE requires commit
+        result = fetchone(
+            update_sql,
+            (BookingStatus.CANCELLED.value, cancellation_reason, booking_id),
+            commit=True,
+        )  # UPDATE requires commit
 
         if not result:
             raise RuntimeError("Failed to cancel booking - no result returned")
@@ -514,7 +503,7 @@ def cancel_booking(
 
         # Enqueue cancellation email
         _enqueue_email(
-            email_type="booking_cancelled",
+            email_type=EmailNotificationType.BOOKING_CANCELLED.value,
             booking_data={
                 "booking_id": booking_id,
                 "customer_name": booking["customer_name"],
@@ -577,7 +566,8 @@ def reschedule_booking(
         if not booking:
             raise ValueError(f"Booking {booking_id} not found")
 
-        if booking["status"] in ("cancelled", "completed"):
+        non_reschedulable = {BookingStatus.CANCELLED.value, BookingStatus.COMPLETED.value}
+        if booking["status"] in non_reschedulable:
             raise ValueError(f"Cannot reschedule {booking['status']} booking")
 
         logger.debug(f"Found booking: {booking['customer_name']}")
@@ -641,12 +631,16 @@ def reschedule_booking(
         UPDATE {settings.SCHEMA_NAME}.appointments
         SET booking_date = %s,
             booking_time = %s,
-            status = 'rescheduled'
+            status = %s
         WHERE id = %s
         RETURNING booking_date, booking_time, status
         """
 
-        result = fetchone(update_sql, (new_date, new_time, booking_id), commit=True)  # UPDATE requires commit
+        result = fetchone(
+            update_sql,
+            (new_date, new_time, BookingStatus.RESCHEDULED.value, booking_id),
+            commit=True,
+        )  # UPDATE requires commit
 
         if not result:
             raise RuntimeError("Failed to reschedule booking - no result returned")
@@ -663,7 +657,7 @@ def reschedule_booking(
 
         # Enqueue rescheduled email
         _enqueue_email(
-            email_type="booking_rescheduled",
+            email_type=EmailNotificationType.BOOKING_RESCHEDULED.value,
             booking_data={
                 "booking_id": booking_id,
                 "customer_name": booking["customer_name"],
@@ -891,7 +885,7 @@ def list_customer_bookings(
 
     try:
         # Build status filter
-        status_filter = "" if include_cancelled else "AND status != 'cancelled'"
+        status_filter = "" if include_cancelled else f"AND status != '{BookingStatus.CANCELLED.value}'"
 
         query = f"""
         SELECT id, customer_name, customer_email, service_type,
@@ -934,10 +928,13 @@ def list_customer_bookings(
                 booking["is_past"] = False  # Default to not past if parsing fails
 
         # Count active bookings
-        active_count = sum(1 for b in bookings if b.get("status") != "cancelled")
+        active_count = sum(1 for b in bookings if b.get("status") != BookingStatus.CANCELLED.value)
 
         # Count future bookings (not yet passed)
-        future_count = sum(1 for b in bookings if not b.get("is_past", False) and b.get("status") != "cancelled")
+        future_count = sum(
+            1 for b in bookings
+            if not b.get("is_past", False) and b.get("status") != BookingStatus.CANCELLED.value
+        )
 
         logger.info(
             f"Found {len(bookings)} bookings for {customer_email} "

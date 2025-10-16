@@ -229,6 +229,99 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # Booking Input Parser Configuration (Confidence Thresholds)
+    # ============================================================================
+    BOOKING_CHOICE_CONFIDENCE_THRESHOLD: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="Confidence threshold for booking choice classification (reschedule/cancel)",
+    )
+
+    BOOKING_PARTIAL_MATCH_CONFIDENCE: float = Field(
+        default=0.95,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score for partial word matches in booking input",
+    )
+
+    BOOKING_MIN_KEYWORD_LENGTH: int = Field(
+        default=3,
+        gt=0,
+        description="Minimum string length for substring matching in booking keywords",
+    )
+
+    BOOKING_FUZZY_MATCH_THRESHOLD: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        description="SequenceMatcher threshold for fuzzy matching in booking input",
+    )
+
+    BOOKING_CONFIRMATION_THRESHOLD: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="Confidence threshold for yes/no confirmation in booking context",
+    )
+
+    BOOKING_CLARIFICATION_THRESHOLD: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="Confidence threshold below which to ask for clarification",
+    )
+
+    BOOKING_EMAIL_QUEUE_PRIORITY: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Email queue priority for booking notifications (1=lowest, 10=highest)",
+    )
+
+    # ============================================================================
+    # Memory Context Configuration (Priority Thresholds & Display Limits)
+    # ============================================================================
+    MEMORY_PRIORITY_HIGH_THRESHOLD: int = Field(
+        default=7,
+        ge=0,
+        le=10,
+        description="Priority score threshold for high-priority memory blocks (0-10 scale)",
+    )
+
+    MEMORY_PRIORITY_MEDIUM_MIN: int = Field(
+        default=5,
+        ge=0,
+        le=10,
+        description="Minimum priority score for medium-priority memory blocks",
+    )
+
+    MEMORY_PRIORITY_MEDIUM_MAX: int = Field(
+        default=7,
+        ge=0,
+        le=10,
+        description="Maximum priority score for medium-priority memory blocks",
+    )
+
+    MEMORY_HIGH_PRIORITY_LIMIT: int = Field(
+        default=3,
+        gt=0,
+        description="Number of high-priority memory blocks to include in agent context",
+    )
+
+    MEMORY_MEDIUM_PRIORITY_LIMIT: int = Field(
+        default=2,
+        gt=0,
+        description="Number of medium-priority memory blocks to include in agent context",
+    )
+
+    MEMORY_USER_BLOCKS_LIMIT: int = Field(
+        default=5,
+        gt=0,
+        description="Number of user-level memory blocks to include in agent context",
+    )
+
+    # ============================================================================
     # Field Validators
     # ============================================================================
     @field_validator("LOG_LEVEL")

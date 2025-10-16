@@ -394,31 +394,6 @@ class Settings(BaseSettings):
         except ValueError:
             return False
 
-    @staticmethod
-    def get_prompts_dir() -> Path:
-        """Get the prompts directory path.
-
-        Returns:
-            Path: Path to prompts directory
-        """
-        # prompts/ is in assets/ directory
-        config_dir = Path(__file__).parent  # config/
-        project_root = config_dir.parent  # client_mcp/
-        return project_root / "assets" / "prompts"
-
-    def get_system_prompt(self) -> str:
-        """Get the main system prompt for Odiseo Bot.
-
-        Returns:
-            str: System prompt content
-
-        Raises:
-            FileNotFoundError: If prompt file doesn't exist
-        """
-        prompt_path = self.get_prompts_dir() / "system_prompt.txt"
-        if not prompt_path.exists():
-            raise FileNotFoundError(f"System prompt not found at: {prompt_path}")
-        return prompt_path.read_text(encoding="utf-8")
 
     def get_retry_config(self) -> dict[str, float | int | bool]:
         """Get retry configuration as dictionary.

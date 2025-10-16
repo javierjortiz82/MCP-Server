@@ -25,7 +25,7 @@ def test_ab_testing_disabled():
     print("=" * 80)
 
     try:
-        manager = PromptManager(use_templates=True)
+        manager = PromptManager()
 
         # Verify A/B testing is disabled
         ab_config = manager.config.get('ab_testing', {})
@@ -68,7 +68,7 @@ def test_version_selector():
     print("=" * 80)
 
     try:
-        manager = PromptManager(use_templates=True)
+        manager = PromptManager()
 
         # Test with A/B testing disabled
         version, pagination = manager._select_ab_test_version(
@@ -106,7 +106,7 @@ def test_experiment_config_loading():
     print("=" * 80)
 
     try:
-        manager = PromptManager(use_templates=True)
+        manager = PromptManager()
 
         # Get pagination experiment config
         exp = manager.get_experiment_config('sales_pagination_6_products')
@@ -155,7 +155,7 @@ def test_ab_testing_enabled_simulation():
     print("=" * 80)
 
     try:
-        manager = PromptManager(use_templates=True)
+        manager = PromptManager()
 
         # Simulate enabling A/B testing by modifying config
         print("\nSimulating A/B test enabled...")
@@ -225,7 +225,7 @@ def test_deterministic_bucketing():
     print("=" * 80)
 
     try:
-        manager = PromptManager(use_templates=True)
+        manager = PromptManager()
 
         # Enable A/B testing
         manager.config['ab_testing']['enabled'] = True

@@ -4,6 +4,67 @@ Este archivo documenta todos los cambios realizados por Claude en el proyecto.
 
 ---
 
+## 🎉 MIGRACIÓN COMPLETA A JINJA2: Eliminación de system_prompt.txt
+
+**Fecha:** 2025-10-16
+**Estado:** ✅ COMPLETADO Y VALIDADO
+**Criticidad:** MEDIA - Arquitectura más limpia y moderna
+
+### Cambios Realizados
+
+**Fase 1: Verificación** (✅ COMPLETADA)
+- Confirmación de 23/23 tests pasando (baseline)
+- Análisis de 23 templates Jinja2 existentes
+- Validación de PromptManager funcional
+
+**Fase 2: Jinja2 Obligatorio** (✅ COMPLETADA)
+- `sales_agent.py`: Eliminado fallback a PromptBuilder
+- `booking_agent.py`: Eliminado parámetro `use_template` y fallback a SYSTEM_PROMPT
+- `general_agent.py`: Eliminado parámetro `use_template` y fallback a SYSTEM_PROMPT
+- `prompt_manager.py`: Jinja2 ahora es OBLIGATORIO (no fallback mode)
+
+**Fase 3: Eliminación de Legacy** (✅ COMPLETADA)
+- ❌ **Deletado**: `client_mcp/assets/prompts/system_prompt.txt` (26KB)
+- ❌ **Deletado**: `client_mcp/core/prompt_builder.py` (179 líneas)
+- ❌ **Eliminadas**: Métodos fallback en `prompt_manager.py`
+
+**Fase 4: Dependencias** (✅ COMPLETADA)
+- `jinja2>=3.1.0` marcado como REQUERIDO en requirements.txt
+- `settings.py`: Eliminadas funciones `get_prompts_dir()` y `get_system_prompt()`
+
+**Fase 5: Testing & Documentación** (✅ COMPLETADA)
+- Tests pasando: 23/23 después de migración
+- Todos los agentes usando PromptManager + Jinja2 templates
+- Documentación actualizada
+
+### Resultados
+
+✅ **Sistema 100% modular:**
+- 23 templates Jinja2 completamente funcionales
+- Versionado claro: v1.0, v1.1, v2.0
+- A/B testing nativo integrado
+- Soporte multi-idioma (español/inglés)
+
+✅ **Beneficios empresariales:**
+- Eliminadas 500+ líneas de código legacy
+- Un solo sistema de prompts (JINJA2 + PromptManager)
+- Fácil mantenim por no-técnicos (YAML + templates)
+- Versionado con Git tracking
+- Producción-ready (no fallbacks complejos)
+
+### Impacto en Archivos
+
+| Archivo | Cambio | Líneas |
+|---------|--------|--------|
+| `sales_agent.py` | Simplificado | -30 |
+| `booking_agent.py` | Simplificado | -20 |
+| `general_agent.py` | Simplificado | -20 |
+| `prompt_manager.py` | Jinja2 obligatorio | -5 |
+| `settings.py` | Eliminadas 2 métodos | -30 |
+| **Total** | **Eliminadas** | **-105** |
+
+---
+
 ## 🚀 OPTIMIZACIÓN CRÍTICA: Reducción de Prompts 65% (54K → 19K)
 
 **Fecha:** 2025-10-16

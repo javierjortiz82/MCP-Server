@@ -762,7 +762,6 @@ class BaseAgent(ABC):
                 model=self.model_name,
                 contents=contents,  # type: ignore[arg-type]
                 config=self.generation_config,
-                request_options={"timeout": settings.REQUEST_TIMEOUT},
             )
 
             self.logger.debug("Response generated successfully")

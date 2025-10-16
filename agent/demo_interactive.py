@@ -187,7 +187,7 @@ def main():
     print("█" + " " * 78 + "█")
     print("█" * 80)
 
-    manager = PromptManager(use_templates=True)
+    manager = PromptManager()
 
     # Demo 1: Single user (variant A)
     demo_single_user(manager, "maria@example.com")

@@ -25,7 +25,7 @@ def test_sales_prompt_basic():
     print("=" * 80)
 
     try:
-        manager = PromptManager(use_templates=True)
+        manager = PromptManager()
         prompt = manager.get_sales_prompt(
             mcp_tools=None,
             pagination_page_size=4,
@@ -78,7 +78,7 @@ def test_sales_prompt_with_tools():
     print("=" * 80)
 
     try:
-        manager = PromptManager(use_templates=True)
+        manager = PromptManager()
 
         # Create mock tools context (simulating PromptBuilder output)
         mock_tools_context = """
@@ -127,7 +127,7 @@ def test_fallback_mechanism():
     print("=" * 80)
 
     try:
-        manager = PromptManager(use_templates=False)
+        manager = PromptManager()
         prompt = manager.get_sales_prompt(
             mcp_tools=None,
             pagination_page_size=4
