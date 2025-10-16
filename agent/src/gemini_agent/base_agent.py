@@ -1298,7 +1298,8 @@ class BaseAgent(ABC):
                                 }
                             )
                             self.logger.debug(
-                                f"Saved memory block: {memory.block_label} (id={block_id}, p={memory.priority})"
+                                f"Saved memory block: {memory.block_label} "
+                                f"(id={block_id}, p={memory.priority})"
                             )
                     except Exception as e:
                         self.logger.warning(f"Failed to save memory block: {e}")
