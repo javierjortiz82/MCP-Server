@@ -36,20 +36,18 @@ if str(client_mcp_path) not in sys.path:
     sys.path.insert(0, str(client_mcp_path))
 
 try:
-    from config.settings import (  # client_mcp settings (has ENABLE_THINKING, etc.)
-        settings,
-    )
     from core.conversation_manager import ConversationManager
     from core.debug_formatter import DebugFormatter
     from core.function_call_handler import FunctionCallHandler
     from core.mcp_connector import MCPConnector
     from core.pagination_manager import PaginationManager
-    from core.prompt_builder import PromptBuilder
     from core.response_processor import ResponseProcessor
     from core.response_validator import ResponseValidator
     from core.result_serializer import ResultSerializer
     from core.thinking_manager import ThinkingManager
     from core.tool_executor import ToolExecutor
+
+    from config.settings import settings  # client_mcp settings (has ENABLE_THINKING, etc.)
 except ImportError as e:
     raise RuntimeError(
         f"Failed to import client_mcp utilities: {e}. "
@@ -181,9 +179,8 @@ class SalesAgent(BaseAgent):
         else:
             self.rate_limiter = None
 
-        # Prompt management
+        # Prompt management (Jinja2 + PromptManager is mandatory)
         self.prompt_manager_instance: PromptManager | None = None
-        self.use_modular_prompts = PROMPT_MANAGER_AVAILABLE
 
     @property
     def agent_name(self) -> str:
@@ -194,11 +191,11 @@ class SalesAgent(BaseAgent):
         return "sales_agent"
 
     def get_system_prompt(self, **kwargs: Any) -> str:
-        """Get system prompt for SalesAgent using PromptManager.
+        """Get system prompt for SalesAgent using PromptManager (Jinja2).
 
         Implements BaseAgent's abstract method.
 
-        Uses PromptManager (modular + A/B testing) with fallback to PromptBuilder (legacy).
+        Uses PromptManager with Jinja2 templates and A/B testing support.
 
         Args:
             **kwargs: Additional parameters (user_id, mcp_tools, etc.).
@@ -209,35 +206,22 @@ class SalesAgent(BaseAgent):
         Example:
             >>> prompt = bot.get_system_prompt(user_id="user_123")
         """
-        # Try PromptManager first (modular prompts with A/B testing)
-        if self.use_modular_prompts and PROMPT_MANAGER_AVAILABLE:
-            try:
-                if self.prompt_manager_instance is None:
-                    self.logger.info("🎨 Initializing PromptManager (modular prompts)")
-                    self.prompt_manager_instance = PromptManager(use_templates=True)
+        # Initialize PromptManager if not already done
+        if self.prompt_manager_instance is None:
+            self.logger.debug("🎨 Initializing PromptManager (Jinja2 templates)")
+            self.prompt_manager_instance = PromptManager()
 
-                # Get prompt with A/B testing support
-                prompt = self.prompt_manager_instance.get_sales_prompt(
-                    mcp_tools=kwargs.get("mcp_tools", self.mcp_tools),
-                    user_id=kwargs.get("user_id", self.user_id),
-                )
-
-                self.logger.info(
-                    f"✅ Using modular prompt system ({len(prompt)} chars, "
-                    f"user_id={self.user_id[:8]}...)"
-                )
-                return prompt
-
-            except Exception as e:
-                self.logger.warning(
-                    f"⚠️ PromptManager failed: {e}. Falling back to PromptBuilder."
-                )
-
-        # Fallback to legacy PromptBuilder
-        self.logger.info("📝 Using legacy PromptBuilder (monolithic prompt)")
-        return PromptBuilder.build_dynamic_system_prompt(
-            kwargs.get("mcp_tools", self.mcp_tools)
+        # Get prompt with A/B testing support
+        prompt = self.prompt_manager_instance.get_sales_prompt(
+            mcp_tools=kwargs.get("mcp_tools", self.mcp_tools),
+            user_id=kwargs.get("user_id", self.user_id),
         )
+
+        self.logger.debug(
+            f"✅ Sales prompt loaded from Jinja2 ({len(prompt)} chars, "
+            f"user_id={self.user_id[:8]}...)"
+        )
+        return prompt
 
     async def initialize(self) -> None:
         """Initialize SalesAgent with injected MCP dependencies.

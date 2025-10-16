@@ -18,6 +18,6 @@ pydantic>=2.11.0                   # Data validation and settings management (v2
 pydantic-settings>=2.11.0          # Settings management from environment variables
 python-dotenv>=1.0.0               # Load environment variables from .env file
 
-# Template Engine and Data Formats
-jinja2>=3.1.0                      # Template engine for prompt management
+# Template Engine and Data Formats (REQUIRED for Jinja2-based prompt system)
+jinja2>=3.1.0                      # REQUIRED: Template engine for prompt management (now mandatory)
 pyyaml>=6.0.0                      # YAML parser for configuration data

@@ -414,7 +414,6 @@ NO agregues explicaciones ni puntuación adicional."""
                 model=self.model_name,
                 contents=contents,
                 config=self.generation_config,
-                request_options={"timeout": settings.REQUEST_TIMEOUT},
             )
 
             # Extract classification result with defensive checks

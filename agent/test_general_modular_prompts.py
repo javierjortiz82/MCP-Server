@@ -26,7 +26,7 @@ def test_general_base_template_loads():
     print("TEST 1: General Base Template Loading")
     print("="*80)
 
-    manager = PromptManager(use_templates=True)
+    manager = PromptManager()
 
     # Get general prompt (default version v1.0)
     prompt = manager.get_general_prompt()
@@ -71,7 +71,7 @@ def test_general_modular_system():
     print("TEST 2: General Modular System Structure")
     print("="*80)
 
-    manager = PromptManager(use_templates=True)
+    manager = PromptManager()
 
     # Get general prompt with default parameters
     prompt = manager.get_general_prompt()
@@ -113,7 +113,7 @@ def test_general_ab_parameter_injection():
     print("TEST 3: A/B Test Parameter Injection")
     print("="*80)
 
-    manager = PromptManager(use_templates=True)
+    manager = PromptManager()
 
     # Test Variant A (v1.0): Detailed responses
     print("\n📋 Testing Variant A (v1.0): Detailed responses")

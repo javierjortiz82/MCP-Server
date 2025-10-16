@@ -41,7 +41,7 @@ import yaml
 
 # Jinja2 imports
 try:
-    from jinja2 import Environment, FileSystemLoader, Template, TemplateNotFound
+    from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
     JINJA2_AVAILABLE = True
 except ImportError:
@@ -69,9 +69,7 @@ class PromptManager:
     agents in the system. It provides a unified interface for prompt management
     with support for templates, data injection, and versioning.
 
-    The manager supports two modes:
-    1. **Template Mode**: Load Jinja2 templates and render with data (preferred)
-    2. **Fallback Mode**: Return legacy hardcoded prompts if templates unavailable
+    Jinja2 is MANDATORY for this system - all prompts are loaded from templates.
 
     Example:
         >>> manager = PromptManager()
@@ -87,21 +85,24 @@ class PromptManager:
         config_dir: Directory containing version configs
         env: Jinja2 environment for template rendering
         config: Active configuration loaded from YAML
-        use_templates: Whether to use templates or fallback mode
     """
 
-    def __init__(
-        self, prompts_dir: Path | None = None, use_templates: bool = True
-    ) -> None:
-        """Initialize Prompt Manager.
+    def __init__(self, prompts_dir: Path | None = None) -> None:
+        """Initialize Prompt Manager with Jinja2 templates (mandatory).
 
         Args:
             prompts_dir: Root directory for prompts (defaults to repo root/prompts/)
-            use_templates: Whether to use template mode (True) or fallback mode (False)
 
         Raises:
-            RuntimeError: If Jinja2 not available and use_templates=True
+            RuntimeError: If Jinja2 not available (Jinja2 is now REQUIRED)
         """
+        # Jinja2 is mandatory - no fallback mode
+        if not JINJA2_AVAILABLE:
+            raise RuntimeError(
+                "Jinja2 is REQUIRED for the prompt system. "
+                "Install with: pip install jinja2>=3.1.0"
+            )
+
         # Determine prompts directory
         if prompts_dir is None:
             # Default: /path/to/Lab01-MCP/prompts/
@@ -114,35 +115,20 @@ class PromptManager:
         self.data_dir = self.prompts_dir / "data"
         self.config_dir = self.prompts_dir / "config"
 
-        # Template mode configuration
-        self.use_templates = use_templates
-
-        # Initialize Jinja2 environment if templates enabled
-        if use_templates:
-            if not JINJA2_AVAILABLE:
-                logger.error("Jinja2 not available but use_templates=True")
-                raise RuntimeError(
-                    "Jinja2 is required for template mode. "
-                    "Install with: pip install jinja2"
-                )
-
-            self.env = Environment(
-                loader=FileSystemLoader(str(self.templates_dir)),
-                trim_blocks=True,
-                lstrip_blocks=True,
-                autoescape=False,  # Prompts are not HTML
-            )
-            logger.info(f"Jinja2 environment initialized: {self.templates_dir}")
-        else:
-            self.env = None
-            logger.info("Template mode disabled - using fallback prompts")
+        # Initialize Jinja2 environment
+        self.env = Environment(
+            loader=FileSystemLoader(str(self.templates_dir)),
+            trim_blocks=True,
+            lstrip_blocks=True,
+            autoescape=False,  # Prompts are not HTML
+        )
+        logger.info(f"✅ Jinja2 environment initialized: {self.templates_dir}")
 
         # Load configuration
         self.config = self._load_config()
 
         logger.info(
-            f"PromptManager initialized - "
-            f"Mode: {'Template' if use_templates else 'Fallback'}, "
+            f"PromptManager initialized (Jinja2 templates MANDATORY) - "
             f"Dir: {self.prompts_dir}"
         )
 
@@ -165,7 +151,6 @@ class PromptManager:
                     "general": "v1.0",
                     "sales": "v1.0",
                 },
-                "use_templates": self.use_templates,
                 "ab_testing": {"enabled": False},
             }
 
@@ -176,7 +161,7 @@ class PromptManager:
             return config
         except Exception as e:
             logger.exception(f"Error loading config: {e}")
-            return {"active_versions": {}, "use_templates": False}
+            return {"active_versions": {}}
 
     def _load_data(self, data_file: str) -> dict[str, Any]:
         """Load data from YAML file in data directory.
@@ -218,11 +203,7 @@ class PromptManager:
 
         Raises:
             TemplateNotFound: If template file not found
-            RuntimeError: If template mode disabled
         """
-        if not self.use_templates or self.env is None:
-            raise RuntimeError("Template mode is disabled")
-
         try:
             template = self.env.get_template(template_name)
             rendered = template.render(**context)
@@ -251,30 +232,9 @@ class PromptManager:
             >>> "sales" in prompt.lower()
             True
         """
-        if not self.use_templates:
-            return self._get_router_prompt_fallback()
-
-        try:
-            version = version or self.config["active_versions"].get("router", "v1.0")
-            context = {"version": version}
-            return self._render_template("router_classification.jinja2", context)
-        except Exception as e:
-            logger.warning(f"Template render failed, using fallback: {e}")
-            return self._get_router_prompt_fallback()
-
-    def _get_router_prompt_fallback(self) -> str:
-        """Fallback router prompt (legacy compatibility).
-
-        Returns hardcoded prompt from original agent_router.py.
-        """
-        # Import from original module to maintain consistency
-        try:
-            from multi_agent.agent_router import AgentRouter
-
-            return AgentRouter.CLASSIFICATION_PROMPT
-        except ImportError:
-            logger.error("Cannot import AgentRouter for fallback")
-            return "Classify intent as: sales, booking, or general"
+        version = version or self.config["active_versions"].get("router", "v1.0")
+        context = {"version": version}
+        return self._render_template("router_classification.jinja2", context)
 
     # =========================================================================
     # Booking Agent Prompts
@@ -315,78 +275,58 @@ class PromptManager:
             >>> # With A/B testing (user gets variant A or B)
             >>> prompt = manager.get_booking_prompt(user_id="user_12345")
         """
-        if not self.use_templates:
-            return self._get_booking_prompt_fallback(customer_email)
-
-        try:
-            # Check if A/B testing should override version/parameters
-            if user_id and not version:
-                # Use A/B testing to select version and parameters
-                selected_version, selected_show_summary = (
-                    self._select_ab_test_version_booking(user_id=user_id)
-                )
-                version = selected_version
-                show_pre_confirmation_summary = (
-                    show_pre_confirmation_summary
-                    if show_pre_confirmation_summary is not None
-                    else selected_show_summary
-                )
-            else:
-                # Use defaults or provided values
-                version = version or self.config["active_versions"].get(
-                    "booking", "v1.0"
-                )
-                show_pre_confirmation_summary = show_pre_confirmation_summary or False
-
-            # Load services data if not provided
-            if services is None:
-                try:
-                    services_data = self._load_data("services.yaml")
-                    services = services_data.get("services", [])
-                except FileNotFoundError:
-                    logger.warning("services.yaml not found, using empty list")
-                    services = []
-
-            # Inject current date/time for relative date calculations
-            now = datetime.now()
-
-            context = {
-                "version": version,
-                "services": services,
-                "customer_email": customer_email,
-                "show_pre_confirmation_summary": show_pre_confirmation_summary,
-                # Date/time context for flexible date parsing
-                "current_date": now.strftime("%Y-%m-%d"),  # 2025-10-13
-                "current_datetime": now,  # Full datetime object for Jinja2 filters
-                "current_day": now.strftime("%A"),  # Sunday, Monday, etc.
-                "current_day_es": self._get_spanish_day(
-                    now.weekday()
-                ),  # Domingo, Lunes, etc.
-            }
-
-            logger.debug(
-                f"Rendering booking prompt: version={version}, "
-                f"show_summary={show_pre_confirmation_summary}, user_id={user_id}"
+        # Check if A/B testing should override version/parameters
+        if user_id and not version:
+            # Use A/B testing to select version and parameters
+            selected_version, selected_show_summary = (
+                self._select_ab_test_version_booking(user_id=user_id)
             )
+            version = selected_version
+            show_pre_confirmation_summary = (
+                show_pre_confirmation_summary
+                if show_pre_confirmation_summary is not None
+                else selected_show_summary
+            )
+        else:
+            # Use defaults or provided values
+            version = version or self.config["active_versions"].get(
+                "booking", "v1.0"
+            )
+            show_pre_confirmation_summary = show_pre_confirmation_summary or False
 
-            # Use new modular template structure (booking_agent/booking_agent.jinja2)
-            return self._render_template("booking_agent/booking_agent.jinja2", context)
-        except Exception as e:
-            logger.warning(f"Template render failed, using fallback: {e}")
-            return self._get_booking_prompt_fallback(customer_email)
+        # Load services data if not provided
+        if services is None:
+            try:
+                services_data = self._load_data("services.yaml")
+                services = services_data.get("services", [])
+            except FileNotFoundError:
+                logger.warning("services.yaml not found, using empty list")
+                services = []
 
-    def _get_booking_prompt_fallback(self, customer_email: str | None = None) -> str:
-        """Fallback booking prompt (legacy compatibility)."""
-        try:
-            from multi_agent.booking_agent import BookingAgent
+        # Inject current date/time for relative date calculations
+        now = datetime.now()
 
-            prompt = BookingAgent.SYSTEM_PROMPT
-            if customer_email:
-                prompt += f"\n\nCLIENTE ACTUAL: {customer_email}"
-            return prompt
-        except ImportError:
-            logger.error("Cannot import BookingAgent for fallback")
-            return "You are a booking assistant."
+        context = {
+            "version": version,
+            "services": services,
+            "customer_email": customer_email,
+            "show_pre_confirmation_summary": show_pre_confirmation_summary,
+            # Date/time context for flexible date parsing
+            "current_date": now.strftime("%Y-%m-%d"),  # 2025-10-13
+            "current_datetime": now,  # Full datetime object for Jinja2 filters
+            "current_day": now.strftime("%A"),  # Sunday, Monday, etc.
+            "current_day_es": self._get_spanish_day(
+                now.weekday()
+            ),  # Domingo, Lunes, etc.
+        }
+
+        logger.debug(
+            f"Rendering booking prompt: version={version}, "
+            f"show_summary={show_pre_confirmation_summary}, user_id={user_id}"
+        )
+
+        # Use new modular template structure (booking_agent/booking_agent.jinja2)
+        return self._render_template("booking_agent/booking_agent.jinja2", context)
 
     # =========================================================================
     # General Agent Prompts
@@ -423,65 +363,48 @@ class PromptManager:
             >>> # With A/B testing (user gets variant A or B)
             >>> prompt = manager.get_general_prompt(user_id="user_12345")
         """
-        if not self.use_templates:
-            return self._get_general_prompt_fallback()
-
-        try:
-            # Check if A/B testing should override version/parameters
-            if user_id and not version:
-                # Use A/B testing to select version and parameters
-                selected_version, selected_detail_level = (
-                    self._select_ab_test_version_general(user_id=user_id)
-                )
-                version = selected_version
-                response_detail_level = (
-                    response_detail_level
-                    if response_detail_level is not None
-                    else selected_detail_level
-                )
-            else:
-                # Use defaults or provided values
-                version = version or self.config["active_versions"].get(
-                    "general", "v1.0"
-                )
-                response_detail_level = response_detail_level or "detailed"
-
-            # Load business info and policies
-            try:
-                business = self._load_data("business_info.yaml")
-                policies = self._load_data("policies.yaml")
-            except FileNotFoundError as e:
-                logger.warning(f"Data file not found: {e}, using defaults")
-                business = {"company_name": "Lab01-MCP"}
-                policies = {}
-
-            context = {
-                "version": version,
-                "business": business,
-                "policies": policies,
-                "response_detail_level": response_detail_level,
-            }
-
-            logger.debug(
-                f"Rendering general prompt: version={version}, "
-                f"detail_level={response_detail_level}, user_id={user_id}"
+        # Check if A/B testing should override version/parameters
+        if user_id and not version:
+            # Use A/B testing to select version and parameters
+            selected_version, selected_detail_level = (
+                self._select_ab_test_version_general(user_id=user_id)
             )
+            version = selected_version
+            response_detail_level = (
+                response_detail_level
+                if response_detail_level is not None
+                else selected_detail_level
+            )
+        else:
+            # Use defaults or provided values
+            version = version or self.config["active_versions"].get(
+                "general", "v1.0"
+            )
+            response_detail_level = response_detail_level or "detailed"
 
-            # Use new modular template structure (general_agent/general_agent.jinja2)
-            return self._render_template("general_agent/general_agent.jinja2", context)
-        except Exception as e:
-            logger.warning(f"Template render failed, using fallback: {e}")
-            return self._get_general_prompt_fallback()
-
-    def _get_general_prompt_fallback(self) -> str:
-        """Fallback general prompt (legacy compatibility)."""
+        # Load business info and policies
         try:
-            from multi_agent.general_agent import GeneralAgent
+            business = self._load_data("business_info.yaml")
+            policies = self._load_data("policies.yaml")
+        except FileNotFoundError as e:
+            logger.warning(f"Data file not found: {e}, using defaults")
+            business = {"company_name": "Lab01-MCP"}
+            policies = {}
 
-            return GeneralAgent.SYSTEM_PROMPT
-        except ImportError:
-            logger.error("Cannot import GeneralAgent for fallback")
-            return "You are a general information assistant."
+        context = {
+            "version": version,
+            "business": business,
+            "policies": policies,
+            "response_detail_level": response_detail_level,
+        }
+
+        logger.debug(
+            f"Rendering general prompt: version={version}, "
+            f"detail_level={response_detail_level}, user_id={user_id}"
+        )
+
+        # Use new modular template structure (general_agent/general_agent.jinja2)
+        return self._render_template("general_agent/general_agent.jinja2", context)
 
     # =========================================================================
     # Sales Agent Prompts
@@ -520,83 +443,35 @@ class PromptManager:
             >>> # With A/B testing (user gets variant A or B)
             >>> prompt = manager.get_sales_prompt(user_id="user_12345")
         """
-        if not self.use_templates:
-            return self._get_sales_prompt_fallback(mcp_tools, pagination_page_size or 4)
-
-        try:
-            # Check if A/B testing should override version/pagination
-            if user_id and not version:
-                # Use A/B testing to select version and pagination
-                selected_version, selected_pagination = self._select_ab_test_version(
-                    agent="sales", user_id=user_id
-                )
-                version = selected_version
-                pagination_page_size = pagination_page_size or selected_pagination
-            else:
-                # Use defaults or provided values
-                version = version or self.config["active_versions"].get("sales", "v1.0")
-                pagination_page_size = pagination_page_size or 4
-
-            # Generate tools context (similar to PromptBuilder)
-            tools_context = self._generate_tools_context(mcp_tools) if mcp_tools else ""
-
-            context = {
-                "version": version,
-                "tools_context": tools_context,
-                "pagination_page_size": pagination_page_size,
-            }
-
-            logger.debug(
-                f"Rendering sales prompt: version={version}, "
-                f"pagination={pagination_page_size}, user_id={user_id}"
+        # Check if A/B testing should override version/pagination
+        if user_id and not version:
+            # Use A/B testing to select version and pagination
+            selected_version, selected_pagination = self._select_ab_test_version(
+                agent="sales", user_id=user_id
             )
+            version = selected_version
+            pagination_page_size = pagination_page_size or selected_pagination
+        else:
+            # Use defaults or provided values
+            version = version or self.config["active_versions"].get("sales", "v1.0")
+            pagination_page_size = pagination_page_size or 4
 
-            # Use new modular template structure (sales_agent/sales_agent.jinja2)
-            return self._render_template("sales_agent/sales_agent.jinja2", context)
-        except Exception as e:
-            logger.warning(f"Template render failed, using fallback: {e}")
-            return self._get_sales_prompt_fallback(mcp_tools, pagination_page_size or 4)
+        # Generate tools context (similar to PromptBuilder)
+        tools_context = self._generate_tools_context(mcp_tools) if mcp_tools else ""
 
-    def _get_sales_prompt_fallback(
-        self, mcp_tools: list[Any] | None = None, pagination_page_size: int = 4
-    ) -> str:
-        """Fallback sales prompt using standalone implementation.
+        context = {
+            "version": version,
+            "tools_context": tools_context,
+            "pagination_page_size": pagination_page_size,
+        }
 
-        This method provides a complete fallback without requiring PromptBuilder
-        or settings imports, making it more robust for testing and edge cases.
-        """
-        try:
-            # Try to use PromptBuilder if available
-            from client_mcp.core.prompt_builder import PromptBuilder
+        logger.debug(
+            f"Rendering sales prompt: version={version}, "
+            f"pagination={pagination_page_size}, user_id={user_id}"
+        )
 
-            return PromptBuilder.build_dynamic_system_prompt(mcp_tools or [])
-        except ImportError:
-            logger.warning("PromptBuilder not available, using standalone fallback")
-            # Standalone fallback - generate basic prompt with tools context
-            tools_context = self._generate_tools_context(mcp_tools) if mcp_tools else ""
-
-            base_prompt = f"""Eres Odiseo, un vendedor inteligente especializado en productos.
-
-Tu misión es ayudar a los clientes a encontrar lo que buscan con precisión y empatía.
-
-{tools_context}
-
-## REGLAS DE PAGINACIÓN
-- Muestra {pagination_page_size} productos por página
-- Al final indica cuántos productos quedan sin mostrar
-- Usa formato claro y conciso
-
-## FORMATO DE RESPUESTA
-1. Saludo empático
-2. Resultados con detalles relevantes
-3. Sugerencias personalizadas
-
-Sé profesional, cordial y proactivo."""
-
-            return base_prompt
-        except Exception as e:
-            logger.error(f"Fallback failed: {e}")
-            return "You are Odiseo, a sales assistant."
+        # Use new modular template structure (sales_agent/sales_agent.jinja2)
+        return self._render_template("sales_agent/sales_agent.jinja2", context)
 
     def _generate_tools_context(self, mcp_tools: list[Any]) -> str:
         """Generate tools context from MCP tools (standalone implementation).
@@ -964,9 +839,8 @@ Sé profesional, cordial y proactivo."""
 
     def __repr__(self) -> str:
         """String representation of PromptManager."""
-        mode = "Template" if self.use_templates else "Fallback"
         return (
-            f"PromptManager(mode={mode}, "
+            f"PromptManager(Jinja2 MANDATORY, "
             f"dir={self.prompts_dir}, "
             f"versions={self.get_active_versions()})"
         )

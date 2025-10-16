@@ -32,7 +32,7 @@ def test_prompt_manager_availability():
     print("=" * 80)
 
     try:
-        manager = PromptManager(use_templates=True)
+        manager = PromptManager()
         print("\n✅ PromptManager imported successfully")
         print(f"✅ Template mode: {manager.config.get('use_templates', False)}")
         print(f"✅ Active sales version: {manager.config['active_versions']['sales']}")

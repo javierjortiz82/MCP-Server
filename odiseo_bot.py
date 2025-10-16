@@ -380,7 +380,7 @@ class OdiseoBot:
             try:
                 if self.prompt_manager is None:
                     self.logger.info("🎨 Initializing PromptManager (modular prompts)")
-                    self.prompt_manager = PromptManager(use_templates=True)
+                    self.prompt_manager = PromptManager()
 
                 # Get prompt with A/B testing support
                 prompt = self.prompt_manager.get_sales_prompt(

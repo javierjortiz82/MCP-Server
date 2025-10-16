@@ -26,7 +26,7 @@ def test_booking_base_template_loads():
     print("TEST 1: Booking Base Template Loading")
     print("="*80)
 
-    manager = PromptManager(use_templates=True)
+    manager = PromptManager()
 
     # Get booking prompt (default version v1.0)
     prompt = manager.get_booking_prompt()
@@ -67,7 +67,7 @@ def test_booking_modular_system():
     print("TEST 2: Booking Modular System Structure")
     print("="*80)
 
-    manager = PromptManager(use_templates=True)
+    manager = PromptManager()
 
     # Get booking prompt with default parameters
     prompt = manager.get_booking_prompt()
@@ -108,7 +108,7 @@ def test_booking_ab_parameter_injection():
     print("TEST 3: A/B Test Parameter Injection")
     print("="*80)
 
-    manager = PromptManager(use_templates=True)
+    manager = PromptManager()
 
     # Test Variant A (v1.0): Direct confirmation
     print("\n📋 Testing Variant A (v1.0): Direct confirmation")

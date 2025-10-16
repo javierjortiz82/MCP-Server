@@ -42,7 +42,7 @@ def scenario_1_ab_disabled():
     print("  ab_testing.enabled: false")
     print("  Expected: All users get variant A (v1.0 - detailed responses)")
 
-    manager = PromptManager(use_templates=True)
+    manager = PromptManager()
 
     # Test multiple users - all should get same variant
     test_users = [
@@ -81,7 +81,7 @@ def scenario_2_ab_enabled():
     print("  traffic_split: 0.5 (50% A, 50% B)")
     print("  Expected: ~50% users get variant A, ~50% get variant B")
 
-    manager = PromptManager(use_templates=True)
+    manager = PromptManager()
 
     # Temporarily enable A/B testing
     manager.config['ab_testing']['enabled'] = True
@@ -133,7 +133,7 @@ def scenario_3_deterministic_bucketing():
     print("\nHypothesis: Same user_id should ALWAYS get same variant")
     print("Testing user: consistent_general@example.com (10 attempts)")
 
-    manager = PromptManager(use_templates=True)
+    manager = PromptManager()
 
     # Enable A/B testing
     manager.config['ab_testing']['enabled'] = True
@@ -180,7 +180,7 @@ def scenario_4_prompt_comparison():
 
     print("\nComparing generated prompts for both variants...")
 
-    manager = PromptManager(use_templates=True)
+    manager = PromptManager()
 
     # Get variant A prompt
     print("\n📋 Generating Variant A (v1.0 - Detailed Responses)...")
