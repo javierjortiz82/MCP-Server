@@ -38,6 +38,7 @@ from typing import Any
 from google.genai import types
 
 from gemini_agent.base_agent import BaseAgent
+from gemini_agent.config.booking_agent_settings import booking_agent_settings
 from multi_agent.prompt_manager import PromptManager
 
 # Import client_mcp utilities for function calling
@@ -102,10 +103,10 @@ class BookingAgent(BaseAgent):
         """
         super().__init__(api_key, model_name, mcp_tools, **generation_params)
 
-        # Function calling support
+        # Function calling support (max iterations configurable via booking_agent_settings)
         self.mcp_client = mcp_client
         self.function_call_handler = (
-            FunctionCallHandler(max_iterations=10)
+            FunctionCallHandler(max_iterations=booking_agent_settings.BOOKING_MAX_FUNCTION_CALL_ITERATIONS)
             if FUNCTION_CALLING_AVAILABLE
             else None
         )
@@ -151,6 +152,10 @@ class BookingAgent(BaseAgent):
 
         Implements BaseAgent's abstract method.
 
+        Configuration-driven thresholds:
+        - TOKEN_ESTIMATE_RATIO: Ratio for estimating tokens from character count (default: 0.25)
+        - BOOKING_MAX_PROMPT_SIZE_CHARS: Maximum prompt size in characters (warning threshold, default: 30000)
+
         Args:
             customer_email: Optional customer email for personalization.
             **kwargs: Additional parameters (user_id for A/B testing, etc.).
@@ -171,17 +176,17 @@ class BookingAgent(BaseAgent):
             customer_email=customer_email, user_id=kwargs.get("user_id")
         )
         prompt_size = len(prompt)
-        estimated_tokens = prompt_size // 4  # Rough estimate: 1 token ≈ 4 chars
+        estimated_tokens = int(prompt_size * booking_agent_settings.TOKEN_ESTIMATE_RATIO)
         self.logger.debug(
             f"Loaded booking prompt from Jinja2 "
             f"({prompt_size} chars, ~{estimated_tokens} tokens)"
         )
 
-        # Warn if prompt is very long
-        if prompt_size > 30000:
+        # Warn if prompt exceeds configured threshold
+        if prompt_size > booking_agent_settings.BOOKING_MAX_PROMPT_SIZE_CHARS:
             self.logger.warning(
                 f"⚠️ Prompt is very long: {prompt_size} chars (~{estimated_tokens} tokens)\n"
-                f"   This may cause issues with Gemini API (recommended < 30k chars)"
+                f"   This may cause issues with Gemini API (recommended < {booking_agent_settings.BOOKING_MAX_PROMPT_SIZE_CHARS} chars)"
             )
 
         return prompt
@@ -238,17 +243,17 @@ class BookingAgent(BaseAgent):
             # Build conversation contents (uses template method pattern)
             contents = self._build_contents(query, include_history, **kwargs)
 
-            # DEBUG: Log contents size for diagnosis
+            # DEBUG: Log contents size for diagnosis (using configurable token estimation ratio)
             total_chars = sum(len(str(content)) for content in contents)
-            estimated_tokens = total_chars // 4
+            estimated_tokens = int(total_chars * booking_agent_settings.TOKEN_ESTIMATE_RATIO)
             self.logger.debug(
                 f"Contents built: {len(contents)} messages, "
                 f"{total_chars} chars, ~{estimated_tokens} tokens"
             )
-            if total_chars > 100000:
+            if total_chars > booking_agent_settings.BOOKING_MAX_CONTENT_SIZE_CHARS:
                 self.logger.warning(
                     f"⚠️ Total contents size is very large: {total_chars} chars "
-                    f"(~{estimated_tokens} tokens)"
+                    f"(~{estimated_tokens} tokens, threshold: {booking_agent_settings.BOOKING_MAX_CONTENT_SIZE_CHARS})"
                 )
 
             # Generate initial response
