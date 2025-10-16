@@ -685,7 +685,11 @@ def get_available_slots(
 ) -> dict[str, Any]:
     """Get available time slots for a specific date and service.
 
+    Filters out past times and slots that don't meet minimum advance requirement.
     Checks business hours, existing bookings, and blocked times.
+
+    Configuration parameters:
+    - BOOKING_MIN_ADVANCE_MINUTES: Minimum minutes in advance to book (default: 60)
 
     Args:
         service_type: Type of service (used for duration lookup).
@@ -706,7 +710,8 @@ def get_available_slots(
             "business_hours": {
                 "open_time": str,
                 "close_time": str
-            }
+            },
+            "min_advance_minutes": int
         }
 
     Example:
@@ -716,11 +721,17 @@ def get_available_slots(
     """
     logger.info(f"Getting available slots for {service_type} on {date}")
 
+    # Get current datetime for filtering past times
+    now = datetime.now()
+    current_date = now.date()
+    current_datetime = now
+    min_advance_minutes = settings.BOOKING_MIN_ADVANCE_MINUTES
+
     # Get day of week (0=Monday, 6=Sunday)
     try:
         dt = datetime.fromisoformat(date)
         day_of_week = dt.weekday()  # Python: 0=Monday, 6=Sunday
-        logger.debug(f"Date {date} is day {day_of_week} of week")
+        logger.debug(f"Date {date} is day {day_of_week} of week (today is {current_date})")
 
     except ValueError as exc:
         logger.exception(f"Invalid date format: {date}")
@@ -745,6 +756,7 @@ def get_available_slots(
                 "available_slots": [],
                 "count": 0,
                 "business_hours": None,
+                "min_advance_minutes": min_advance_minutes,
             }
 
         open_time = business_hours["open_time"]
@@ -756,14 +768,31 @@ def get_available_slots(
         logger.exception(f"Failed to fetch business hours: {exc}")
         raise RuntimeError(f"Could not fetch business hours: {exc}") from exc
 
-    # Generate time slots based on interval
+    # Generate time slots based on interval, filtering out past times
     slots = []
     current_time = datetime.combine(dt, open_time)
     end_time = datetime.combine(dt, close_time)
     interval = timedelta(minutes=settings.BOOKING_SLOT_INTERVAL_MINUTES)
+    min_advance_delta = timedelta(minutes=min_advance_minutes)
 
     while current_time < end_time:
         time_str = current_time.strftime("%H:%M")
+
+        # Skip past times (only for today)
+        if dt.date() == current_date and current_time < current_datetime:
+            logger.debug(f"Skipping {time_str} - time has already passed")
+            current_time += interval
+            continue
+
+        # Skip times that don't meet minimum advance requirement (only for today)
+        if dt.date() == current_date and (current_datetime + min_advance_delta) > current_time:
+            required_time = current_datetime + min_advance_delta
+            logger.debug(
+                f"Skipping {time_str} - does not meet minimum advance requirement "
+                f"(need by {required_time.strftime('%H:%M')}, current min: {min_advance_minutes} min)"
+            )
+            current_time += interval
+            continue
 
         # Check if slot is available using database function
         try:
@@ -783,7 +812,10 @@ def get_available_slots(
         current_time += interval
 
     available_count = sum(1 for s in slots if s["available"])
-    logger.info(f"Generated {len(slots)} time slots for {date} ({available_count} available)")
+    logger.info(
+        f"Generated {len(slots)} time slots for {date} "
+        f"({available_count} available, min_advance: {min_advance_minutes} min)"
+    )
 
     return {
         "date": date,
@@ -794,6 +826,7 @@ def get_available_slots(
             "open_time": str(open_time),
             "close_time": str(close_time),
         },
+        "min_advance_minutes": min_advance_minutes,
     }
 
 
