@@ -31,7 +31,7 @@ from config.booking_constants import (
     EmailNotificationType,
     ServiceType,
 )
-from utils.db import fetchall, fetchone
+from utils.db import fetchall, fetchone, get_conn
 from utils.logger import setup_logging
 
 # Conditional import of Email Queue Manager
@@ -133,6 +133,153 @@ def _format_datetime_iso(booking_date: str, booking_time: str) -> str:
 
     # Return ISO 8601 string (automatically includes correct offset)
     return dt_aware.isoformat()
+
+
+def _create_booking_atomic(
+    customer_name: str,
+    customer_email: str,
+    customer_phone: str,
+    service_type: str,
+    booking_date: str,
+    booking_time: str,
+    duration_minutes: int,
+    notes: str,
+    calendar_event_id: str | None = None,
+    calendar_link: str | None = None,
+) -> dict[str, Any]:
+    """Create a booking with atomic transaction and row-level locking to prevent race conditions.
+
+    Uses PostgreSQL row-level locking (SELECT ... FOR UPDATE) to ensure
+    that if two requests check availability simultaneously, only one can create the booking.
+
+    Args:
+        customer_name: Customer name
+        customer_email: Customer email
+        customer_phone: Customer phone
+        service_type: Service type
+        booking_date: Booking date (YYYY-MM-DD)
+        booking_time: Booking time (HH:MM)
+        duration_minutes: Duration in minutes
+        notes: Booking notes
+        calendar_event_id: Optional Google Calendar event ID
+        calendar_link: Optional Google Calendar link
+
+    Returns:
+        Dict with booking details (id, status, created_at)
+
+    Raises:
+        RuntimeError: If booking creation fails or slot becomes unavailable
+
+    Note:
+        This function uses database-level transactions with row-level locking
+        to prevent the TOCTOU (Time-of-Check-Time-of-Use) vulnerability.
+    """
+    from datetime import time as time_type
+
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            # BEGIN TRANSACTION (implicit)
+            logger.debug(f"Starting atomic booking transaction for {booking_date} {booking_time}")
+
+            # Parse date and time for comparison
+            booking_dt = datetime.fromisoformat(f"{booking_date}T{booking_time}:00")
+            end_time_dt = booking_dt + timedelta(minutes=duration_minutes)
+
+            # LOCK: Select all overlapping appointments for this date with FOR UPDATE
+            # This prevents other transactions from modifying these rows
+            lock_query = f"""
+                SELECT id
+                FROM {settings.SCHEMA_NAME}.appointments
+                WHERE booking_date = %s
+                  AND status IN ('confirmed', 'rescheduled')
+                  AND booking_time < %s
+                  AND booking_time + (duration_minutes || ' minutes')::INTERVAL > %s
+                FOR UPDATE
+            """
+
+            cur.execute(
+                lock_query,
+                (booking_date, end_time_dt.time(), booking_dt.time()),
+            )
+
+            locked_rows = cur.fetchall()
+            logger.debug(
+                f"Locked {len(locked_rows)} overlapping appointments for atomic check"
+            )
+
+            # RECHECK: Verify slot is still available after locking
+            availability_check_query = f"""
+                SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s) as available
+            """
+
+            cur.execute(
+                availability_check_query,
+                (booking_date, booking_time, duration_minutes),
+            )
+
+            availability_result = cur.fetchone()
+            is_available = availability_result[0] if availability_result else False
+
+            if not is_available:
+                logger.warning(
+                    f"Slot {booking_date} {booking_time} became unavailable after locking "
+                    f"(was checked by another transaction)"
+                )
+                raise RuntimeError(
+                    f"Time slot {booking_date} at {booking_time} is no longer available "
+                    f"(was booked by another request). Please choose a different time."
+                )
+
+            # INSERT: Create the booking atomically within the transaction
+            insert_query = f"""
+                INSERT INTO {settings.SCHEMA_NAME}.appointments
+                (customer_name, customer_email, customer_phone, service_type,
+                 booking_date, booking_time, duration_minutes, notes,
+                 google_calendar_event_id, google_calendar_link, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, status, created_at
+            """
+
+            cur.execute(
+                insert_query,
+                (
+                    customer_name,
+                    customer_email,
+                    customer_phone,
+                    service_type,
+                    booking_date,
+                    booking_time,
+                    duration_minutes,
+                    notes,
+                    calendar_event_id,
+                    calendar_link,
+                    BookingStatus.CONFIRMED.value,
+                ),
+            )
+
+            result = cur.fetchone()
+
+            if not result:
+                raise RuntimeError("Failed to create booking - no result returned")
+
+            # COMMIT: Transaction commits atomically here
+            conn.commit()
+
+            logger.info(
+                f"✅ Booking created atomically: ID={result[0]} "
+                f"(transaction lock prevented race conditions)"
+            )
+
+            return {
+                "id": result[0],
+                "status": result[1],
+                "created_at": str(result[2]),
+            }
+
+    except Exception as exc:
+        logger.exception(f"Atomic booking creation failed: {exc}")
+        # Connection is automatically rolled back on exception
+        raise RuntimeError(f"Failed to create booking atomically: {exc}") from exc
 
 
 def _enqueue_email(
@@ -315,50 +462,36 @@ def create_booking(
             logger.warning(f"Failed to create Google Calendar event: {exc}")
             # Continue anyway - calendar is optional
 
-    # Insert into database
+    # Insert into database (atomically with row-level locking to prevent race conditions)
     try:
-        insert_sql = f"""
-        INSERT INTO {settings.SCHEMA_NAME}.appointments
-        (customer_name, customer_email, customer_phone, service_type,
-         booking_date, booking_time, duration_minutes, notes,
-         google_calendar_event_id, google_calendar_link, status)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        RETURNING id, status, created_at
-        """
-
-        result = fetchone(
-            insert_sql,
-            (
-                customer_name,
-                customer_email,
-                customer_phone,
-                service_type,
-                booking_date,
-                booking_time,
-                duration_minutes,
-                notes,
-                calendar_event_id,
-                calendar_link,
-                BookingStatus.CONFIRMED.value,
-            ),
-            commit=True,  # INSERT requires commit
+        # Use atomic transaction with row-level locking
+        # This prevents the TOCTOU vulnerability where two concurrent requests
+        # could both check availability and then both create conflicting bookings
+        db_result = _create_booking_atomic(
+            customer_name=customer_name,
+            customer_email=customer_email,
+            customer_phone=customer_phone,
+            service_type=service_type,
+            booking_date=booking_date,
+            booking_time=booking_time,
+            duration_minutes=duration_minutes,
+            notes=notes,
+            calendar_event_id=calendar_event_id,
+            calendar_link=calendar_link,
         )
 
-        if not result:
-            raise RuntimeError("Failed to create booking - no result returned")
-
-        booking_id = result["id"]
-        logger.info(f"✅ Booking created successfully: ID={booking_id}")
+        booking_id = db_result["id"]
+        logger.info(f"✅ Booking created successfully with atomic transaction: ID={booking_id}")
 
         booking_response = {
             "booking_id": booking_id,
-            "status": result["status"],
+            "status": db_result["status"],
             "google_calendar_event_id": calendar_event_id,
             "google_calendar_link": calendar_link,
             "booking_date": booking_date,
             "booking_time": booking_time,
             "duration_minutes": duration_minutes,
-            "created_at": str(result["created_at"]),
+            "created_at": db_result["created_at"],
         }
 
         # Enqueue confirmation email
