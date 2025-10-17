@@ -895,8 +895,9 @@ def get_available_slots(
 
     # Generate time slots based on interval, filtering out past times
     slots = []
-    current_time = datetime.combine(dt, open_time)
-    end_time = datetime.combine(dt, close_time)
+    # Make datetime objects timezone-aware to match current_datetime
+    current_time = datetime.combine(dt, open_time, tzinfo=tz)
+    end_time = datetime.combine(dt, close_time, tzinfo=tz)
     interval = timedelta(minutes=settings.BOOKING_SLOT_INTERVAL_MINUTES)
     min_advance_delta = timedelta(minutes=min_advance_minutes)
 
