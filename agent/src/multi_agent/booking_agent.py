@@ -183,16 +183,22 @@ class BookingAgent(BaseAgent):
             self.logger.debug("Initializing PromptManager for BookingAgent (Jinja2)")
             self._prompt_manager = PromptManager()
 
-        # Get prompt from PromptManager (supports A/B testing)
+        # Get prompt from PromptManager (supports A/B testing and multilingual)
+        user_lang = kwargs.get("user_lang", "es")
+        self.logger.info(f"🌐 GET_SYSTEM_PROMPT: Requesting template for language: {user_lang}")
         prompt = self._prompt_manager.get_booking_prompt(
-            customer_email=customer_email, user_id=kwargs.get("user_id")
+            customer_email=customer_email,
+            user_id=kwargs.get("user_id"),
+            user_lang=user_lang,  # Pass language context for template selection
         )
         prompt_size = len(prompt)
         estimated_tokens = int(prompt_size * booking_agent_settings.TOKEN_ESTIMATE_RATIO)
-        self.logger.debug(
-            f"Loaded booking prompt from Jinja2 "
-            f"({prompt_size} chars, ~{estimated_tokens} tokens)"
+        self.logger.info(
+            f"✅ Loaded booking prompt from Jinja2 (lang={user_lang}, "
+            f"{prompt_size} chars, ~{estimated_tokens} tokens)"
         )
+        # Log first 200 chars of prompt to verify template
+        self.logger.debug(f"Prompt preview: {prompt[:200]}...")
 
         # Warn if prompt exceeds configured threshold
         if prompt_size > booking_agent_settings.BOOKING_MAX_PROMPT_SIZE_CHARS:
@@ -252,6 +258,13 @@ class BookingAgent(BaseAgent):
         try:
             self.logger.info(f"Generating response for: '{query[:100]}...'")
 
+            # Update agent language if provided in kwargs (allows orchestrator to change language per-query)
+            if 'language' in kwargs:
+                new_language = kwargs['language']
+                if new_language != self.language:
+                    self.logger.info(f"🌐 Updating agent language: {self.language} → {new_language}")
+                    self.language = new_language
+
             # Build conversation contents (uses template method pattern)
             contents = self._build_contents(query, include_history, **kwargs)
 
@@ -270,6 +283,7 @@ class BookingAgent(BaseAgent):
 
             # Build system prompt using language context (following Google Gemini best practices)
             kwargs['user_lang'] = self.language
+            self.logger.info(f"🌐 GENERATE_RESPONSE: Agent language is '{self.language}', setting kwargs['user_lang']={self.language}")
             system_prompt = self.get_system_prompt(**kwargs)
             self.logger.debug(f"Language: {self.language}, System prompt length: {len(system_prompt)}")
 
