@@ -25,10 +25,11 @@ Version: 1.0.0
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
@@ -36,6 +37,9 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from mcp_server.utils.logger import setup_logging
+
+# Type variable for retry decorator
+T = TypeVar("T")
 
 # Setup module logger
 logger = setup_logging("google_calendar")
@@ -99,6 +103,71 @@ class EventDeletionError(GoogleCalendarError):
     """Raised when event deletion fails."""
 
     pass
+
+
+def _is_transient_error(http_error: HttpError) -> bool:
+    """Check if an HttpError is transient (should be retried).
+
+    Transient errors include:
+    - 429: Too Many Requests (rate limiting)
+    - 503: Service Unavailable
+    - 500: Internal Server Error (occasional)
+
+    Args:
+        http_error: HttpError to check
+
+    Returns:
+        True if error is transient, False otherwise
+    """
+    try:
+        return http_error.resp.status in (429, 500, 503)
+    except (AttributeError, TypeError):
+        return False
+
+
+def _retry_with_backoff(
+    func: Callable[..., T],
+    max_retries: int = 3,
+    initial_delay: float = 1.0,
+    exponential_base: float = 2.0,
+) -> Callable[..., T]:
+    """Wrapper function for retrying with exponential backoff.
+
+    Retries on transient errors (429, 500, 503).
+
+    Args:
+        func: Function to wrap
+        max_retries: Maximum retry attempts (default: 3)
+        initial_delay: Initial delay in seconds (default: 1.0)
+        exponential_base: Multiplier for exponential backoff (default: 2.0)
+
+    Returns:
+        Wrapped function that retries on transient errors
+    """
+
+    def wrapper(*args: Any, **kwargs: Any) -> T:
+        delay = initial_delay
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except HttpError as e:
+                last_error = e
+                if not _is_transient_error(e) or attempt == max_retries - 1:
+                    raise
+
+                logger.warning(
+                    f"Transient error (HTTP {e.resp.status}) on attempt {attempt + 1}/"
+                    f"{max_retries}. Retrying in {delay:.1f}s..."
+                )
+                time.sleep(delay)
+                delay *= exponential_base
+
+        # This should never happen, but just in case
+        raise last_error or RuntimeError("Retry exhausted without error")
+
+    return wrapper
 
 
 class GoogleCalendarClient:
@@ -265,13 +334,20 @@ class GoogleCalendarClient:
             }
 
             # Add attendee if provided
-            # Note: Service accounts cannot invite attendees without Domain-Wide Delegation
-            # For personal Google accounts, we'll add email to description instead
+            # Best-effort approach: Try to add as attendee, fall back to description
             if attendee_email:
-                # Append email to description for reference
-                event_body["description"] += f"\n\nCustomer Email: {attendee_email}"
-                # Try to add as attendee (will fail for non-Workspace accounts, but that's OK)
-                # event_body["attendees"] = [{"email": attendee_email}]
+                try:
+                    # Try to add attendee (requires Domain-Wide Delegation for service accounts)
+                    event_body["attendees"] = [{"email": attendee_email}]
+                    logger.debug(f"Added attendee: {attendee_email}")
+                except Exception as e:
+                    # If attendee addition fails, fall back to adding email to description
+                    logger.warning(
+                        f"Could not add attendee {attendee_email} "
+                        f"(likely due to Domain-Wide Delegation requirements): {e}. "
+                        f"Adding to description instead."
+                    )
+                    event_body["description"] += f"\n\nCustomer Email: {attendee_email}"
 
             # Add reminders (30 min and 10 min before)
             event_body["reminders"] = {
@@ -285,25 +361,59 @@ class GoogleCalendarClient:
             logger.info(f"Creating event: {summary} at {start_datetime}")
             logger.debug(f"Event body: {event_body}")
 
-            # Create event
-            created_event = (
-                self._service.events()
-                .insert(
-                    calendarId=self.calendar_id,
-                    body=event_body,
-                    sendNotifications=send_notifications,
+            # Create event with retry logic for transient errors
+            def _create_event_with_retry() -> dict[str, Any]:
+                return (
+                    self._service.events()
+                    .insert(
+                        calendarId=self.calendar_id,
+                        body=event_body,
+                        sendNotifications=send_notifications,
+                    )
+                    .execute()
                 )
-                .execute()
-            )
+
+            try:
+                # Try to create with attendee first
+                created_event = _retry_with_backoff(
+                    _create_event_with_retry,
+                    max_retries=3,
+                    initial_delay=1.0,
+                    exponential_base=2.0,
+                )()
+            except HttpError as exc:
+                # If creation failed with 403 (permission denied) and we have an attendee,
+                # try again without the attendee and add to description instead
+                if exc.resp.status == 403 and attendee_email and "attendees" in event_body:
+                    logger.warning(
+                        f"Got 403 Forbidden when trying to add attendee "
+                        f"(likely missing Domain-Wide Delegation). "
+                        f"Removing attendee and retrying..."
+                    )
+                    # Remove attendee and add to description instead
+                    del event_body["attendees"]
+                    event_body["description"] += f"\n\nCustomer Email: {attendee_email}"
+
+                    try:
+                        created_event = _retry_with_backoff(
+                            _create_event_with_retry,
+                            max_retries=3,
+                            initial_delay=1.0,
+                            exponential_base=2.0,
+                        )()
+                    except HttpError as retry_exc:
+                        logger.exception(f"HTTP error creating event (retry): {retry_exc}")
+                        raise EventCreationError(
+                            f"Failed to create event after removing attendee: {retry_exc}"
+                        ) from retry_exc
+                else:
+                    logger.exception(f"HTTP error creating event: {exc}")
+                    raise EventCreationError(f"Failed to create event: {exc}") from exc
 
             logger.info(f"✅ Event created successfully: {created_event['id']}")
             logger.debug(f"Event link: {created_event.get('htmlLink')}")
 
             return self._parse_event(created_event)
-
-        except HttpError as exc:
-            logger.exception(f"HTTP error creating event: {exc}")
-            raise EventCreationError(f"Failed to create event: {exc}") from exc
 
         except Exception as exc:
             logger.exception(f"Unexpected error creating event: {exc}")
@@ -378,17 +488,25 @@ class GoogleCalendarClient:
             logger.info(f"Updating event: {event_id}")
             logger.debug(f"Updated fields: summary={summary}, start={start_datetime}")
 
-            # Update event
-            updated_event = (
-                self._service.events()
-                .update(
-                    calendarId=self.calendar_id,
-                    eventId=event_id,
-                    body=existing_event,
-                    sendNotifications=send_notifications,
+            # Update event with retry logic for transient errors
+            def _update_event_with_retry() -> dict[str, Any]:
+                return (
+                    self._service.events()
+                    .update(
+                        calendarId=self.calendar_id,
+                        eventId=event_id,
+                        body=existing_event,
+                        sendNotifications=send_notifications,
+                    )
+                    .execute()
                 )
-                .execute()
-            )
+
+            updated_event = _retry_with_backoff(
+                _update_event_with_retry,
+                max_retries=3,
+                initial_delay=1.0,
+                exponential_base=2.0,
+            )()
 
             logger.info(f"✅ Event updated successfully: {event_id}")
             return self._parse_event(updated_event)
