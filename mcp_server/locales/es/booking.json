@@ -1,0 +1,207 @@
+{
+  "welcome": "¡Claro! Estos son los servicios disponibles:",
+  "select_service": "¿Cuál te interesa?",
+  "service_selected": "Perfecto, has seleccionado **{service_name}** ({duration} min)",
+  "ask_date": "¿Para qué fecha te gustaría agendarla?",
+  "ask_time": "¿Qué hora prefieres?",
+  "confirm_booking": "Perfecto, confirmando tu reserva...",
+  "booking_confirmed": "✅ Tu cita ha sido confirmada exitosamente",
+  "booking_id": "ID de Reserva: #{booking_id}",
+  "reservation_details": "📅 Detalles de la Reserva",
+  "confirmation": {
+    "title": "✅ Cita Confirmada",
+    "greeting": "Hola {customer_name},",
+    "message": "Tu cita ha sido confirmada exitosamente.",
+    "details_header": "📅 Detalles de tu Cita",
+    "reminders": "Recibirás recordatorios automáticos 24 horas y 1 hora antes de tu cita."
+  },
+  "availability": {
+    "found": "Encontré {count} horarios disponibles el {date}:",
+    "no_availability_date": "Lo siento, no tengo horarios disponibles para {service_type} el {date}",
+    "no_availability_range": "Lo siento, no encontré disponibilidad para {service_type} entre {start_date} y {end_date}",
+    "searching": "Déjame revisar los próximos días...",
+    "first_available": "✨ Primer horario disponible: {date}",
+    "choose_time": "¿Cuál de estos horarios te va bien?",
+    "choose_time_alt": "¿Cuál prefieres?"
+  },
+  "cancellation": {
+    "title": "❌ Cita Cancelada",
+    "greeting": "Hola {customer_name},",
+    "message": "Tu cita ha sido cancelada.",
+    "cancelled_booking": "📅 Detalles de la Cita Cancelada",
+    "reschedule_info": "¿Necesitas agendar una nueva cita? Contáctanos en cualquier momento",
+    "confirm_cancel": "¿Estás seguro de que quieres cancelar esta cita? Esta acción no se puede deshacer.",
+    "cancel_confirm": "Sí, cancelar mi cita"
+  },
+  "rescheduling": {
+    "title": "🔄 Cita Reagendada",
+    "greeting": "Hola {customer_name},",
+    "message": "Tu cita ha sido reagendada exitosamente.",
+    "change_header": "📅 Cambio de Fecha y Hora",
+    "old_date": "Fecha anterior:",
+    "new_date": "Nueva fecha:",
+    "details_updated": "Detalles de tu Cita"
+  },
+  "reminders": {
+    "reminder_24h": {
+      "title": "🔔 Recordatorio de Cita",
+      "greeting": "Hola {customer_name},",
+      "message": "Este es un recordatorio amigable de que tienes una cita programada para mañana.",
+      "header": "📅 Detalles de tu Cita"
+    },
+    "reminder_1h": {
+      "title": "⏰ ¡Cita Pronto!",
+      "greeting": "Hola {customer_name},",
+      "message": "Este es un recordatorio urgente: tu cita es en 1 hora.",
+      "urgent": "URGENTE - Tu cita es en 1 hora",
+      "time_display": "Tu cita comienza en",
+      "time_value": "1 HORA",
+      "alert": "⚠️ Procura estar listo y llegar 5-10 minutos antes"
+    }
+  },
+  "errors": {
+    "slot_unavailable": "Lo siento, ese horario no está disponible",
+    "invalid_date": "La fecha que proporcionaste no es válida",
+    "past_date": "No puedo agendar citas en el pasado",
+    "booking_failed": "No pude completar tu reserva. Por favor, intenta de nuevo",
+    "cancellation_failed": "No pude cancelar tu cita. Por favor, intenta de nuevo",
+    "not_found": "No encontré tu cita con ese ID",
+    "invalid_email": "La dirección de correo no parece válida. Verifica que sea correcta.",
+    "invalid_phone": "El número de teléfono no parece válido. Verifica que sea correcto.",
+    "invalid_service": "Ese servicio no está disponible. Por favor, selecciona de las opciones disponibles."
+  },
+  "response": {
+    "no_services": "No hay servicios disponibles en este momento",
+    "invalid_selection": "Por favor, selecciona un servicio válido",
+    "no_availability": "Lamentablemente, no hay disponibilidad en ese período",
+    "ask_for_more": "¿Te gustaría que revise otra fecha?",
+    "ask_contact_info": "Necesitaré tu información de contacto para completar la reserva.",
+    "confirm_details": "Déjame confirmar tus datos antes de reservar..."
+  },
+  "progress": {
+    "checking": "Verificando horarios disponibles...",
+    "booking": "Creando tu cita...",
+    "searching_bookings": "Buscando tus citas...",
+    "cancelling": "Cancelando tu cita...",
+    "rescheduling": "Reagendando tu cita..."
+  },
+  "prompts": {
+    "customer_name": "¿Cuál es tu nombre?",
+    "customer_email": "¿Cuál es tu dirección de correo?",
+    "customer_phone": "¿Cuál es tu número de teléfono?",
+    "booking_notes": "¿Tienes alguna solicitud especial o nota para esta cita?"
+  },
+  "days": {
+    "monday": "Lunes",
+    "tuesday": "Martes",
+    "wednesday": "Miércoles",
+    "thursday": "Jueves",
+    "friday": "Viernes",
+    "saturday": "Sábado",
+    "sunday": "Domingo"
+  },
+  "months": {
+    "january": "enero",
+    "february": "febrero",
+    "march": "marzo",
+    "april": "abril",
+    "may": "mayo",
+    "june": "junio",
+    "july": "julio",
+    "august": "agosto",
+    "september": "septiembre",
+    "october": "octubre",
+    "november": "noviembre",
+    "december": "diciembre"
+  },
+  "messages": {
+    "slot_not_available_race": "El horario {booking_date} a las {booking_time} ya no está disponible (fue reservado por otra solicitud). Por favor, elige un horario diferente.",
+    "slot_not_available_general": "El horario {booking_date} a las {booking_time} no está disponible",
+    "booking_not_found": "La reserva {booking_id} no fue encontrada",
+    "booking_already_cancelled": "La reserva {booking_id} ya ha sido cancelada",
+    "cannot_reschedule_status": "No se puede reagendar una reserva {status}",
+    "date_range_invalid": "la_fecha_inicio debe ser anterior o igual a la_fecha_fin",
+    "date_format_invalid": "Formato de fecha inválido: {date}",
+    "create_booking_failed_no_result": "Fallo al crear la reserva - no se devolvió resultado",
+    "create_booking_failed_atomic": "Fallo al crear la reserva atómicamente: {error}",
+    "verify_availability_failed": "No se pudo verificar la disponibilidad: {error}",
+    "create_booking_failed_general": "Fallo al crear la reserva: {error}",
+    "cancel_booking_failed_no_result": "Fallo al cancelar la reserva - no se devolvió resultado",
+    "cancel_booking_failed_general": "Fallo al cancelar la reserva: {error}",
+    "fetch_booking_failed": "No se pudo obtener la reserva {booking_id}: {error}",
+    "reschedule_booking_failed_no_result": "Fallo al reagendar la reserva - no se devolvió resultado",
+    "reschedule_booking_failed_general": "Fallo al reagendar la reserva: {error}",
+    "booking_success_emoji": "✅",
+    "booking_created_template": "Reserva creada exitosamente",
+    "booking_cancelled_template": "Reserva cancelada exitosamente",
+    "booking_rescheduled_template": "Reserva reagendada exitosamente"
+  },
+  "defaults": {
+    "customer_name": "Cliente",
+    "service_type": "Servicio",
+    "confirmation_subject": "Confirmación: {service_type}"
+  },
+  "create": {
+    "info_start": "Creando reserva para {customer_name} el {booking_date} a las {booking_time}",
+    "progress_validate": "Validando información de la reserva",
+    "progress_create": "Creando reserva en la base de datos",
+    "progress_success": "Reserva creada exitosamente",
+    "info_with_calendar": "✅ Reserva creada: ID={booking_id}, evento de Google Calendar creado",
+    "info_without_calendar": "✅ Reserva creada: ID={booking_id} (calendario deshabilitado)",
+    "progress_ready": "Confirmación de reserva lista",
+    "error_validation": "Error de validación al crear reserva: {error}",
+    "error_general": "Error al crear reserva: {error}"
+  },
+  "cancel": {
+    "info_start": "Cancelando reserva ID: {booking_id}",
+    "progress_validate": "Validando reserva",
+    "progress_process": "Procesando cancelación",
+    "info_success": "✅ Reserva {booking_id} cancelada exitosamente",
+    "progress_complete": "Cancelación completada",
+    "error_validation": "Error de validación al cancelar reserva: {error}",
+    "error_general": "Error al cancelar reserva {booking_id}: {error}"
+  },
+  "reschedule": {
+    "info_start": "Reagendando reserva ID: {booking_id} para {new_date} a las {new_time}",
+    "progress_validate_status": "Validando estado de la reserva",
+    "progress_fetch": "Obteniendo detalles de la reserva",
+    "error_not_found": "Reserva {booking_id} no encontrada",
+    "info_status_validated": "Estado de reserva validado: {status} (cliente: {customer_name})",
+    "progress_check_availability": "Verificando disponibilidad del nuevo horario",
+    "progress_update": "Actualizando reserva y calendario",
+    "info_success": "✅ Reserva {booking_id} reagendada para {new_date} a las {new_time}",
+    "progress_complete": "Reagendación completada",
+    "error_validation": "Error de validación al reagendar: {error}",
+    "error_general": "Error al reagendar reserva {booking_id}: {error}"
+  },
+  "availability": {
+    "info_start": "Verificando horarios disponibles para {service_type} el {date}",
+    "progress_query": "Consultando horarios de negocio y reservas",
+    "progress_calculate": "Calculando horarios disponibles",
+    "info_success": "✅ Se encontraron {slot_count} horarios disponibles el {date}",
+    "progress_slots": "Se encontraron {slot_count} horarios disponibles",
+    "error_validation": "Error de validación al verificar disponibilidad: {error}",
+    "error_general": "Error al obtener horarios disponibles para {date}: {error}"
+  },
+  "get_by_id": {
+    "info_start": "Obteniendo detalles de la reserva ID: {booking_id}",
+    "info_found": "✅ Reserva encontrada: {customer_name} - {booking_date} a las {booking_time}",
+    "info_not_found": "No se encontró reserva con ID: {booking_id}",
+    "error_general": "Error al obtener reserva {booking_id}: {error}"
+  },
+  "list_bookings": {
+    "info_start": "Listando reservas para el cliente: {customer_email}",
+    "info_found": "✅ Se encontraron {booking_count} reservas totales ({active_count} activas) para {customer_email}",
+    "error_general": "Error al listar reservas para {customer_email}: {error}"
+  },
+  "get_services": {
+    "info_start": "Obteniendo servicios disponibles de la base de datos",
+    "info_success": "✅ Se cargaron {service_count} servicios de la base de datos",
+    "error_general": "Error al obtener servicios: {error}"
+  },
+  "get_hours": {
+    "info_start": "Obteniendo horarios de negocio de la base de datos",
+    "info_success": "✅ Se cargaron horarios de negocio para {days_count} días",
+    "error_general": "Error al obtener horarios de negocio: {error}"
+  }
+}

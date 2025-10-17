@@ -13,6 +13,7 @@ from tools import fuzzy_search as fuzzy_search_tool
 from tools import ingest as ingest_tool
 from tools import search as search_tool
 from utils.logger import setup_logging
+from utils.mcp_i18n import mcp_info, mcp_debug, mcp_progress
 
 # Setup logger for tool handlers
 logger = setup_logging("mcp_tool_handlers")
@@ -84,20 +85,29 @@ def register_tools():
             Returns: {id, sku, name, description, category, brand, tags, color, size, price}
         """
         try:
-            await ctx.info(f"Fetching product by SKU: {sku}")
+            await mcp_info(ctx, "product.fetch.by_sku.info_start", sku=sku)
             logger.debug(f"fetch_by_sku called with sku={sku}")
             result = fetch_tool.fetch_by_sku(sku)
 
             if result:
-                await ctx.info(f"Successfully found product: {result.get('name', 'Unknown')}")
+                await mcp_info(
+                    ctx,
+                    "product.fetch.by_sku.info_found",
+                    product_name=result.get('name', 'Unknown'),
+                )
                 logger.info(f"Product found for SKU {sku}: {result.get('name', 'Unknown')}")
             else:
-                await ctx.info(f"No product found with SKU: {sku}")
+                await mcp_info(ctx, "product.fetch.by_sku.info_not_found", sku=sku)
                 logger.warning(f"No product found for SKU: {sku}")
 
             return result
         except Exception as e:
-            await ctx.debug(f"Error fetching by SKU {sku}: {e}")
+            await mcp_debug(
+                ctx,
+                "product.fetch.by_sku.error_general",
+                sku=sku,
+                error=str(e),
+            )
             logger.error(f"Error in fetch_by_sku for SKU {sku}: {str(e)}", exc_info=True)
             raise
 
@@ -114,17 +124,26 @@ def register_tools():
             Product details if found, None otherwise
         """
         try:
-            await ctx.info(f"Fetching product by ID: {product_id}")
+            await mcp_info(ctx, "product.fetch.by_id.info_start", product_id=product_id)
             result = fetch_tool.fetch_by_id(product_id)
 
             if result:
-                await ctx.info(f"Successfully found product: {result.get('name', 'Unknown')}")
+                await mcp_info(
+                    ctx,
+                    "product.fetch.by_id.info_found",
+                    product_name=result.get('name', 'Unknown'),
+                )
             else:
-                await ctx.info(f"No product found with ID: {product_id}")
+                await mcp_info(ctx, "product.fetch.by_id.info_not_found", product_id=product_id)
 
             return result
         except Exception as e:
-            await ctx.debug(f"Error fetching by ID {product_id}: {e}")
+            await mcp_debug(
+                ctx,
+                "product.fetch.by_id.error_general",
+                product_id=product_id,
+                error=str(e),
+            )
             raise
 
     @mcp.tool()  # type: ignore[union-attr]
@@ -175,18 +194,28 @@ def register_tools():
             Each product: {id, sku, name, description, category, brand, tags, color, size, price}
         """
         try:
-            await ctx.info(f"Starting semantic search for: '{query}'")
-            await ctx.report_progress(0, 1, "Initializing semantic search")
+            await mcp_info(ctx, "product.semantic_search.info_start", query=query)
+            await mcp_progress(ctx, 0, 1, "product.semantic_search.progress_init")
 
             results = search_tool.search_products(query, k)
 
-            await ctx.report_progress(1, 1, f"Found {len(results)} results")
-            await ctx.info(f"Semantic search completed: {len(results)} products found")
+            await mcp_progress(
+                ctx,
+                1,
+                1,
+                "product.semantic_search.progress_complete",
+                result_count=len(results),
+            )
+            await mcp_info(
+                ctx,
+                "product.semantic_search.info_completed",
+                result_count=len(results),
+            )
 
             # MCP protocol issue: wrap list in object
             return {"items": results, "count": len(results), "query": query}
         except Exception as e:
-            await ctx.debug(f"Error in semantic search: {e}")
+            await mcp_debug(ctx, "product.semantic_search.error_general", error=str(e))
             raise
 
     @mcp.tool()  # type: ignore[union-attr]
@@ -310,8 +339,8 @@ def register_tools():
                           max_similarity: float, search_tier: str, [field]_similarity: float}
         """
         try:
-            await ctx.info(f"Starting smart fuzzy search for: '{query}'")
-            await ctx.report_progress(0, 3, "Initializing multi-tier search")
+            await mcp_info(ctx, "product.fuzzy_search.info_start", query=query)
+            await mcp_progress(ctx, 0, 3, "product.fuzzy_search.progress_init")
 
             # Default to searching in name, description, and category
             # This enables category-based searches like "qué hay en hogar"
@@ -331,20 +360,30 @@ def register_tools():
                 brand_weight,
             )
 
-            await ctx.report_progress(3, 3, f"Search completed with {len(results)} results")
+            await mcp_progress(
+                ctx,
+                3,
+                3,
+                "product.fuzzy_search.progress_complete",
+                result_count=len(results),
+            )
 
             # Log search tier information
             if results and len(results) > 0:
                 tier = results[0].get("search_tier", "unknown")
-                await ctx.info(f"Smart fuzzy search succeeded at tier: {tier}")
+                await mcp_info(
+                    ctx,
+                    "product.fuzzy_search.info_succeeded",
+                    tier=tier,
+                )
             else:
-                await ctx.info("Smart fuzzy search found no results")
+                await mcp_info(ctx, "product.fuzzy_search.info_no_results")
 
             # MCP protocol issue: returning a list directly only sends first item
             # Wrap in object to ensure all items are transmitted
             return {"items": results, "count": len(results), "query": query}
         except Exception as e:
-            await ctx.debug(f"Error in smart fuzzy search: {e}")
+            await mcp_debug(ctx, "product.fuzzy_search.error_general", error=str(e))
             raise
 
     @mcp.tool()  # type: ignore[union-attr]
@@ -361,15 +400,15 @@ def register_tools():
         """
         try:
             total_products = len(products)
-            await ctx.info(f"Starting ingestion of {total_products} products")
-            await ctx.report_progress(0, total_products, "Starting product ingestion")
+            await mcp_info(ctx, "product.ingest.info_start", total_products=total_products)
+            await mcp_progress(ctx, 0, total_products, "product.ingest.progress_init")
 
             result = ingest_tool.ingest_products(products)
 
-            await ctx.report_progress(total_products, total_products, "Ingestion completed")
-            await ctx.info(f"Successfully processed {total_products} products")
+            await mcp_progress(ctx, total_products, total_products, "product.ingest.progress_complete")
+            await mcp_info(ctx, "product.ingest.info_completed", total_products=total_products)
 
             return {"processed": result}
         except Exception as e:
-            await ctx.debug(f"Error ingesting products: {e}")
+            await mcp_debug(ctx, "product.ingest.error_general", error=str(e))
             raise

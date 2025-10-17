@@ -1,0 +1,43 @@
+{
+  "fetch": {
+    "by_sku": {
+      "info_start": "Buscando producto por SKU: {sku}",
+      "info_found": "Producto encontrado exitosamente: {product_name}",
+      "info_not_found": "No se encontró producto con SKU: {sku}",
+      "error_general": "Error al buscar por SKU {sku}: {error}"
+    },
+    "by_id": {
+      "info_start": "Buscando producto por ID: {product_id}",
+      "info_found": "Producto encontrado exitosamente: {product_name}",
+      "info_not_found": "No se encontró producto con ID: {product_id}",
+      "error_general": "Error al buscar por ID {product_id}: {error}"
+    }
+  },
+  "semantic_search": {
+    "info_start": "Iniciando búsqueda semántica para: '{query}'",
+    "progress_init": "Inicializando búsqueda semántica",
+    "progress_complete": "Se encontraron {result_count} resultados",
+    "info_completed": "Búsqueda semántica completada: {result_count} productos encontrados",
+    "info_no_results": "Búsqueda semántica sin resultados para: '{query}'",
+    "error_general": "Error en búsqueda semántica: {error}"
+  },
+  "fuzzy_search": {
+    "info_start": "Iniciando búsqueda difusa inteligente para: '{query}'",
+    "progress_init": "Inicializando búsqueda multinivel",
+    "progress_tier1": "Nivel 1: Búsqueda de similitud estándar",
+    "progress_tier2": "Nivel 2: Búsqueda de similitud de palabras",
+    "progress_tier25": "Nivel 2.5: Búsqueda basada en tokens",
+    "progress_tier3": "Nivel 3: Fallback con umbral relajado",
+    "progress_complete": "Búsqueda completada con {result_count} resultados",
+    "info_succeeded": "Búsqueda difusa inteligente exitosa en nivel: {tier}",
+    "info_no_results": "Búsqueda difusa inteligente sin resultados",
+    "error_general": "Error en búsqueda difusa inteligente: {error}"
+  },
+  "ingest": {
+    "info_start": "Iniciando ingesta de {total_products} productos",
+    "progress_init": "Iniciando ingesta de productos",
+    "progress_complete": "Ingesta completada",
+    "info_completed": "Se procesaron exitosamente {total_products} productos",
+    "error_general": "Error al ingestar productos: {error}"
+  }
+}

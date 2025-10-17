@@ -1,0 +1,43 @@
+{
+  "fetch": {
+    "by_sku": {
+      "info_start": "Fetching product by SKU: {sku}",
+      "info_found": "Successfully found product: {product_name}",
+      "info_not_found": "No product found with SKU: {sku}",
+      "error_general": "Error fetching by SKU {sku}: {error}"
+    },
+    "by_id": {
+      "info_start": "Fetching product by ID: {product_id}",
+      "info_found": "Successfully found product: {product_name}",
+      "info_not_found": "No product found with ID: {product_id}",
+      "error_general": "Error fetching by ID {product_id}: {error}"
+    }
+  },
+  "semantic_search": {
+    "info_start": "Starting semantic search for: '{query}'",
+    "progress_init": "Initializing semantic search",
+    "progress_complete": "Found {result_count} results",
+    "info_completed": "Semantic search completed: {result_count} products found",
+    "info_no_results": "Semantic search found no results for: '{query}'",
+    "error_general": "Error in semantic search: {error}"
+  },
+  "fuzzy_search": {
+    "info_start": "Starting smart fuzzy search for: '{query}'",
+    "progress_init": "Initializing multi-tier search",
+    "progress_tier1": "Tier 1: Standard similarity search",
+    "progress_tier2": "Tier 2: Word similarity search",
+    "progress_tier25": "Tier 2.5: Token-based search",
+    "progress_tier3": "Tier 3: Relaxed threshold fallback",
+    "progress_complete": "Search completed with {result_count} results",
+    "info_succeeded": "Smart fuzzy search succeeded at tier: {tier}",
+    "info_no_results": "Smart fuzzy search found no results",
+    "error_general": "Error in smart fuzzy search: {error}"
+  },
+  "ingest": {
+    "info_start": "Starting ingestion of {total_products} products",
+    "progress_init": "Starting product ingestion",
+    "progress_complete": "Ingestion completed",
+    "info_completed": "Successfully processed {total_products} products",
+    "error_general": "Error ingesting products: {error}"
+  }
+}

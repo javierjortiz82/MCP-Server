@@ -103,6 +103,7 @@ backups/
 !package.json
 !tsconfig.json
 !servers.json
+!mcp_server/locales/**/*.json
 
 # Test outputs
 test_results/
