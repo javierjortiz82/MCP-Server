@@ -328,6 +328,9 @@ def _enqueue_email(
             context["old_time"] = old_time
             context["new_date"] = booking_data.get("booking_date")
             context["new_time"] = booking_data.get("booking_time")
+            # Ensure duration_minutes is included for template rendering
+            if "duration_minutes" not in context:
+                context["duration_minutes"] = booking_data.get("duration_minutes", 60)
 
         # Enqueue email (rendered by worker using templates)
         email_id = queue_manager.enqueue_email(
