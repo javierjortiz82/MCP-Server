@@ -1,0 +1,54 @@
+{
+  "greetings": {
+    "hello": "¡Hola!",
+    "welcome": "Bienvenido a Lab01",
+    "goodbye": "¡Hasta luego!"
+  },
+  "common": {
+    "customer": "Cliente",
+    "service": "Servicio",
+    "yes": "Sí",
+    "no": "No",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "warning": "Advertencia",
+    "info": "Información",
+    "help": "Ayuda",
+    "close": "Cerrar"
+  },
+  "days": {
+    "monday": "Lunes",
+    "tuesday": "Martes",
+    "wednesday": "Miércoles",
+    "thursday": "Jueves",
+    "friday": "Viernes",
+    "saturday": "Sábado",
+    "sunday": "Domingo"
+  },
+  "months": {
+    "january": "enero",
+    "february": "febrero",
+    "march": "marzo",
+    "april": "abril",
+    "may": "mayo",
+    "june": "junio",
+    "july": "julio",
+    "august": "agosto",
+    "september": "septiembre",
+    "october": "octubre",
+    "november": "noviembre",
+    "december": "diciembre"
+  },
+  "errors": {
+    "general": "Ha ocurrido un error inesperado",
+    "invalid_input": "Entrada inválida. Por favor, intenta de nuevo",
+    "not_found": "No se encontró lo que buscas",
+    "unauthorized": "No tienes permiso para hacer esto",
+    "server_error": "Error del servidor. Por favor, intenta más tarde"
+  }
+}
