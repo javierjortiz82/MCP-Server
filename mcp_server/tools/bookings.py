@@ -333,6 +333,7 @@ def _enqueue_email(
                 context["duration_minutes"] = booking_data.get("duration_minutes", 60)
 
         # Enqueue email (rendered by worker using templates)
+        logger.debug(f"📧 Enqueueing {email_type} email with context keys: {list(context.keys())}")
         email_id = queue_manager.enqueue_email(
             email_type=EmailType(email_type),
             recipient_email=booking_data["customer_email"],
@@ -344,7 +345,7 @@ def _enqueue_email(
             priority=5,
         )
 
-        logger.info(f"📧 Email queued: type={email_type}, email_id={email_id}")
+        logger.info(f"📧 Email queued: type={email_type}, email_id={email_id}, template_context_keys={list(context.keys())}")
 
     except Exception as exc:
         logger.error(f"❌ Email notification failed: {exc}")
