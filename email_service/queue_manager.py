@@ -105,7 +105,13 @@ class EmailQueueManager:
         try:
             with conn.cursor() as cur:
                 # Convert template_context dict to JSON string for PostgreSQL
+                # DEBUG: Log what we receive
+                import logging
+                logger_debug = logging.getLogger("email_queue_mgr")
+                logger_debug.warning(f"🔍 enqueue_email template_context: {bool(template_context)}, keys: {list(template_context.keys()) if isinstance(template_context, dict) else type(template_context).__name__}")
+
                 template_json = json.dumps(template_context) if template_context else None
+                logger_debug.warning(f"🔍 template_json bytes: {len(template_json) if template_json else 0}")
 
                 # Use SQL function from create_email_queue.sql
                 cur.execute(
