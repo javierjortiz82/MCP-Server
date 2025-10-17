@@ -1,0 +1,128 @@
+{
+  "booking": {
+    "create": {
+      "info_start": "Creating booking for {customer_name} on {booking_date} at {booking_time}",
+      "progress_validate": "Validating booking information",
+      "progress_create": "Creating booking in database",
+      "progress_success": "Booking created successfully",
+      "info_with_calendar": "✅ Booking created: ID={booking_id}, Google Calendar event created",
+      "info_without_calendar": "✅ Booking created: ID={booking_id} (calendar disabled)",
+      "progress_ready": "Booking confirmation ready",
+      "error_validation": "Validation error creating booking: {error}",
+      "error_general": "Error creating booking: {error}"
+    },
+    "cancel": {
+      "info_start": "Cancelling booking ID: {booking_id}",
+      "progress_validate": "Validating booking",
+      "progress_process": "Processing cancellation",
+      "info_success": "✅ Booking {booking_id} cancelled successfully",
+      "progress_complete": "Cancellation completed",
+      "error_validation": "Validation error cancelling booking: {error}",
+      "error_general": "Error cancelling booking {booking_id}: {error}"
+    },
+    "reschedule": {
+      "info_start": "Rescheduling booking ID: {booking_id} to {new_date} at {new_time}",
+      "progress_validate_status": "Validating booking status",
+      "progress_fetch": "Fetching booking details",
+      "error_not_found": "Booking {booking_id} not found",
+      "info_status_validated": "Booking status validated: {status} (customer: {customer_name})",
+      "progress_check_availability": "Checking new slot availability",
+      "progress_update": "Updating booking and calendar",
+      "info_success": "✅ Booking {booking_id} rescheduled to {new_date} at {new_time}",
+      "progress_complete": "Reschedule completed",
+      "error_validation": "Validation error rescheduling booking: {error}",
+      "error_general": "Error rescheduling booking {booking_id}: {error}"
+    },
+    "availability": {
+      "info_start": "Checking available slots for {service_type} on {date}",
+      "progress_query": "Querying business hours and bookings",
+      "progress_calculate": "Calculating available time slots",
+      "info_success": "✅ Found {slot_count} available slots on {date}",
+      "progress_slots": "Found {slot_count} available slots",
+      "error_validation": "Validation error checking availability: {error}",
+      "error_general": "Error getting available slots for {date}: {error}"
+    },
+    "get_by_id": {
+      "info_start": "Fetching booking details for ID: {booking_id}",
+      "info_found": "✅ Booking found: {customer_name} - {booking_date} at {booking_time}",
+      "info_not_found": "No booking found with ID: {booking_id}",
+      "error_general": "Error fetching booking {booking_id}: {error}"
+    },
+    "list_bookings": {
+      "info_start": "Listing bookings for customer: {customer_email}",
+      "info_found": "✅ Found {booking_count} total bookings ({active_count} active) for {customer_email}",
+      "error_general": "Error listing bookings for {customer_email}: {error}"
+    },
+    "get_services": {
+      "info_start": "Fetching available services from database",
+      "info_success": "✅ Loaded {service_count} services from database",
+      "error_general": "Error fetching services: {error}"
+    },
+    "get_hours": {
+      "info_start": "Fetching business hours from database",
+      "info_success": "✅ Loaded business hours for {days_count} days",
+      "error_general": "Error fetching business hours: {error}"
+    }
+  },
+  "product": {
+    "get_by_sku": {
+      "info_start": "Looking up product by SKU: {sku}",
+      "progress_searching": "Searching product database",
+      "info_found": "✅ Product found: {product_name}",
+      "info_not_found": "No product found with SKU: {sku}",
+      "error_general": "Error looking up product by SKU {sku}: {error}"
+    },
+    "get_by_id": {
+      "info_start": "Looking up product by ID: {product_id}",
+      "progress_searching": "Searching product database",
+      "info_found": "✅ Product found: {product_name}",
+      "info_not_found": "No product found with ID: {product_id}",
+      "error_general": "Error looking up product by ID {product_id}: {error}"
+    },
+    "semantic_search": {
+      "info_start": "Performing semantic search for: {query}",
+      "progress_embedding": "Generating semantic embedding",
+      "progress_searching": "Searching product database",
+      "progress_filtering": "Filtering results by relevance",
+      "info_found": "✅ Found {result_count} semantic matches for: {query}",
+      "info_no_results": "No semantic matches found for: {query}",
+      "error_embedding": "Error generating embedding for query: {error}",
+      "error_general": "Error in semantic search for \"{query}\": {error}"
+    },
+    "fuzzy_search": {
+      "info_start": "Performing fuzzy search for: {query}",
+      "progress_tier1": "Tier 1: Standard similarity search",
+      "progress_tier2": "Tier 2: Word similarity search",
+      "progress_tier25": "Tier 2.5: Token-based search",
+      "progress_tier3": "Tier 3: Relaxed threshold fallback",
+      "info_found_tier1": "✅ Found {result_count} results (Tier 1)",
+      "info_found_tier2": "✅ Found {result_count} results (Tier 2)",
+      "info_found_tier25": "✅ Found {result_count} results (Tier 2.5)",
+      "info_found_tier3": "✅ Found {result_count} results (Tier 3 - relaxed threshold)",
+      "info_no_results": "No fuzzy search matches found for: {query}",
+      "error_validation": "Search validation error: {error}",
+      "error_general": "Error in fuzzy search for \"{query}\": {error}"
+    },
+    "db_stats": {
+      "info_start": "Fetching database statistics",
+      "progress_counting": "Counting products and categories",
+      "info_success": "✅ Database stats retrieved",
+      "error_general": "Error fetching database statistics: {error}"
+    },
+    "ingest": {
+      "info_start": "Starting data ingestion",
+      "progress_validating": "Validating input data",
+      "progress_processing": "Processing batch of {batch_size} items",
+      "progress_inserted": "Inserted {count} items",
+      "info_success": "✅ Data ingestion completed: {total_inserted} items inserted",
+      "error_validation": "Data validation error: {error}",
+      "error_general": "Error during data ingestion: {error}"
+    }
+  },
+  "search": {
+    "start": "Starting search operation",
+    "progress": "Processing search request",
+    "success": "✅ Search completed successfully",
+    "error": "Error during search: {error}"
+  }
+}

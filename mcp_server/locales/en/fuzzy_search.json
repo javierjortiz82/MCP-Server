@@ -1,0 +1,17 @@
+{
+  "errors": {
+    "min_similarity_invalid": "min_similarity must be between 0.0 and 1.0, got {min_similarity}",
+    "limit_invalid": "limit must be positive, got {limit}",
+    "invalid_fields": "Invalid fields: {invalid_fields}. Valid fields: {valid_fields}"
+  },
+  "validation": {
+    "min_similarity_required": "Similarity threshold must be specified",
+    "search_query_required": "Search query cannot be empty",
+    "collection_required": "Collection name is required"
+  },
+  "messages": {
+    "searching": "Searching with fuzzy matching...",
+    "no_results": "No results found matching your criteria",
+    "search_failed": "Search operation failed: {error}"
+  }
+}
