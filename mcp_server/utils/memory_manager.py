@@ -1036,3 +1036,61 @@ class MemoryManager:
         except Exception as e:
             logger.error(f"Failed to get session retention stats: {e}")
             return {}
+
+    # ========================================================================
+    # Language Preference Management (Simple i18n Support)
+    # ========================================================================
+
+    def set_user_preferred_language(
+        self,
+        customer_email: str,
+        language_code: str,
+    ) -> int:
+        """Store user's preferred language as high-priority memory block.
+
+        Args:
+            customer_email: Customer email
+            language_code: Language code ("es" or "en")
+
+        Returns:
+            int: Memory block ID
+        """
+        if language_code not in ("es", "en"):
+            logger.warning(f"Invalid language code: {language_code}")
+            return -1
+
+        return self.save_user_memory_block(
+            customer_email=customer_email,
+            block_label="preferred_language",
+            block_value=language_code,
+            priority=10,  # Highest priority
+            agent_scope="shared",
+            ttl_days=365,  # Long TTL
+        )
+
+    def get_user_preferred_language(
+        self,
+        customer_email: str,
+        default_language: str = "es",
+    ) -> str:
+        """Retrieve user's preferred language.
+
+        Args:
+            customer_email: Customer email
+            default_language: Default if not found
+
+        Returns:
+            str: Language code ("es" or "en")
+        """
+        try:
+            blocks = self.get_user_memory_blocks(customer_email, agent_scope="shared")
+            for block in blocks:
+                if block.get("block_label") == "preferred_language":
+                    language = block.get("block_value")
+                    if language in ("es", "en"):
+                        return language
+            return default_language
+        except Exception as exc:
+            logger.debug(f"Failed to get language preference: {exc}")
+            return default_language
+

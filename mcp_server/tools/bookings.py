@@ -33,6 +33,7 @@ from config.booking_constants import (
 )
 from utils.db import fetchall, fetchone, get_conn
 from utils.logger import setup_logging
+from utils.i18n import t, get_days_of_week, format_date_localized
 
 # Conditional import of Email Queue Manager
 try:
@@ -226,10 +227,13 @@ def _create_booking_atomic(
                     f"Slot {booking_date} {booking_time} became unavailable after locking "
                     f"(was checked by another transaction)"
                 )
-                raise RuntimeError(
-                    f"Time slot {booking_date} at {booking_time} is no longer available "
-                    f"(was booked by another request). Please choose a different time."
+                error_msg = t(
+                    "booking.messages.slot_not_available_race",
+                    lang="en",
+                    booking_date=booking_date,
+                    booking_time=booking_time
                 )
+                raise RuntimeError(error_msg)
 
             # INSERT: Create the booking atomically within the transaction
             insert_query = f"""
@@ -261,7 +265,8 @@ def _create_booking_atomic(
             result = cur.fetchone()
 
             if not result:
-                raise RuntimeError("Failed to create booking - no result returned")
+                error_msg = t("booking.messages.create_booking_failed_no_result", lang="en")
+                raise RuntimeError(error_msg)
 
             # COMMIT: Transaction commits atomically here
             conn.commit()
@@ -280,7 +285,8 @@ def _create_booking_atomic(
     except Exception as exc:
         logger.exception(f"Atomic booking creation failed: {exc}")
         # Connection is automatically rolled back on exception
-        raise RuntimeError(f"Failed to create booking atomically: {exc}") from exc
+        error_msg = t("booking.messages.create_booking_failed_atomic", lang="en", error=str(exc))
+        raise RuntimeError(error_msg) from exc
 
 
 def _enqueue_email(
@@ -312,9 +318,9 @@ def _enqueue_email(
 
         # Build template context based on email type
         context = {
-            "customer_name": booking_data.get("customer_name", "Cliente"),
+            "customer_name": booking_data.get("customer_name", t("booking.defaults.customer_name", lang="en")),
             "booking_id": booking_data.get("booking_id") or booking_data.get("id"),
-            "service_type": booking_data.get("service_type", "Servicio"),
+            "service_type": booking_data.get("service_type", t("booking.defaults.service_type", lang="en")),
             "booking_date": booking_data.get("booking_date", ""),
             "booking_time": booking_data.get("booking_time", ""),
             "duration_minutes": booking_data.get("duration_minutes", 60),
@@ -335,11 +341,16 @@ def _enqueue_email(
 
         # Enqueue email (rendered by worker using templates)
         logger.debug(f"📧 Enqueueing {email_type} email with context keys: {list(context.keys())}")
+        email_subject = t(
+            "booking.defaults.confirmation_subject",
+            lang="en",
+            service_type=booking_data.get("service_type", t("booking.defaults.service_type", lang="en"))
+        )
         email_id = queue_manager.enqueue_email(
             email_type=EmailType(email_type),
             recipient_email=booking_data["customer_email"],
             recipient_name=booking_data.get("customer_name"),
-            subject=f"Confirmación: {booking_data.get('service_type', 'Servicio')}",
+            subject=email_subject,
             body_html="",  # Will be rendered by worker from template
             template_context=context,
             booking_id=booking_data.get("booking_id") or booking_data.get("id"),
@@ -426,15 +437,20 @@ def create_booking(
         )
 
         if not availability_check or not availability_check["available"]:
-            raise ValueError(
-                f"Time slot {booking_date} at {booking_time} is not available"
+            error_msg = t(
+                "booking.messages.slot_not_available_general",
+                lang="en",
+                booking_date=booking_date,
+                booking_time=booking_time
             )
+            raise ValueError(error_msg)
 
         logger.debug("Availability check passed")
 
     except Exception as exc:
         logger.exception(f"Availability check failed: {exc}")
-        raise ValueError(f"Could not verify availability: {exc}") from exc
+        error_msg = t("booking.messages.verify_availability_failed", lang="en", error=str(exc))
+        raise ValueError(error_msg) from exc
 
     # Create Google Calendar event if enabled
     calendar_event_id = None
@@ -532,7 +548,8 @@ def create_booking(
             except Exception as cleanup_exc:
                 logger.warning(f"Failed to rollback calendar event: {cleanup_exc}")
 
-        raise RuntimeError(f"Failed to create booking: {exc}") from exc
+        error_msg = t("booking.messages.create_booking_failed_general", lang="en", error=str(exc))
+        raise RuntimeError(error_msg) from exc
 
 
 def cancel_booking(
@@ -574,10 +591,12 @@ def cancel_booking(
         )
 
         if not booking:
-            raise ValueError(f"Booking {booking_id} not found")
+            error_msg = t("booking.messages.booking_not_found", lang="en", booking_id=booking_id)
+            raise ValueError(error_msg)
 
         if booking["status"] == BookingStatus.CANCELLED.value:
-            raise ValueError(f"Booking {booking_id} is already cancelled")
+            error_msg = t("booking.messages.booking_already_cancelled", lang="en", booking_id=booking_id)
+            raise ValueError(error_msg)
 
         logger.debug(
             f"Found booking: {booking['customer_name']} on {booking['booking_date']}"
@@ -587,7 +606,8 @@ def cancel_booking(
         raise
     except Exception as exc:
         logger.exception(f"Failed to fetch booking: {exc}")
-        raise RuntimeError(f"Could not fetch booking {booking_id}: {exc}") from exc
+        error_msg = t("booking.messages.fetch_booking_failed", lang="en", booking_id=booking_id, error=str(exc))
+        raise RuntimeError(error_msg) from exc
 
     # Delete Google Calendar event if exists
     calendar_deleted = False
@@ -622,7 +642,8 @@ def cancel_booking(
         )  # UPDATE requires commit
 
         if not result:
-            raise RuntimeError("Failed to cancel booking - no result returned")
+            error_msg = t("booking.messages.cancel_booking_failed_no_result", lang="en")
+            raise RuntimeError(error_msg)
 
         logger.info(f"✅ Booking cancelled successfully: ID={booking_id}")
 
@@ -651,7 +672,8 @@ def cancel_booking(
 
     except Exception as exc:
         logger.exception(f"Failed to cancel booking in database: {exc}")
-        raise RuntimeError(f"Failed to cancel booking: {exc}") from exc
+        error_msg = t("booking.messages.cancel_booking_failed_general", lang="en", error=str(exc))
+        raise RuntimeError(error_msg) from exc
 
 
 def reschedule_booking(
@@ -696,11 +718,13 @@ def reschedule_booking(
         )
 
         if not booking:
-            raise ValueError(f"Booking {booking_id} not found")
+            error_msg = t("booking.messages.booking_not_found", lang="en", booking_id=booking_id)
+            raise ValueError(error_msg)
 
         non_reschedulable = {BookingStatus.CANCELLED.value, BookingStatus.COMPLETED.value}
         if booking["status"] in non_reschedulable:
-            raise ValueError(f"Cannot reschedule {booking['status']} booking")
+            error_msg = t("booking.messages.cannot_reschedule_status", lang="en", status=booking["status"])
+            raise ValueError(error_msg)
 
         logger.debug(f"Found booking: {booking['customer_name']}")
 
@@ -708,7 +732,8 @@ def reschedule_booking(
         raise
     except Exception as exc:
         logger.exception(f"Failed to fetch booking: {exc}")
-        raise RuntimeError(f"Could not fetch booking {booking_id}: {exc}") from exc
+        error_msg = t("booking.messages.fetch_booking_failed", lang="en", booking_id=booking_id, error=str(exc))
+        raise RuntimeError(error_msg) from exc
 
     # Check availability of new slot
     # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
@@ -719,7 +744,13 @@ def reschedule_booking(
         )
 
         if not availability_check or not availability_check["available"]:
-            raise ValueError(f"Time slot {new_date} at {new_time} is not available")
+            error_msg = t(
+                "booking.messages.slot_not_available_general",
+                lang="en",
+                booking_date=new_date,
+                booking_time=new_time
+            )
+            raise ValueError(error_msg)
 
         logger.debug("New slot is available")
 
@@ -727,7 +758,8 @@ def reschedule_booking(
         raise
     except Exception as exc:
         logger.exception(f"Availability check failed: {exc}")
-        raise RuntimeError(f"Could not verify availability: {exc}") from exc
+        error_msg = t("booking.messages.verify_availability_failed", lang="en", error=str(exc))
+        raise RuntimeError(error_msg) from exc
 
     # Update Google Calendar event if exists
     calendar_updated = False
@@ -776,7 +808,8 @@ def reschedule_booking(
         )  # UPDATE requires commit
 
         if not result:
-            raise RuntimeError("Failed to reschedule booking - no result returned")
+            error_msg = t("booking.messages.reschedule_booking_failed_no_result", lang="en")
+            raise RuntimeError(error_msg)
 
         logger.info(f"✅ Booking rescheduled successfully: ID={booking_id}")
 
@@ -808,7 +841,8 @@ def reschedule_booking(
 
     except Exception as exc:
         logger.exception(f"Failed to reschedule booking in database: {exc}")
-        raise RuntimeError(f"Failed to reschedule booking: {exc}") from exc
+        error_msg = t("booking.messages.reschedule_booking_failed_general", lang="en", error=str(exc))
+        raise RuntimeError(error_msg) from exc
 
 
 def find_first_available_slots_in_range(
@@ -816,6 +850,7 @@ def find_first_available_slots_in_range(
     start_date: str,  # YYYY-MM-DD
     end_date: str,  # YYYY-MM-DD (inclusive)
     duration_minutes: int = 60,
+    user_lang: str = "es",
 ) -> dict[str, Any]:
     """Find the first available date with slots within a date range.
 
@@ -828,6 +863,7 @@ def find_first_available_slots_in_range(
         start_date: Start date in YYYY-MM-DD format.
         end_date: End date in YYYY-MM-DD format (inclusive).
         duration_minutes: Required appointment duration (default: 60).
+        user_lang: Language code for messages ("es" or "en", default: "es").
 
     Returns:
         Dict with first available date and slots:
@@ -837,12 +873,12 @@ def find_first_available_slots_in_range(
             "first_available_day_name": str | None,
             "available_slots": list | None,
             "days_searched": int,
-            "message": str
+            "message": str (localized)
         }
 
     Example:
         >>> result = find_first_available_slots_in_range(
-        ...     "consultation", "2025-10-18", "2025-10-25", 30
+        ...     "consultation", "2025-10-18", "2025-10-25", 30, user_lang="en"
         ... )
         >>> if result["found"]:
         ...     print(f"Available on {result['first_available_date']}")
@@ -859,18 +895,11 @@ def find_first_available_slots_in_range(
 
         if start_dt > end_dt:
             logger.warning(f"Invalid date range: {start_date} > {end_date}")
-            raise ValueError("start_date must be before or equal to end_date")
+            error_msg = t("booking.messages.date_range_invalid", lang="en")
+            raise ValueError(error_msg)
 
-        # Days of week names
-        days_names_es = [
-            "Lunes",
-            "Martes",
-            "Miércoles",
-            "Jueves",
-            "Viernes",
-            "Sábado",
-            "Domingo",
-        ]
+        # Get localized day names for the selected language
+        days_names = get_days_of_week(lang=user_lang)
 
         # Iterate through each day in range
         current_dt = start_dt
@@ -878,9 +907,9 @@ def find_first_available_slots_in_range(
 
         while current_dt <= end_dt:
             date_str = current_dt.strftime("%Y-%m-%d")
-            day_name_es = days_names_es[current_dt.weekday()]
+            day_name = days_names[current_dt.weekday()]
 
-            logger.debug(f"Checking availability for {date_str} ({day_name_es})")
+            logger.debug(f"Checking availability for {date_str} ({day_name})")
 
             try:
                 # Get available slots for this day
@@ -896,28 +925,30 @@ def find_first_available_slots_in_range(
                     available_times = [s["time"] for s in available]
 
                     logger.info(
-                        f"✅ Found {len(available)} available slots on {date_str} ({day_name_es})"
+                        f"✅ Found {len(available)} available slots on {date_str} ({day_name})"
                     )
 
-                    # Format date as readable string
-                    date_formatted = current_dt.strftime("%d de %B de %Y").replace(
-                        "October", "octubre"
-                    ).replace(
-                        "November", "noviembre"
-                    ).replace(
-                        "December", "diciembre"
+                    # Format date as readable string using i18n
+                    date_formatted = format_date_localized(current_dt, lang=user_lang)
+
+                    # Build localized message using i18n
+                    message = t(
+                        "booking.availability.found",
+                        lang=user_lang,
+                        count=len(available),
+                        date=f"{day_name} {date_formatted}"
                     )
 
                     return {
                         "found": True,
                         "first_available_date": date_str,
-                        "first_available_day_name": day_name_es,
-                        "first_available_date_formatted": f"{day_name_es} {date_formatted}",
+                        "first_available_day_name": day_name,
+                        "first_available_date_formatted": f"{day_name} {date_formatted}",
                         "available_slots": available_times,
                         "available_count": len(available),
                         "days_searched": days_searched,
                         "duration_minutes": duration_minutes,
-                        "message": f"Encontré {len(available)} horarios disponibles el {day_name_es} {date_formatted}",
+                        "message": message,
                     }
 
             except Exception as exc:
@@ -930,6 +961,15 @@ def find_first_available_slots_in_range(
         # No available dates found in range
         logger.info(f"No availability found between {start_date} and {end_date}")
 
+        # Build localized message for no availability
+        message = t(
+            "booking.availability.no_availability_range",
+            lang=user_lang,
+            service_type=service_type,
+            start_date=start_date,
+            end_date=end_date
+        )
+
         return {
             "found": False,
             "first_available_date": None,
@@ -937,7 +977,7 @@ def find_first_available_slots_in_range(
             "available_slots": None,
             "days_searched": days_searched,
             "duration_minutes": duration_minutes,
-            "message": f"No encontré disponibilidad para {service_type} entre {start_date} y {end_date}",
+            "message": message,
         }
 
     except Exception as exc:
@@ -949,6 +989,7 @@ def get_available_slots(
     service_type: str,
     date: str,  # YYYY-MM-DD
     duration_minutes: int = 60,
+    user_lang: str = "es",
 ) -> dict[str, Any]:
     """Get available time slots for a specific date and service.
 
@@ -962,6 +1003,7 @@ def get_available_slots(
         service_type: Type of service (used for duration lookup).
         date: Date to check in YYYY-MM-DD format.
         duration_minutes: Required appointment duration (default: 60).
+        user_lang: Language code for messages ("es" or "en", default: "es").
 
     Returns:
         Dict with available slots and metadata:
@@ -1003,7 +1045,8 @@ def get_available_slots(
 
     except ValueError as exc:
         logger.exception(f"Invalid date format: {date}")
-        raise ValueError(f"Invalid date format: {date}") from exc
+        error_msg = t("booking.messages.date_format_invalid", lang="en", date=date)
+        raise ValueError(error_msg) from exc
 
     # Get business hours for this day
     try:

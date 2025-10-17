@@ -113,6 +113,7 @@ class BaseAgent(ABC):
         mcp_tools: list[types.FunctionDeclaration] | None = None,
         session_id: str | None = None,
         memory_manager: Any | None = None,
+        language: str = "es",
         **generation_params: Any,
     ) -> None:
         """Initialize base agent with common parameters.
@@ -126,6 +127,7 @@ class BaseAgent(ABC):
                 If provided with memory_manager, enables conversation persistence.
             memory_manager: Optional MemoryManager instance for persistent context.
                 If None, agent operates in stateless mode (RAM-only history).
+            language: Language code for prompts ("es" or "en", default: "es").
             **generation_params: Override generation parameters:
                 - temperature: Sampling temperature (0.0-1.0)
                 - top_k: Top K sampling parameter
@@ -141,6 +143,7 @@ class BaseAgent(ABC):
         self.api_key = api_key or settings.GOOGLE_API_KEY
         self.model_name = model_name or settings.MODEL
         self.mcp_tools = mcp_tools or []
+        self.language = language  # Language for prompts (es or en)
 
         # Gemini client components (initialized in initialize())
         self.client: genai.Client | None = None
@@ -866,20 +869,26 @@ class BaseAgent(ABC):
         """
         contents = []
 
+        # Pass language to get_system_prompt via kwargs
+        kwargs['user_lang'] = self.language
+
         # Add system prompt (agent-specific)
         system_context = self.get_system_prompt(**kwargs)
         contents.append(
             types.Content(role="user", parts=[types.Part(text=system_context)])
         )
 
-        # Add model acknowledgment (establishes agent role)
+        # Add model acknowledgment (establishes agent role) - language-aware
+        if self.language == "en":
+            ack_message = f"Understood. I'm {self.agent_name}. How can I help you?"
+        else:
+            ack_message = f"Entendido. Soy {self.agent_name}. ¿En qué puedo ayudarte?"
+
         contents.append(
             types.Content(
                 role="model",
                 parts=[
-                    types.Part(
-                        text=f"Entendido. Soy {self.agent_name}. ¿En qué puedo ayudarte?"
-                    )
+                    types.Part(text=ack_message)
                 ],
             )
         )
