@@ -12,7 +12,7 @@ Migration from dataclasses to Pydantic v2 for:
 
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator, ValidationInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -233,7 +233,7 @@ class Settings(BaseSettings):
     # Booking Input Parser Configuration (Confidence Thresholds)
     # ============================================================================
     BOOKING_CHOICE_CONFIDENCE_THRESHOLD: float = Field(
-        default=0.6,
+        default=0.75,
         ge=0.0,
         le=1.0,
         description="Confidence threshold for booking choice classification (reschedule/cancel)",
@@ -260,7 +260,7 @@ class Settings(BaseSettings):
     )
 
     BOOKING_CONFIRMATION_THRESHOLD: float = Field(
-        default=0.6,
+        default=0.75,
         ge=0.0,
         le=1.0,
         description="Confidence threshold for yes/no confirmation in booking context",
@@ -351,6 +351,58 @@ class Settings(BaseSettings):
         if not v or v.strip() == "":
             raise ValueError("GOOGLE_API_KEY cannot be empty")
         return v.strip()
+
+    @model_validator(mode="after")
+    def validate_configuration_consistency(self) -> "Settings":
+        """Validate that configuration values are consistent and compatible.
+
+        This method ensures cross-field configuration consistency to prevent
+        runtime errors from conflicting or invalid setting combinations.
+
+        Returns:
+            Settings: The validated settings instance
+
+        Raises:
+            ValueError: If configuration conflicts are detected
+        """
+        # Booking configuration: Duration must be >= Interval
+        if self.BOOKING_DEFAULT_DURATION_MINUTES < self.BOOKING_SLOT_INTERVAL_MINUTES:
+            raise ValueError(
+                f"BOOKING_DEFAULT_DURATION_MINUTES ({self.BOOKING_DEFAULT_DURATION_MINUTES} min) "
+                f"must be >= BOOKING_SLOT_INTERVAL_MINUTES ({self.BOOKING_SLOT_INTERVAL_MINUTES} min). "
+                f"Otherwise, slot generation produces overlapping slots."
+            )
+
+        # Memory priority thresholds: MIN < MAX <= HIGH_THRESHOLD
+        if self.MEMORY_PRIORITY_MEDIUM_MIN >= self.MEMORY_PRIORITY_MEDIUM_MAX:
+            raise ValueError(
+                f"MEMORY_PRIORITY_MEDIUM_MIN ({self.MEMORY_PRIORITY_MEDIUM_MIN}) "
+                f"must be < MEMORY_PRIORITY_MEDIUM_MAX ({self.MEMORY_PRIORITY_MEDIUM_MAX})"
+            )
+
+        if self.MEMORY_PRIORITY_MEDIUM_MAX > self.MEMORY_PRIORITY_HIGH_THRESHOLD:
+            raise ValueError(
+                f"MEMORY_PRIORITY_MEDIUM_MAX ({self.MEMORY_PRIORITY_MEDIUM_MAX}) "
+                f"must be <= MEMORY_PRIORITY_HIGH_THRESHOLD ({self.MEMORY_PRIORITY_HIGH_THRESHOLD})"
+            )
+
+        # Session lifecycle: Hard delete must come after soft archive
+        if self.SESSION_HARD_DELETE_DAYS <= self.SESSION_SOFT_ARCHIVE_DAYS:
+            raise ValueError(
+                f"SESSION_HARD_DELETE_DAYS ({self.SESSION_HARD_DELETE_DAYS} days) "
+                f"must be > SESSION_SOFT_ARCHIVE_DAYS ({self.SESSION_SOFT_ARCHIVE_DAYS} days). "
+                f"Sessions should be archived before they are deleted."
+            )
+
+        # Session preservation: Email-preserved sessions should last longer than anonymous
+        if self.SESSION_PRESERVE_WITH_EMAIL_DAYS <= self.SESSION_ANONYMOUS_DELETE_DAYS:
+            raise ValueError(
+                f"SESSION_PRESERVE_WITH_EMAIL_DAYS ({self.SESSION_PRESERVE_WITH_EMAIL_DAYS} days) "
+                f"should be > SESSION_ANONYMOUS_DELETE_DAYS ({self.SESSION_ANONYMOUS_DELETE_DAYS} days). "
+                f"Email sessions have more business value and should be retained longer."
+            )
+
+        return self
 
     # ============================================================================
     # Computed Properties
