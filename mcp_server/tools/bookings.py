@@ -344,8 +344,10 @@ def _enqueue_email(
         logger.info(f"📧 Email queued: type={email_type}, email_id={email_id}")
 
     except Exception as exc:
-        logger.warning(f"Failed to enqueue email notification: {exc}")
+        logger.error(f"❌ Email notification failed: {exc}")
+        logger.debug(f"Email details - type: {email_type}, recipient: {booking_data.get('customer_email')}")
         # Don't raise - email is optional, shouldn't block booking
+        # Note: Booking operation completed successfully, email delivery only failed
 
 
 # ============================================================================
