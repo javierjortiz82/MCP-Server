@@ -23,13 +23,13 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from config.settings import settings
 from config.booking_constants import (
     BookingStatus,
     EmailNotificationType,
     ServiceType,
-    get_timezone_offset,
 )
 from utils.db import fetchall, fetchone
 from utils.logger import setup_logging
@@ -105,43 +105,34 @@ def _get_calendar_client() -> Any | None:
 
 
 def _format_datetime_iso(booking_date: str, booking_time: str) -> str:
-    """Format booking date and time to ISO 8601 string.
+    """Format booking date and time to ISO 8601 string with proper timezone.
+
+    Uses zoneinfo for DST-aware timezone handling.
 
     Args:
         booking_date: Date in YYYY-MM-DD format.
         booking_time: Time in HH:MM format.
 
     Returns:
-        ISO 8601 datetime string with timezone.
+        ISO 8601 datetime string with timezone (DST-aware).
 
     Example:
         >>> _format_datetime_iso("2025-10-12", "15:00")
-        "2025-10-12T15:00:00-05:00"
+        "2025-10-12T15:00:00-05:00"  # or -04:00 if DST
     """
-    # Combine date and time
+    # Parse date and time string
     dt_str = f"{booking_date}T{booking_time}:00"
+    dt_naive = datetime.fromisoformat(dt_str)  # Validates format
 
-    # Validate datetime format
-    _ = datetime.fromisoformat(dt_str)  # Validates format, raises ValueError if invalid
+    # Get timezone from settings
+    tz = ZoneInfo(settings.GOOGLE_CALENDAR_TIMEZONE)
 
-    # Add timezone offset (simplified - should use timezone library in production)
-    # For now, assume timezone from settings (e.g., America/New_York = UTC-5 or UTC-4)
-    # In production, use pytz or zoneinfo for proper timezone handling
-    return f"{dt_str}{_get_timezone_offset()}"
+    # Localize naive datetime to configured timezone
+    # This automatically handles DST transitions
+    dt_aware = dt_naive.replace(tzinfo=tz)
 
-
-def _get_timezone_offset() -> str:
-    """Get timezone offset string for current timezone.
-
-    Returns:
-        Timezone offset string (e.g., "-05:00", "+01:00").
-
-    Note:
-        Timezone offsets are centralized in config/booking_constants.py.
-        This is a simplified implementation. In production,
-        use proper timezone library (pytz, zoneinfo).
-    """
-    return get_timezone_offset(settings.GOOGLE_CALENDAR_TIMEZONE)
+    # Return ISO 8601 string (automatically includes correct offset)
+    return dt_aware.isoformat()
 
 
 def _enqueue_email(
@@ -721,8 +712,9 @@ def get_available_slots(
     """
     logger.info(f"Getting available slots for {service_type} on {date}")
 
-    # Get current datetime for filtering past times
-    now = datetime.now()
+    # Get current datetime for filtering past times (timezone-aware)
+    tz = ZoneInfo(settings.GOOGLE_CALENDAR_TIMEZONE)
+    now = datetime.now(tz)
     current_date = now.date()
     current_datetime = now
     min_advance_minutes = settings.BOOKING_MIN_ADVANCE_MINUTES
@@ -932,9 +924,9 @@ def list_customer_bookings(
 
         bookings = fetchall(query, (customer_email,))
 
-        # Get current datetime for past/future filtering
-        from datetime import datetime, date as date_type, time as time_type
-        now = datetime.now()
+        # Get current datetime for past/future filtering (timezone-aware)
+        tz = ZoneInfo(settings.GOOGLE_CALENDAR_TIMEZONE)
+        now = datetime.now(tz)
         current_date = now.date()
         current_time = now.time()
 
