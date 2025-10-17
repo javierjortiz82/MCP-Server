@@ -758,13 +758,20 @@ class BaseAgent(ABC):
             # Build conversation contents (uses template method pattern)
             contents = self._build_contents(query, include_history, **kwargs)
 
-            self.logger.debug(f"Generating with {len(self.mcp_tools)} tools available")
+            # Build system prompt using language context (kwargs contains user_lang)
+            kwargs['user_lang'] = self.language
+            system_instruction = self.get_system_prompt(**kwargs)
 
-            # Generate response (tools are included in generation_config)
+            self.logger.debug(f"Generating with {len(self.mcp_tools)} tools available")
+            self.logger.debug(f"Language: {self.language}, System instruction length: {len(system_instruction)}")
+
+            # Generate response with system_instruction (following Google Gemini best practices)
+            # This ensures language context is properly applied to Gemini's understanding
             response = await self.client.aio.models.generate_content(
                 model=self.model_name,
                 contents=contents,  # type: ignore[arg-type]
                 config=self.generation_config,
+                system_instruction=system_instruction,
             )
 
             self.logger.debug("Response generated successfully")
@@ -846,11 +853,14 @@ class BaseAgent(ABC):
         """Build conversation contents for Gemini API.
 
         This method constructs the conversation context that will be sent to
-        Gemini. It follows this structure:
-        1. System prompt (agent instructions)
-        2. Model acknowledgment (establishes agent role)
-        3. Conversation history (previous turns, if include_history=True)
-        4. Current user query
+        Gemini. IMPORTANT: System prompt is NO LONGER included here. It's passed
+        via system_instruction parameter in generate_content() to follow Google
+        Gemini API best practices for multilingual support.
+
+        This method builds:
+        1. Model acknowledgment (establishes agent role)
+        2. Conversation history (previous turns, if include_history=True)
+        3. Current user query
 
         Subclasses can override this method to customize the conversation
         structure (e.g., different acknowledgment message, additional context).
@@ -864,19 +874,11 @@ class BaseAgent(ABC):
             List of Content objects representing the conversation.
 
         Note:
-            This is a template method that can be overridden by subclasses
-            to customize conversation structure while maintaining consistency.
+            - System prompt now goes ONLY in system_instruction parameter
+            - This is a template method that can be overridden by subclasses
+            - Supports multilingual responses via system_instruction
         """
         contents = []
-
-        # Pass language to get_system_prompt via kwargs
-        kwargs['user_lang'] = self.language
-
-        # Add system prompt (agent-specific)
-        system_context = self.get_system_prompt(**kwargs)
-        contents.append(
-            types.Content(role="user", parts=[types.Part(text=system_context)])
-        )
 
         # Add model acknowledgment (establishes agent role) - language-aware
         if self.language == "en":

@@ -41,6 +41,18 @@ from gemini_agent.base_agent import BaseAgent
 from gemini_agent.config.booking_agent_settings import booking_agent_settings
 from multi_agent.prompt_manager import PromptManager
 
+# Import language context for MCP tool execution
+mcp_server_path = Path(__file__).parent.parent.parent.parent / "mcp_server"
+if str(mcp_server_path) not in sys.path:
+    sys.path.insert(0, str(mcp_server_path))
+
+try:
+    from utils.language_context import set_current_language
+    LANGUAGE_CONTEXT_AVAILABLE = True
+except ImportError:
+    LANGUAGE_CONTEXT_AVAILABLE = False
+    set_current_language = None  # type: ignore[assignment]
+
 # Import client_mcp utilities for function calling
 client_mcp_path = Path(__file__).parent.parent.parent.parent / "client_mcp"
 if str(client_mcp_path) not in sys.path:
@@ -256,11 +268,17 @@ class BookingAgent(BaseAgent):
                     f"(~{estimated_tokens} tokens, threshold: {booking_agent_settings.BOOKING_MAX_CONTENT_SIZE_CHARS})"
                 )
 
-            # Generate initial response
+            # Build system prompt using language context (following Google Gemini best practices)
+            kwargs['user_lang'] = self.language
+            system_instruction = self.get_system_prompt(**kwargs)
+            self.logger.debug(f"Language: {self.language}, System instruction length: {len(system_instruction)}")
+
+            # Generate initial response with system_instruction parameter
             response = await self.client.aio.models.generate_content(
                 model=self.model_name,
                 contents=contents,  # type: ignore[arg-type]
                 config=self.generation_config,
+                system_instruction=system_instruction,
             )
 
             # DEBUG: Log response details for diagnosis
@@ -388,11 +406,13 @@ class BookingAgent(BaseAgent):
             # Add function response parts (user role)
             contents.append(types.Content(role="user", parts=function_response_parts))
 
-            # Generate next response
+            # Generate next response with system_instruction parameter
+            # (maintain language context through function calling loop)
             response = await self.client.aio.models.generate_content(
                 model=self.model_name,
                 contents=contents,  # type: ignore[arg-type]
                 config=self.generation_config,
+                system_instruction=system_instruction,
             )
 
         # Exhausted iterations
@@ -456,7 +476,10 @@ class BookingAgent(BaseAgent):
         return function_response_parts
 
     async def _execute_tool(self, tool_name: str, args: dict) -> Any:
-        """Execute a single tool with proper error handling.
+        """Execute a single tool with proper error handling and language context.
+
+        Propagates the agent's language context to MCP tools so responses
+        are in the correct language (English or Spanish).
 
         Args:
             tool_name: Tool name to execute.
@@ -471,7 +494,12 @@ class BookingAgent(BaseAgent):
         if not self.mcp_client:
             raise RuntimeError("No MCP client available for tool execution")
 
-        # Execute tool via MCP
+        # Propagate language context to MCP tools (CRITICAL for multilingual support)
+        if LANGUAGE_CONTEXT_AVAILABLE and set_current_language:
+            set_current_language(self.language)
+            self.logger.debug(f"Set MCP language context to: {self.language}")
+
+        # Execute tool via MCP (MCP handlers will use the language context)
         result = await self.mcp_client.call_tool(tool_name, args)
         return result
 
