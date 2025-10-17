@@ -145,16 +145,37 @@ class EmailWorker:
 
             # Render template if template_context provided
             if email.template_context:
+                logger.debug(
+                    f"📄 Rendering template for email type: {email.type}, "
+                    f"context keys: {list(email.template_context.keys())}"
+                )
                 body_html = self.template_renderer.render_html(
                     EmailType(email.type), email.template_context
                 )
                 body_text = self.template_renderer.render_text(
                     EmailType(email.type), email.template_context
                 )
+                logger.debug(
+                    f"✅ Template rendered successfully - "
+                    f"HTML size: {len(body_html)} bytes, "
+                    f"Text size: {len(body_text) if body_text else 0} bytes"
+                )
             else:
                 # Use pre-rendered content from queue
+                logger.debug(
+                    f"Using pre-rendered content from queue - "
+                    f"HTML size: {len(email.body_html)} bytes, "
+                    f"Text size: {len(email.body_text) if email.body_text else 0} bytes"
+                )
                 body_html = email.body_html
                 body_text = email.body_text
+
+                # Warn if body_html is empty and no template_context
+                if not body_html.strip():
+                    logger.warning(
+                        f"⚠️ Email #{email.id} has empty body_html and no template_context! "
+                        f"Recipient will receive empty email."
+                    )
 
             # Send email via SMTP
             self.smtp_client.send_email(

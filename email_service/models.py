@@ -78,7 +78,7 @@ class EmailCreateRequest(BaseModel):
     recipient_email: EmailStr
     recipient_name: str | None = None
     subject: str = Field(..., max_length=500, min_length=1)
-    body_html: str = Field(..., min_length=10)
+    body_html: str = Field(default="", min_length=0, max_length=1000000)
     body_text: str | None = None
     booking_id: int | None = None
     template_context: dict[str, Any] | None = None
@@ -92,6 +92,25 @@ class EmailCreateRequest(BaseModel):
         if not v.strip():
             raise ValueError("Subject cannot be empty")
         return v.strip()
+
+    @field_validator("body_html")
+    @classmethod
+    def body_html_or_template_required(cls, v: str, info) -> str:
+        """Validate that either body_html or template_context is provided.
+
+        If body_html is empty, template_context must be present for worker to render.
+        This allows fire-and-forget template rendering without pre-rendering HTML.
+        """
+        # Get template_context from the data being validated
+        template_context = info.data.get("template_context")
+
+        # Either body_html must have content OR template_context must be provided
+        if not v.strip() and not template_context:
+            raise ValueError(
+                "Either body_html or template_context must be provided. "
+                "If body_html is empty, template_context will be used for rendering."
+            )
+        return v
 
 
 class EmailTemplateContext(BaseModel):
