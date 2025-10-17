@@ -57,12 +57,16 @@ try:
     if str(mcp_server_lang_path) not in sys.path:
         sys.path.insert(0, str(mcp_server_lang_path))
     from utils.language_context import set_current_language  # noqa: E402
+    from utils.language_detector import detect_language_from_query  # noqa: E402
     LANGUAGE_CONTEXT_AVAILABLE = True
 except ImportError:
     LANGUAGE_CONTEXT_AVAILABLE = False
     def set_current_language(lang: str) -> None:  # noqa: F811
         """No-op when language context not available."""
         pass
+    def detect_language_from_query(query: str) -> str:  # noqa: F811
+        """Fallback language detection - returns default Spanish."""
+        return "es"
 
 # Setup logger BEFORE using it
 logger = get_logger("agent_orchestrator")
@@ -318,6 +322,21 @@ class AgentOrchestrator:
 
         logger.debug(f"Processing query in SINGLE-AGENT mode: '{query[:50]}...'")
 
+        # Detect language from query for single-agent mode
+        detected_lang = detect_language_from_query(query)
+        if detected_lang in ("es", "en"):
+            if detected_lang != self.language:
+                logger.info(
+                    f"🌐 Language detected from query: {detected_lang.upper()} "
+                    f"(was: {self.language.upper()})"
+                )
+                self.language = detected_lang
+            else:
+                logger.debug(f"🌐 Query language confirmed: {self.language.upper()}")
+
+        # Set language context for MCP handlers
+        set_current_language(self.language)
+
         # Call SalesAgent's send_message method
         response = await self.sales_bot.send_message(query)
         return response
@@ -347,6 +366,21 @@ class AgentOrchestrator:
             raise RuntimeError("AgentRouter not initialized")
 
         logger.debug(f"Processing query in MULTI-AGENT mode: '{query[:50]}...'")
+
+        # Step 0: Detect language from query if not available from memory
+        # Priority: Memory (with email) > Query detection > Default Spanish
+        if not customer_email or not self.memory_manager:
+            # No customer email or memory available - try query-based detection
+            detected_lang = detect_language_from_query(query)
+            if detected_lang in ("es", "en"):
+                if detected_lang != self.language:
+                    logger.info(
+                        f"🌐 Language detected from query: {detected_lang.upper()} "
+                        f"(was: {self.language.upper()})"
+                    )
+                    self.language = detected_lang
+                else:
+                    logger.debug(f"🌐 Query language confirmed: {self.language.upper()}")
 
         # Step 1: Classify intent with context
         try:
