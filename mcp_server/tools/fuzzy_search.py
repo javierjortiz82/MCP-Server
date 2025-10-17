@@ -17,6 +17,7 @@ Designed to complement semantic search with exact/approximate text matching.
 from config import settings
 from utils.db import fetchall
 from utils.logger import setup_logging
+from utils.i18n import t
 
 # Setup logger for fuzzy search operations
 logger = setup_logging("mcp_tools_fuzzy_search")
@@ -55,10 +56,12 @@ def fuzzy_search(
         return []
 
     if not 0.0 <= min_similarity <= 1.0:
-        raise ValueError(f"min_similarity must be between 0.0 and 1.0, got {min_similarity}")
+        error_msg = t("fuzzy_search.errors.min_similarity_invalid", lang="en", min_similarity=min_similarity)
+        raise ValueError(error_msg)
 
     if limit <= 0:
-        raise ValueError(f"limit must be positive, got {limit}")
+        error_msg = t("fuzzy_search.errors.limit_invalid", lang="en", limit=limit)
+        raise ValueError(error_msg)
 
     # Default searchable fields
     if fields is None:
@@ -67,7 +70,13 @@ def fuzzy_search(
     valid_fields = {"name", "description", "brand", "category"}
     invalid_fields = set(fields) - valid_fields
     if invalid_fields:
-        raise ValueError(f"Invalid fields: {invalid_fields}. Valid fields: {valid_fields}")
+        error_msg = t(
+            "fuzzy_search.errors.invalid_fields",
+            lang="en",
+            invalid_fields=", ".join(sorted(invalid_fields)),
+            valid_fields=", ".join(sorted(valid_fields))
+        )
+        raise ValueError(error_msg)
 
     logger.info(
         "Starting fuzzy search: query='%s', fields=%s, min_similarity=%.2f, limit=%d",

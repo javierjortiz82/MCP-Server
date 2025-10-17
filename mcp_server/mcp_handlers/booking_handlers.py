@@ -26,6 +26,8 @@ from mcp.server.fastmcp import Context
 
 from tools import bookings as booking_tool
 from utils.logger import setup_logging
+from utils.language_context import get_current_language
+from utils.mcp_i18n import mcp_info, mcp_debug, mcp_progress
 
 # Setup logger for booking handlers
 logger = setup_logging("mcp_booking_handlers")
@@ -169,10 +171,14 @@ def register_booking_tools():
             >>> print(result["booking_id"])  # 123
         """
         try:
-            await ctx.info(
-                f"Creating booking for {customer_name} on {booking_date} at {booking_time}"
+            await mcp_info(
+                ctx,
+                "booking.create.info_start",
+                customer_name=customer_name,
+                booking_date=booking_date,
+                booking_time=booking_time,
             )
-            await ctx.report_progress(0, 3, "Validating booking information")
+            await mcp_progress(ctx, 0, 3, "booking.create.progress_validate")
 
             logger.info(
                 f"create_booking called: customer={customer_name}, "
@@ -180,7 +186,7 @@ def register_booking_tools():
             )
 
             # Call business logic
-            await ctx.report_progress(1, 3, "Creating booking in database")
+            await mcp_progress(ctx, 1, 3, "booking.create.progress_create")
             result = booking_tool.create_booking(
                 customer_name=customer_name,
                 customer_email=customer_email,
@@ -192,30 +198,41 @@ def register_booking_tools():
                 notes=notes,
             )
 
-            await ctx.report_progress(2, 3, "Booking created successfully")
+            await mcp_progress(ctx, 2, 3, "booking.create.progress_success")
 
             if result.get("google_calendar_event_id"):
-                await ctx.info(
-                    f"✅ Booking created: ID={result['booking_id']}, "
-                    f"Google Calendar event created"
+                await mcp_info(
+                    ctx,
+                    "booking.create.info_with_calendar",
+                    booking_id=result['booking_id'],
                 )
             else:
-                await ctx.info(
-                    f"✅ Booking created: ID={result['booking_id']} (calendar disabled)"
+                await mcp_info(
+                    ctx,
+                    "booking.create.info_without_calendar",
+                    booking_id=result['booking_id'],
                 )
 
-            await ctx.report_progress(3, 3, "Booking confirmation ready")
+            await mcp_progress(ctx, 3, 3, "booking.create.progress_ready")
             logger.info(f"Booking created successfully: ID={result.get('booking_id')}")
 
             return result
 
         except ValueError as e:
-            await ctx.debug(f"Validation error creating booking: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.create.error_validation",
+                error=str(e),
+            )
             logger.error(f"Validation error in create_booking: {str(e)}")
             raise
 
         except Exception as e:
-            await ctx.debug(f"Error creating booking: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.create.error_general",
+                error=str(e),
+            )
             logger.exception(f"Error in create_booking: {str(e)}")
             raise
 
@@ -280,33 +297,42 @@ def register_booking_tools():
             >>> print(result["status"])  # "cancelled"
         """
         try:
-            await ctx.info(f"Cancelling booking ID: {booking_id}")
-            await ctx.report_progress(0, 2, "Validating booking")
+            await mcp_info(ctx, "booking.cancel.info_start", booking_id=booking_id)
+            await mcp_progress(ctx, 0, 2, "booking.cancel.progress_validate")
 
             logger.info(
                 f"cancel_booking called: booking_id={booking_id}, reason={cancellation_reason}"
             )
 
             # Call business logic
-            await ctx.report_progress(1, 2, "Processing cancellation")
+            await mcp_progress(ctx, 1, 2, "booking.cancel.progress_process")
             result = booking_tool.cancel_booking(
                 booking_id=booking_id,
                 cancellation_reason=cancellation_reason,
             )
 
-            await ctx.info(f"✅ Booking {booking_id} cancelled successfully")
-            await ctx.report_progress(2, 2, "Cancellation completed")
+            await mcp_info(ctx, "booking.cancel.info_success", booking_id=booking_id)
+            await mcp_progress(ctx, 2, 2, "booking.cancel.progress_complete")
             logger.info(f"Booking cancelled successfully: ID={booking_id}")
 
             return result
 
         except ValueError as e:
-            await ctx.debug(f"Validation error cancelling booking: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.cancel.error_validation",
+                error=str(e),
+            )
             logger.error(f"Validation error in cancel_booking: {str(e)}")
             raise
 
         except Exception as e:
-            await ctx.debug(f"Error cancelling booking {booking_id}: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.cancel.error_general",
+                booking_id=booking_id,
+                error=str(e),
+            )
             logger.exception(f"Error in cancel_booking: {str(e)}")
             raise
 
@@ -377,61 +403,84 @@ def register_booking_tools():
             >>> print(result["new_datetime"])  # "2025-10-20T16:00:00-05:00"
         """
         try:
-            await ctx.info(
-                f"Rescheduling booking ID: {booking_id} to {new_date} at {new_time}"
+            await mcp_info(
+                ctx,
+                "booking.reschedule.info_start",
+                booking_id=booking_id,
+                new_date=new_date,
+                new_time=new_time,
             )
-            await ctx.report_progress(0, 4, "Validating booking status")
+            await mcp_progress(ctx, 0, 4, "booking.reschedule.progress_validate_status")
 
             logger.info(
                 f"reschedule_booking called: booking_id={booking_id}, new_date={new_date}, new_time={new_time}"
             )
 
             # First, fetch booking to check status (defensive validation)
-            await ctx.report_progress(1, 4, "Fetching booking details")
+            await mcp_progress(ctx, 1, 4, "booking.reschedule.progress_fetch")
             booking = booking_tool.get_booking_by_id(booking_id)
 
             if not booking:
-                error_msg = f"Booking {booking_id} not found"
-                await ctx.debug(error_msg)
-                logger.error(error_msg)
-                raise ValueError(error_msg)
+                await mcp_debug(
+                    ctx,
+                    "booking.reschedule.error_not_found",
+                    booking_id=booking_id,
+                )
+                logger.error(f"Booking {booking_id} not found")
+                raise ValueError(f"Booking {booking_id} not found")
 
             # Check if booking is in a valid state for rescheduling
             current_status = booking.get("status")
             if current_status in ("cancelled", "completed", "no_show"):
                 error_msg = f"Cannot reschedule {current_status} booking (ID: {booking_id})"
-                await ctx.debug(error_msg)
+                await mcp_debug(ctx, "booking.reschedule.error_not_found", booking_id=booking_id)
                 logger.error(error_msg)
                 raise ValueError(error_msg)
 
-            await ctx.info(
-                f"Booking status validated: {current_status} (customer: {booking.get('customer_name')})"
+            await mcp_info(
+                ctx,
+                "booking.reschedule.info_status_validated",
+                status=current_status,
+                customer_name=booking.get('customer_name', 'Unknown'),
             )
 
             # Call business logic
-            await ctx.report_progress(2, 4, "Checking new slot availability")
+            await mcp_progress(ctx, 2, 4, "booking.reschedule.progress_check_availability")
             result = booking_tool.reschedule_booking(
                 booking_id=booking_id,
                 new_date=new_date,
                 new_time=new_time,
             )
 
-            await ctx.report_progress(3, 4, "Updating booking and calendar")
-            await ctx.info(
-                f"✅ Booking {booking_id} rescheduled to {new_date} at {new_time}"
+            await mcp_progress(ctx, 3, 4, "booking.reschedule.progress_update")
+            await mcp_info(
+                ctx,
+                "booking.reschedule.info_success",
+                booking_id=booking_id,
+                new_date=new_date,
+                new_time=new_time,
             )
-            await ctx.report_progress(4, 4, "Reschedule completed")
+            await mcp_progress(ctx, 4, 4, "booking.reschedule.progress_complete")
             logger.info(f"Booking rescheduled successfully: ID={booking_id}")
 
             return result
 
         except ValueError as e:
-            await ctx.debug(f"Validation error rescheduling booking: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.reschedule.error_validation",
+                error=str(e),
+            )
             logger.error(f"Validation error in reschedule_booking: {str(e)}")
             raise
 
         except Exception as e:
-            await ctx.debug(f"Error rescheduling booking {booking_id}: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.reschedule.error_general",
+                booking_id=booking_id,
+                error=str(e),
+            )
             logger.exception(f"Error in reschedule_booking: {str(e)}")
             raise
 
@@ -519,21 +568,29 @@ def register_booking_tools():
             # 14:00 - 15:00
         """
         try:
-            await ctx.info(f"Checking available slots for {service_type} on {date}")
-            await ctx.report_progress(0, 2, "Querying business hours and bookings")
+            await mcp_info(
+                ctx,
+                "booking.availability.info_start",
+                service_type=service_type,
+                date=date,
+            )
+            await mcp_progress(ctx, 0, 2, "booking.availability.progress_query")
 
+            # Get current language from context (set by AgentOrchestrator)
+            user_lang = get_current_language()
             logger.info(
-                f"get_available_slots called: service={service_type}, date={date}, duration={duration_minutes}"
+                f"get_available_slots called: service={service_type}, date={date}, duration={duration_minutes}, lang={user_lang}"
             )
 
-            # Call business logic
+            # Call business logic with language parameter
             result = booking_tool.get_available_slots(
                 service_type=service_type,
                 date=date,
                 duration_minutes=duration_minutes,
+                user_lang=user_lang,
             )
 
-            await ctx.report_progress(1, 2, "Calculating available time slots")
+            await mcp_progress(ctx, 1, 2, "booking.availability.progress_calculate")
 
             # Filter available slots with spacing logic (UX improvement)
             # This prevents showing overlapping slots (e.g., 09:00, 09:30 for 120-min service)
@@ -574,8 +631,19 @@ def register_booking_tools():
             result["count"] = len(spaced_slots)
 
             slot_count = len(spaced_slots)
-            await ctx.info(f"✅ Found {slot_count} available slots on {date}")
-            await ctx.report_progress(2, 2, f"Found {slot_count} available slots")
+            await mcp_info(
+                ctx,
+                "booking.availability.info_success",
+                slot_count=slot_count,
+                date=date,
+            )
+            await mcp_progress(
+                ctx,
+                2,
+                2,
+                "booking.availability.progress_slots",
+                slot_count=slot_count,
+            )
             logger.info(
                 f"Available slots: {slot_count} spaced slots on {date} "
                 f"(from {len(available_slots)} available, {len(all_slots)} total)"
@@ -584,12 +652,21 @@ def register_booking_tools():
             return result
 
         except ValueError as e:
-            await ctx.debug(f"Validation error checking availability: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.availability.error_validation",
+                error=str(e),
+            )
             logger.error(f"Validation error in get_available_slots: {str(e)}")
             raise
 
         except Exception as e:
-            await ctx.debug(f"Error getting available slots for {date}: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.availability.error_general",
+                date=date,
+                error=str(e),
+            )
             logger.exception(f"Error in get_available_slots: {str(e)}")
             raise
 
@@ -655,26 +732,42 @@ def register_booking_tools():
             # María García - 2025-10-15 at 14:00
         """
         try:
-            await ctx.info(f"Fetching booking details for ID: {booking_id}")
+            await mcp_info(
+                ctx,
+                "booking.get_by_id.info_start",
+                booking_id=booking_id,
+            )
             logger.debug(f"get_booking_by_id called with booking_id={booking_id}")
 
             # Call business logic
             result = booking_tool.get_booking_by_id(booking_id=booking_id)
 
             if result:
-                await ctx.info(
-                    f"✅ Booking found: {result.get('customer_name', 'Unknown')} - "
-                    f"{result.get('booking_date')} at {result.get('booking_time')}"
+                await mcp_info(
+                    ctx,
+                    "booking.get_by_id.info_found",
+                    customer_name=result.get('customer_name', 'Unknown'),
+                    booking_date=result.get('booking_date'),
+                    booking_time=result.get('booking_time'),
                 )
                 logger.info(f"Booking found: ID={booking_id}")
             else:
-                await ctx.info(f"No booking found with ID: {booking_id}")
+                await mcp_info(
+                    ctx,
+                    "booking.get_by_id.info_not_found",
+                    booking_id=booking_id,
+                )
                 logger.warning(f"No booking found for ID: {booking_id}")
 
             return result
 
         except Exception as e:
-            await ctx.debug(f"Error fetching booking {booking_id}: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.get_by_id.error_general",
+                booking_id=booking_id,
+                error=str(e),
+            )
             logger.exception(f"Error in get_booking_by_id: {str(e)}")
             raise
 
@@ -761,7 +854,11 @@ def register_booking_tools():
             # ID: 125 - 2025-10-25
         """
         try:
-            await ctx.info(f"Listing bookings for customer: {customer_email}")
+            await mcp_info(
+                ctx,
+                "booking.list_bookings.info_start",
+                customer_email=customer_email,
+            )
             logger.debug(
                 f"list_customer_bookings called with email={customer_email}, include_cancelled={include_cancelled}"
             )
@@ -775,9 +872,12 @@ def register_booking_tools():
             booking_count = result.get("count", 0)
             active_count = result.get("active_count", 0)
 
-            await ctx.info(
-                f"✅ Found {booking_count} total bookings ({active_count} active) "
-                f"for {customer_email}"
+            await mcp_info(
+                ctx,
+                "booking.list_bookings.info_found",
+                booking_count=booking_count,
+                active_count=active_count,
+                customer_email=customer_email,
             )
             logger.info(
                 f"Bookings listed: {booking_count} total, {active_count} active for {customer_email}"
@@ -786,7 +886,12 @@ def register_booking_tools():
             return result
 
         except Exception as e:
-            await ctx.debug(f"Error listing bookings for {customer_email}: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.list_bookings.error_general",
+                customer_email=customer_email,
+                error=str(e),
+            )
             logger.exception(f"Error in list_customer_bookings: {str(e)}")
             raise
 
@@ -858,20 +963,28 @@ def register_booking_tools():
             # Demo de Producto: 45min - $0.00
         """
         try:
-            await ctx.info("Fetching available services from database")
+            await mcp_info(ctx, "booking.get_services.info_start")
             logger.info(f"get_services called with active_only={active_only}")
 
             # Call business logic
             result = booking_tool.get_services(active_only=active_only)
 
             service_count = result.get("total", 0)
-            await ctx.info(f"✅ Loaded {service_count} services from database")
+            await mcp_info(
+                ctx,
+                "booking.get_services.info_success",
+                service_count=service_count,
+            )
             logger.info(f"Services loaded: {service_count} services")
 
             return result
 
         except Exception as e:
-            await ctx.debug(f"Error fetching services: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.get_services.error_general",
+                error=str(e),
+            )
             logger.exception(f"Error in get_services: {str(e)}")
             raise
 
@@ -931,19 +1044,27 @@ def register_booking_tools():
             # ...
         """
         try:
-            await ctx.info("Fetching business hours from database")
+            await mcp_info(ctx, "booking.get_hours.info_start")
             logger.info("get_business_hours called")
 
             # Call business logic
             result = booking_tool.get_business_hours()
 
             days_count = result.get("days_count", 0)
-            await ctx.info(f"✅ Loaded business hours for {days_count} days")
+            await mcp_info(
+                ctx,
+                "booking.get_hours.info_success",
+                days_count=days_count,
+            )
             logger.info(f"Business hours loaded: {days_count} days")
 
             return result
 
         except Exception as e:
-            await ctx.debug(f"Error fetching business hours: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.get_hours.error_general",
+                error=str(e),
+            )
             logger.exception(f"Error in get_business_hours: {str(e)}")
             raise

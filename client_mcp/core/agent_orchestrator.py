@@ -51,6 +51,19 @@ from client_mcp.config.settings import settings  # noqa: E402
 from client_mcp.core.mcp_connector import MCPConnector  # noqa: E402
 from client_mcp.utils.logger import get_logger  # noqa: E402
 
+# Import language context for setting language in MCP handlers
+try:
+    mcp_server_lang_path = Path(__file__).parent.parent.parent / "mcp_server"
+    if str(mcp_server_lang_path) not in sys.path:
+        sys.path.insert(0, str(mcp_server_lang_path))
+    from utils.language_context import set_current_language  # noqa: E402
+    LANGUAGE_CONTEXT_AVAILABLE = True
+except ImportError:
+    LANGUAGE_CONTEXT_AVAILABLE = False
+    def set_current_language(lang: str) -> None:  # noqa: F811
+        """No-op when language context not available."""
+        pass
+
 # Setup logger BEFORE using it
 logger = get_logger("agent_orchestrator")
 
@@ -131,6 +144,9 @@ class AgentOrchestrator:
         self.session_id: str | None = None
         self.customer_email: str | None = None
 
+        # Language preference (es or en, default: es)
+        self.language: str = "es"
+
         logger.info(
             f"AgentOrchestrator initialized - "
             f"Routing: {'ENABLED' if self.routing_enabled else 'DISABLED (single-agent mode)'}"
@@ -161,6 +177,25 @@ class AgentOrchestrator:
                         customer_email=customer_email
                     )
                     logger.info(f"✅ Memory session active: {self.session_id}")
+
+                    # Detect user's language preference from memory
+                    try:
+                        detected_language = (
+                            self.memory_manager.get_user_preferred_language(
+                                customer_email=customer_email, default_language="es"
+                            )
+                        )
+                        if detected_language in ("es", "en"):
+                            self.language = detected_language
+                            logger.info(
+                                f"🌐 User language detected: {self.language.upper()}"
+                            )
+                    except Exception as lang_error:
+                        logger.debug(
+                            f"Could not detect user language: {lang_error}, using default 'es'"
+                        )
+                        self.language = "es"
+
                 except Exception as mem_error:
                     logger.warning(f"⚠️ Failed to initialize memory system: {mem_error}")
                     logger.warning(
@@ -184,6 +219,7 @@ class AgentOrchestrator:
                     "sales",
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
                 logger.info("✅ Single-agent mode initialized successfully")
 
@@ -210,6 +246,7 @@ class AgentOrchestrator:
                     "general",
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
 
                 logger.info(
@@ -616,6 +653,7 @@ class AgentOrchestrator:
                     mcp_client=self.booking_mcp_client,
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
                 logger.info(
                     f"✅ BookingAgent initialized with {len(self.booking_mcp_tools)} MCP tools"
@@ -629,6 +667,7 @@ class AgentOrchestrator:
                     "booking",
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
                 logger.info("✅ BookingAgent initialized in standalone mode (no tools)")
 
@@ -644,6 +683,7 @@ class AgentOrchestrator:
                     "booking",
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
                 logger.info("✅ BookingAgent initialized in fallback mode (no tools)")
 
@@ -688,6 +728,7 @@ class AgentOrchestrator:
                     mcp_tools_raw=self.sales_mcp_tools_raw,
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
                 logger.info(
                     f"✅ SalesAgent initialized with {len(self.sales_mcp_tools)} MCP tools"
@@ -701,6 +742,7 @@ class AgentOrchestrator:
                     "sales",
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
                 logger.info("✅ SalesAgent initialized in standalone mode (no tools)")
 
@@ -716,6 +758,7 @@ class AgentOrchestrator:
                     "sales",
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
                 logger.info("✅ SalesAgent initialized in fallback mode (no tools)")
 
@@ -748,6 +791,10 @@ class AgentOrchestrator:
 
         logger.debug("Routing to SALES agent (SalesAgent)")
 
+        # Set language context for MCP handlers (sales tool calls)
+        set_current_language(self.language)
+        logger.debug(f"🌐 Language context set to: {self.language}")
+
         # Call SalesAgent's send_message method
         response = await self.sales_agent.send_message(query)
         return response
@@ -774,6 +821,10 @@ class AgentOrchestrator:
             raise RuntimeError("Booking agent not initialized")
 
         logger.debug("Routing to BOOKING agent")
+
+        # Set language context for MCP handlers (booking tool calls)
+        set_current_language(self.language)
+        logger.debug(f"🌐 Language context set to: {self.language}")
 
         # Use stored session email if not provided explicitly
         effective_email = customer_email or self.customer_email
@@ -811,6 +862,10 @@ class AgentOrchestrator:
             raise RuntimeError("General agent not initialized")
 
         logger.debug("Routing to GENERAL agent")
+
+        # Set language context for MCP handlers (general tool calls)
+        set_current_language(self.language)
+        logger.debug(f"🌐 Language context set to: {self.language}")
 
         response = await self.general_agent.generate_response(
             query,

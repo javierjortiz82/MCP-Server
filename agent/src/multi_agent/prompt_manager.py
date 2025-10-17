@@ -217,24 +217,30 @@ class PromptManager:
     # Router Agent Prompts
     # =========================================================================
 
-    def get_router_prompt(self, version: str | None = None) -> str:
+    def get_router_prompt(
+        self,
+        version: str | None = None,
+        user_lang: str = "es",
+    ) -> str:
         """Get router classification prompt.
 
         Args:
             version: Specific version (e.g., "v2.0"), or None for active version
+            user_lang: Language for prompt ("es" or "en", default: "es")
 
         Returns:
             Router classification prompt text
 
         Example:
             >>> manager = PromptManager()
-            >>> prompt = manager.get_router_prompt()
+            >>> prompt = manager.get_router_prompt(user_lang="es")
             >>> "sales" in prompt.lower()
             True
         """
         version = version or self.config["active_versions"].get("router", "v1.0")
         context = {"version": version}
-        return self._render_template("router_classification.jinja2", context)
+        template_name = self._get_template_path("router_classification.jinja2", user_lang)
+        return self._render_template(template_name, context)
 
     # =========================================================================
     # Booking Agent Prompts
@@ -247,6 +253,7 @@ class PromptManager:
         services: list[dict[str, Any]] | None = None,
         show_pre_confirmation_summary: bool | None = None,
         user_id: str | None = None,
+        user_lang: str = "es",
     ) -> str:
         """Get booking agent system prompt - MODULAR with A/B TESTING.
 
@@ -264,6 +271,7 @@ class PromptManager:
             show_pre_confirmation_summary: Whether to show pre-confirmation summary
                 (default: from A/B test if user_id provided, else False)
             user_id: Optional user ID for A/B test bucketing (deterministic assignment)
+            user_lang: Language for prompt ("es" or "en", default: "es")
 
         Returns:
             Booking agent system prompt with services data
@@ -273,7 +281,7 @@ class PromptManager:
             >>> # Without A/B testing
             >>> prompt = manager.get_booking_prompt(customer_email="maria@example.com")
             >>> # With A/B testing (user gets variant A or B)
-            >>> prompt = manager.get_booking_prompt(user_id="user_12345")
+            >>> prompt = manager.get_booking_prompt(user_id="user_12345", user_lang="en")
         """
         # Check if A/B testing should override version/parameters
         if user_id and not version:
@@ -322,11 +330,12 @@ class PromptManager:
 
         logger.debug(
             f"Rendering booking prompt: version={version}, "
-            f"show_summary={show_pre_confirmation_summary}, user_id={user_id}"
+            f"show_summary={show_pre_confirmation_summary}, user_id={user_id}, lang={user_lang}"
         )
 
         # Use new modular template structure (booking_agent/booking_agent.jinja2)
-        return self._render_template("booking_agent/booking_agent.jinja2", context)
+        template_name = self._get_template_path("booking_agent/booking_agent.jinja2", user_lang)
+        return self._render_template(template_name, context)
 
     # =========================================================================
     # General Agent Prompts
@@ -337,6 +346,7 @@ class PromptManager:
         version: str | None = None,
         response_detail_level: str | None = None,
         user_id: str | None = None,
+        user_lang: str = "es",
     ) -> str:
         """Get general agent system prompt - MODULAR with A/B TESTING.
 
@@ -352,6 +362,7 @@ class PromptManager:
             response_detail_level: Response style "detailed" or "concise"
                 (default: from A/B test if user_id provided, else "detailed")
             user_id: Optional user ID for A/B test bucketing (deterministic assignment)
+            user_lang: Language for prompt ("es" or "en", default: "es")
 
         Returns:
             General agent system prompt with business info and policies
@@ -359,9 +370,9 @@ class PromptManager:
         Example:
             >>> manager = PromptManager()
             >>> # Without A/B testing
-            >>> prompt = manager.get_general_prompt()
+            >>> prompt = manager.get_general_prompt(user_lang="es")
             >>> # With A/B testing (user gets variant A or B)
-            >>> prompt = manager.get_general_prompt(user_id="user_12345")
+            >>> prompt = manager.get_general_prompt(user_id="user_12345", user_lang="en")
         """
         # Check if A/B testing should override version/parameters
         if user_id and not version:
@@ -400,11 +411,12 @@ class PromptManager:
 
         logger.debug(
             f"Rendering general prompt: version={version}, "
-            f"detail_level={response_detail_level}, user_id={user_id}"
+            f"detail_level={response_detail_level}, user_id={user_id}, lang={user_lang}"
         )
 
         # Use new modular template structure (general_agent/general_agent.jinja2)
-        return self._render_template("general_agent/general_agent.jinja2", context)
+        template_name = self._get_template_path("general_agent/general_agent.jinja2", user_lang)
+        return self._render_template(template_name, context)
 
     # =========================================================================
     # Sales Agent Prompts
@@ -416,6 +428,7 @@ class PromptManager:
         pagination_page_size: int | None = None,
         version: str | None = None,
         user_id: str | None = None,
+        user_lang: str = "es",
     ) -> str:
         """Get sales agent system prompt (OdiseoBot) - MODULAR with A/B TESTING.
 
@@ -432,6 +445,7 @@ class PromptManager:
             pagination_page_size: Number of products per page (default: 4, or from A/B test)
             version: Specific version, or None for active version (or from A/B test)
             user_id: Optional user ID for A/B test bucketing (deterministic assignment)
+            user_lang: Language for prompt ("es" or "en", default: "es")
 
         Returns:
             Sales agent system prompt with tools context
@@ -439,9 +453,9 @@ class PromptManager:
         Example:
             >>> manager = PromptManager()
             >>> # Without A/B testing
-            >>> prompt = manager.get_sales_prompt(pagination_page_size=4)
+            >>> prompt = manager.get_sales_prompt(pagination_page_size=4, user_lang="es")
             >>> # With A/B testing (user gets variant A or B)
-            >>> prompt = manager.get_sales_prompt(user_id="user_12345")
+            >>> prompt = manager.get_sales_prompt(user_id="user_12345", user_lang="en")
         """
         # Check if A/B testing should override version/pagination
         if user_id and not version:
@@ -467,11 +481,12 @@ class PromptManager:
 
         logger.debug(
             f"Rendering sales prompt: version={version}, "
-            f"pagination={pagination_page_size}, user_id={user_id}"
+            f"pagination={pagination_page_size}, user_id={user_id}, lang={user_lang}"
         )
 
         # Use new modular template structure (sales_agent/sales_agent.jinja2)
-        return self._render_template("sales_agent/sales_agent.jinja2", context)
+        template_name = self._get_template_path("sales_agent/sales_agent.jinja2", user_lang)
+        return self._render_template(template_name, context)
 
     def _generate_tools_context(self, mcp_tools: list[Any]) -> str:
         """Generate tools context from MCP tools (standalone implementation).
@@ -816,6 +831,34 @@ class PromptManager:
             True
         """
         return self.config.get("active_versions", {})
+
+    def _get_template_path(self, template_name: str, user_lang: str) -> str:
+        """Get template path based on language.
+
+        Strategy:
+        - If user_lang == "en": Look for "base/{template_name}"
+        - If user_lang == "es" (or other): Use "{template_name}" (Spanish in root for backward compatibility)
+
+        Args:
+            template_name: Base template name (e.g., "booking_agent/booking_agent.jinja2")
+            user_lang: Language code ("es" or "en")
+
+        Returns:
+            Full template path to load
+
+        Example:
+            >>> manager = PromptManager()
+            >>> manager._get_template_path("booking_agent/booking_agent.jinja2", "en")
+            "base/booking_agent/booking_agent.jinja2"
+            >>> manager._get_template_path("booking_agent/booking_agent.jinja2", "es")
+            "booking_agent/booking_agent.jinja2"
+        """
+        if user_lang == "en":
+            # English prompts in base/ directory (best performance)
+            return f"base/{template_name}"
+        else:
+            # Spanish (and any other) in root (backward compatibility)
+            return template_name
 
     def _get_spanish_day(self, weekday: int) -> str:
         """Get Spanish day name from weekday number.
