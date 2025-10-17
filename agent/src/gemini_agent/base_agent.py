@@ -758,20 +758,40 @@ class BaseAgent(ABC):
             # Build conversation contents (uses template method pattern)
             contents = self._build_contents(query, include_history, **kwargs)
 
-            # Build system prompt using language context (kwargs contains user_lang)
+            # Build system prompt using language context
             kwargs['user_lang'] = self.language
-            system_instruction = self.get_system_prompt(**kwargs)
+            system_prompt = self.get_system_prompt(**kwargs)
 
             self.logger.debug(f"Generating with {len(self.mcp_tools)} tools available")
-            self.logger.debug(f"Language: {self.language}, System instruction length: {len(system_instruction)}")
+            self.logger.debug(f"Language: {self.language}, System prompt length: {len(system_prompt)}")
 
-            # Generate response with system_instruction (following Google Gemini best practices)
-            # This ensures language context is properly applied to Gemini's understanding
+            # Build generation config with system instruction (following Google Gemini best practices)
+            # Create a config copy with the language-specific system instruction
+            config_dict = {
+                "temperature": self.generation_config.temperature,
+                "top_k": self.generation_config.top_k,
+                "top_p": self.generation_config.top_p,
+                "max_output_tokens": self.generation_config.max_output_tokens,
+                "response_mime_type": self.generation_config.response_mime_type,
+                "system_instruction": system_prompt,
+            }
+
+            # Add tools and tool config if available
+            if self.mcp_tools:
+                config_dict["tools"] = [types.Tool(function_declarations=self.mcp_tools)]
+                config_dict["tool_config"] = types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(
+                        mode=types.FunctionCallingConfigMode.AUTO,
+                    )
+                )
+
+            dynamic_config = types.GenerateContentConfig(**config_dict)  # type: ignore[arg-type]
+
+            # Generate response with system_instruction in config
             response = await self.client.aio.models.generate_content(
                 model=self.model_name,
                 contents=contents,  # type: ignore[arg-type]
-                config=self.generation_config,
-                system_instruction=system_instruction,
+                config=dynamic_config,
             )
 
             self.logger.debug("Response generated successfully")
