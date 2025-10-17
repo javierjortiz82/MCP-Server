@@ -208,13 +208,14 @@ def _create_booking_atomic(
             )
 
             # RECHECK: Verify slot is still available after locking
+            # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
             availability_check_query = f"""
-                SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s) as available
+                SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s, %s) as available
             """
 
             cur.execute(
                 availability_check_query,
-                (booking_date, booking_time, duration_minutes),
+                (booking_date, booking_time, duration_minutes, service_type),
             )
 
             availability_result = cur.fetchone()
@@ -417,10 +418,11 @@ def create_booking(
     )
 
     # Validate availability using database function
+    # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
     try:
         availability_check = fetchone(
-            f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s) as available",
-            (booking_date, booking_time, duration_minutes),
+            f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s, %s) as available",
+            (booking_date, booking_time, duration_minutes, service_type),
         )
 
         if not availability_check or not availability_check["available"]:
@@ -709,10 +711,11 @@ def reschedule_booking(
         raise RuntimeError(f"Could not fetch booking {booking_id}: {exc}") from exc
 
     # Check availability of new slot
+    # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
     try:
         availability_check = fetchone(
-            f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s) as available",
-            (new_date, new_time, booking["duration_minutes"]),
+            f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s, %s) as available",
+            (new_date, new_time, booking["duration_minutes"], booking["service_type"]),
         )
 
         if not availability_check or not availability_check["available"]:
@@ -806,6 +809,140 @@ def reschedule_booking(
     except Exception as exc:
         logger.exception(f"Failed to reschedule booking in database: {exc}")
         raise RuntimeError(f"Failed to reschedule booking: {exc}") from exc
+
+
+def find_first_available_slots_in_range(
+    service_type: str,
+    start_date: str,  # YYYY-MM-DD
+    end_date: str,  # YYYY-MM-DD (inclusive)
+    duration_minutes: int = 60,
+) -> dict[str, Any]:
+    """Find the first available date with slots within a date range.
+
+    This helper function searches through multiple days to find the FIRST date
+    that has available time slots. Improves UX by automatically scanning when
+    user says "find availability this week" or "check next 7 days".
+
+    Args:
+        service_type: Type of service to check availability for.
+        start_date: Start date in YYYY-MM-DD format.
+        end_date: End date in YYYY-MM-DD format (inclusive).
+        duration_minutes: Required appointment duration (default: 60).
+
+    Returns:
+        Dict with first available date and slots:
+        {
+            "found": bool,
+            "first_available_date": str | None,
+            "first_available_day_name": str | None,
+            "available_slots": list | None,
+            "days_searched": int,
+            "message": str
+        }
+
+    Example:
+        >>> result = find_first_available_slots_in_range(
+        ...     "consultation", "2025-10-18", "2025-10-25", 30
+        ... )
+        >>> if result["found"]:
+        ...     print(f"Available on {result['first_available_date']}")
+        ...     print(f"Slots: {result['available_slots']}")
+    """
+    logger.info(
+        f"Searching for first available {service_type} slots between {start_date} and {end_date}"
+    )
+
+    try:
+        # Parse dates
+        start_dt = datetime.fromisoformat(start_date)
+        end_dt = datetime.fromisoformat(end_date)
+
+        if start_dt > end_dt:
+            logger.warning(f"Invalid date range: {start_date} > {end_date}")
+            raise ValueError("start_date must be before or equal to end_date")
+
+        # Days of week names
+        days_names_es = [
+            "Lunes",
+            "Martes",
+            "Miércoles",
+            "Jueves",
+            "Viernes",
+            "Sábado",
+            "Domingo",
+        ]
+
+        # Iterate through each day in range
+        current_dt = start_dt
+        days_searched = 0
+
+        while current_dt <= end_dt:
+            date_str = current_dt.strftime("%Y-%m-%d")
+            day_name_es = days_names_es[current_dt.weekday()]
+
+            logger.debug(f"Checking availability for {date_str} ({day_name_es})")
+
+            try:
+                # Get available slots for this day
+                result = get_available_slots(service_type, date_str, duration_minutes)
+
+                days_searched += 1
+
+                # Check if any slots are available
+                available = [s for s in result["available_slots"] if s["available"]]
+
+                if available:
+                    # Found available slots!
+                    available_times = [s["time"] for s in available]
+
+                    logger.info(
+                        f"✅ Found {len(available)} available slots on {date_str} ({day_name_es})"
+                    )
+
+                    # Format date as readable string
+                    date_formatted = current_dt.strftime("%d de %B de %Y").replace(
+                        "October", "octubre"
+                    ).replace(
+                        "November", "noviembre"
+                    ).replace(
+                        "December", "diciembre"
+                    )
+
+                    return {
+                        "found": True,
+                        "first_available_date": date_str,
+                        "first_available_day_name": day_name_es,
+                        "first_available_date_formatted": f"{day_name_es} {date_formatted}",
+                        "available_slots": available_times,
+                        "available_count": len(available),
+                        "days_searched": days_searched,
+                        "duration_minutes": duration_minutes,
+                        "message": f"Encontré {len(available)} horarios disponibles el {day_name_es} {date_formatted}",
+                    }
+
+            except Exception as exc:
+                logger.debug(f"Error checking {date_str}: {exc}")
+                # Continue to next day
+
+            # Move to next day
+            current_dt += timedelta(days=1)
+
+        # No available dates found in range
+        logger.info(f"No availability found between {start_date} and {end_date}")
+
+        return {
+            "found": False,
+            "first_available_date": None,
+            "first_available_day_name": None,
+            "available_slots": None,
+            "days_searched": days_searched,
+            "duration_minutes": duration_minutes,
+            "message": f"No encontré disponibilidad para {service_type} entre {start_date} y {end_date}",
+        }
+
+    except Exception as exc:
+        logger.exception(f"Error searching for available slots: {exc}")
+        raise RuntimeError(f"Could not search for available slots: {exc}") from exc
 
 
 def get_available_slots(
@@ -931,10 +1068,11 @@ def get_available_slots(
             continue
 
         # Check if slot is available using database function
+        # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
         try:
             availability = fetchone(
-                f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s) as available",
-                (date, time_str, duration_minutes),
+                f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s, %s) as available",
+                (date, time_str, duration_minutes, service_type),
             )
 
             is_available = availability["available"] if availability else False
