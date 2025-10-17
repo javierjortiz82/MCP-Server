@@ -109,6 +109,41 @@ Resultado: Bot ejecuta reschedule TWICE, confunde al usuario
 
 ---
 
+## 🟢 Fix 1.7.B: Email Serialization Error ✅ FIXED
+**Fecha:** 2025-10-17 00:45:00
+**Status:** ✅ RESOLVED
+**Commits:** `25e2e18`, `dc2ba47`
+
+### Problema
+```
+[WARNING] Failed to enqueue email notification: can't adapt type 'dict'
+```
+El `template_context` (dict) no se convertía a JSON antes de pasarlo a psycopg2.
+
+### Root Cause
+```python
+# ANTES (ROTO):
+cur.execute(..., (email_type.value, ..., template_context, ...))
+# ↑ psycopg2 ERROR: can't adapt type 'dict'
+```
+
+### Solución
+```python
+# AHORA (FIJO):
+import json
+template_json = json.dumps(template_context) if template_context else None
+cur.execute(..., (email_type.value, ..., template_json, ...))
+# ✅ JSON string se serializa correctamente
+```
+
+### Cambios
+- `email_service/queue_manager.py:16`: Agregado `import json`
+- `email_service/queue_manager.py:108`: Conversión a JSON: `json.dumps(template_context)`
+- `mcp_server/tools/bookings.py:347`: Mejorado logging a ERROR level
+- Mejor visibilidad de errores de email en logs
+
+---
+
 ## 🎉 MIGRACIÓN COMPLETA A JINJA2: Eliminación de system_prompt.txt
 
 **Fecha:** 2025-10-16
