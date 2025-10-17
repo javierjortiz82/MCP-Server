@@ -38,6 +38,7 @@ ENGLISH_WORDS = {
     "give", "day", "most", "us", "is", "was", "are", "been", "being",
     "want", "reserve", "booking", "book", "table", "restaurant",
     "help", "need", "information", "product", "search", "find", "buy", "price",
+    "hello", "hi", "yes", "yeah", "ok", "okay", "please", "thanks", "thank",
 }
 
 # Common Spanish words (most frequent)
