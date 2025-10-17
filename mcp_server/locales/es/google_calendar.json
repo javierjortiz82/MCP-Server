@@ -1,0 +1,39 @@
+{
+  "authentication": {
+    "credentials_not_found": "Credenciales de cuenta de servicio no encontradas: {path}",
+    "failed": "Error al autenticarse con Google Calendar: {error}",
+    "credentials_not_initialized": "Credenciales no inicializadas",
+    "refresh_failed": "Error al actualizar credenciales: {error}",
+    "service_not_initialized": "Servicio no inicializado"
+  },
+  "event": {
+    "create": {
+      "starting": "Creando evento: {summary} en {start_datetime}",
+      "failed": "Error al crear evento: {error}",
+      "failed_after_retry": "Error al crear evento después de eliminar asistente: {error}",
+      "success": "Evento creado exitosamente: {event_id}"
+    },
+    "update": {
+      "starting": "Actualizando evento: {event_id}",
+      "failed": "Error al actualizar evento {event_id}: {error}",
+      "success": "Evento actualizado exitosamente: {event_id}"
+    },
+    "delete": {
+      "starting": "Eliminando evento: {event_id}",
+      "failed": "Error al eliminar evento {event_id}: {error}",
+      "success": "Evento eliminado exitosamente: {event_id}"
+    },
+    "fetch": {
+      "starting": "Obteniendo evento: {event_id}",
+      "failed": "Error al obtener evento {event_id}: {error}"
+    }
+  },
+  "busy": {
+    "query_failed": "Error al consultar horarios ocupados: {error}",
+    "starting": "Consultando horarios ocupados: {start_date} a {end_date}"
+  },
+  "attendee": {
+    "add_failed_domain_delegation": "No se pudo agregar asistente {email} (probablemente debido a requisitos de delegación de dominio): {error}. Agregando a descripción en su lugar.",
+    "permission_denied_retrying": "Se recibió error 403 Prohibido al intentar agregar asistente (probablemente falta delegación de dominio). Eliminando asistente e intentando nuevamente..."
+  }
+}
