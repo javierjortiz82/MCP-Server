@@ -169,6 +169,9 @@ class EmailQueueManager:
                 conn.commit()
 
                 # Convert to Pydantic models
+                import logging
+                logger_debug = logging.getLogger("email_queue_mgr")
+
                 email_records = []
                 for row in rows:
                     # Convert row dict to regular dict to modify
@@ -178,13 +181,21 @@ class EmailQueueManager:
                     # PostgreSQL stores template_context as JSONB, but psycopg2 returns it as
                     # a string when using regular DictCursor (not RealDictCursor with json support)
                     template_context_raw = row_dict.get("template_context")
+                    logger_debug.warning(f"🔍 get_pending_emails email_id={row_dict.get('id')}, template_context_type={type(template_context_raw).__name__}, value_exists={template_context_raw is not None}")
+
                     if template_context_raw:
                         if isinstance(template_context_raw, str):
                             # Deserialize JSON string to dict
+                            logger_debug.warning(f"   → Deserializing JSON string: {len(template_context_raw)} bytes")
                             row_dict["template_context"] = json.loads(template_context_raw)
-                        # else: already a dict (RealDictCursor with json support)
+                        else:
+                            # Already a dict (RealDictCursor with json support)
+                            logger_debug.warning(f"   → Already a dict with {len(template_context_raw) if isinstance(template_context_raw, dict) else 'N/A'} keys")
                     else:
+                        logger_debug.warning(f"   → Setting template_context to None")
                         row_dict["template_context"] = None
+
+                    logger_debug.warning(f"   → Final template_context before EmailRecord: {type(row_dict.get('template_context')).__name__}")
 
                     # Create EmailRecord with deserialized template_context
                     email_records.append(
