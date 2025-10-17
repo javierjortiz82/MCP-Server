@@ -519,20 +519,31 @@ NO agregues explicaciones ni puntuación adicional."""
         except Exception as e:
             logger.exception(f"Error classifying query: {e}")
 
-            # STICKY SESSION FALLBACK: Try to maintain conversation flow
-            if context and "last_intent" in context:
+            # IMPROVED STICKY SESSION: Only use for short/ambiguous queries (likely follow-ups)
+            # For longer/complex queries, raise error and require user to repeat/clarify
+            is_short_query = len(query.strip()) < 10  # "¿y ese?" = follow-up
+            is_likely_followup = query.lower().strip() in [
+                "sí", "si", "no", "ok", "okay", "de acuerdo", "bueno", "gracias"
+            ]
+
+            if (is_short_query or is_likely_followup) and context and "last_intent" in context:
+                # Use sticky session ONLY for likely follow-up questions
                 last_intent_str = context["last_intent"]
                 logger.warning(
-                    f"⚠️ Classification failed but context available. "
-                    f"Maintaining previous intent: {last_intent_str} (sticky session)"
+                    f"⚠️ Classification failed on short/follow-up query but context available. "
+                    f"Maintaining previous intent: {last_intent_str} (sticky session for follow-ups)"
                 )
                 return Intent(last_intent_str)
 
-            # Final fallback to GENERAL only if no context
-            logger.warning(
-                "⚠️ Classification failed with no context, defaulting to GENERAL intent"
+            # For complex/unrelated queries: Don't hide the error, let it propagate
+            logger.error(
+                f"Classification failed on query: '{query[:50]}...' (length={len(query)}). "
+                f"Not using sticky session because query appears to be independent."
             )
-            return Intent.GENERAL
+            raise RuntimeError(
+                f"Failed to classify query (not a follow-up): {e}. "
+                f"Please try again with a clear query."
+            ) from e
 
     def _parse_classification(self, classification_text: str) -> Intent:
         """Parse classification text into Intent enum.
