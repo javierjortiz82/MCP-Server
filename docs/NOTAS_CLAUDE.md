@@ -4,6 +4,111 @@ Este archivo documenta todos los cambios realizados por Claude en el proyecto.
 
 ---
 
+## 🔥 PRODUCCIÓN: Issues Identificados y Soluciones (2025-10-17)
+
+### Issue 1.6: Timezone-Naive DateTime Comparison ✅ HOTFIXED
+**Fecha:** 2025-10-17 00:33:00
+**Severity:** 🔴 CRITICAL
+**Status:** ✅ FIXED
+
+**Problema:** `get_available_slots()` comparaba datetime naive con aware
+```
+TypeError: can't compare offset-naive and offset-aware datetimes
+```
+
+**Causa:** `datetime.combine(dt, open_time)` sin `tzinfo` parámetro
+
+**Solución Aplicada:**
+```python
+# Antes (ROTO):
+current_time = datetime.combine(dt, open_time)
+
+# Después (FIJO):
+current_time = datetime.combine(dt, open_time, tzinfo=tz)
+```
+
+**Commit:** `16e18a4` - fix: resolve timezone-naive datetime comparison
+
+---
+
+### Issue 1.7: Reschedule Booking UX Confusion & Email Failure
+**Fecha:** 2025-10-17 00:35:00
+**Severity:** 🟠 HIGH
+**Status:** 🔍 INVESTIGADO - REQUIERE FIXES
+
+#### Escenario Reproducido:
+```
+Usuario: "reprogramar" → "hoy" → "17" → "si" → "si" (de nuevo)
+Resultado: Bot ejecuta reschedule TWICE, confunde al usuario
+```
+
+#### Root Causes Encontradas:
+
+**1️⃣ Bug A: UX Confusa en Confirmación**
+- Bot ejecuta reschedule (00:35:29) ✅ EXITOSO
+- Muestra resumen sin indicar que fue ejecutado
+- Usuario piensa que debe confirmar de nuevo
+- Bot solicita confirmación SEGUNDA VEZ
+- Usuario confirma (00:35:38) causando reintento
+
+**2️⃣ Bug B: Email Notification Falla Silenciosamente**
+```
+[WARNING] bookings_tools:347 - Failed to enqueue email notification: can't adapt type 'dict'
+```
+- El reschedule fue exitoso
+- Email falló por error de serialización (dict → JSON)
+- Usuario no recibe confirmación por email
+- Bot no notifica del fallo
+
+**3️⃣ Bug C: Reintento Automático Sin Feedback**
+- Bot reintenta reschedule sin avisar (00:35:38)
+- No hay logs de error (¡silenciado!)
+- Usuario no sabe qué pasó
+- Mensaje final confuso: "Ya no está disponible"
+
+#### Estado Actual:
+✅ **LA CITA SE REPROGRAMÓ EXITOSAMENTE A 17:00**
+- Base de datos: ✓ Actualizada
+- Google Calendar: ✓ Actualizado
+- Disponibilidad: ✓ 14:00 liberado, 17:00 ocupado
+
+❌ **PERO LA UX NECESITA FIXES:**
+1. No mostrar confirmación como "confirma?" después de ejecutar
+2. Mostrar "✅ Confirmado!" en lugar de resumen
+3. Manejar fallo de email correctamente
+4. NO retentar automáticamente
+
+#### Fixes Requeridos:
+
+**Fix 1.7.A: Mejorar UX de Confirmación**
+- Cambiar flujo: "¿Confirmas?" → "✅ Confirmado! Cita movida a 17:00"
+- NO pedir confirmación después de ejecutar
+- Mostrar clearmente qué cambió
+
+**Fix 1.7.B: Manejar Email Failures**
+```python
+# En _enqueue_email():
+- Detectar error de type dict
+- Loguear con claridad: "[ERROR] Email failed: ... (booking will proceed)"
+- Notificar al usuario: "Cita confirmada. Nota: No pudimos enviar email"
+```
+
+**Fix 1.7.C: No Reintentar Automáticamente**
+- Si reschedule falla, mostrar ERROR claro
+- NO ejecutar de nuevo sin avisar
+- Dejar que usuario reintente explícitamente
+
+#### Logs Relevantes:
+```
+00:35:05 - get_available_slots: 14 slots (14:00 ocupado por #16)
+00:35:29 - Rescheduling #16 to 17:00 ✅ SUCCESS
+00:35:31 - Failed to enqueue email: can't adapt type 'dict' ⚠️
+00:35:38 - Rescheduling #16 to 17:00 (REINTENTO, silenciado)
+00:35:40 - get_available_slots: 15 slots (14:00 AHORA libre, 17:00 ocupado)
+```
+
+---
+
 ## 🎉 MIGRACIÓN COMPLETA A JINJA2: Eliminación de system_prompt.txt
 
 **Fecha:** 2025-10-16
