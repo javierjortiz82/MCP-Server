@@ -270,15 +270,35 @@ class BookingAgent(BaseAgent):
 
             # Build system prompt using language context (following Google Gemini best practices)
             kwargs['user_lang'] = self.language
-            system_instruction = self.get_system_prompt(**kwargs)
-            self.logger.debug(f"Language: {self.language}, System instruction length: {len(system_instruction)}")
+            system_prompt = self.get_system_prompt(**kwargs)
+            self.logger.debug(f"Language: {self.language}, System prompt length: {len(system_prompt)}")
 
-            # Generate initial response with system_instruction parameter
+            # Build generation config with system instruction
+            config_dict = {
+                "temperature": self.generation_config.temperature,
+                "top_k": self.generation_config.top_k,
+                "top_p": self.generation_config.top_p,
+                "max_output_tokens": self.generation_config.max_output_tokens,
+                "response_mime_type": self.generation_config.response_mime_type,
+                "system_instruction": system_prompt,
+            }
+
+            # Add tools and tool config if available
+            if self.mcp_tools:
+                config_dict["tools"] = [types.Tool(function_declarations=self.mcp_tools)]
+                config_dict["tool_config"] = types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(
+                        mode=types.FunctionCallingConfigMode.AUTO,
+                    )
+                )
+
+            dynamic_config = types.GenerateContentConfig(**config_dict)  # type: ignore[arg-type]
+
+            # Generate initial response with system_instruction in config
             response = await self.client.aio.models.generate_content(
                 model=self.model_name,
                 contents=contents,  # type: ignore[arg-type]
-                config=self.generation_config,
-                system_instruction=system_instruction,
+                config=dynamic_config,
             )
 
             # DEBUG: Log response details for diagnosis
@@ -306,7 +326,7 @@ class BookingAgent(BaseAgent):
 
             # Run function calling loop if tools are available
             if self.mcp_tools and self.function_call_handler:
-                final_text = await self._run_function_calling_loop(response, contents)
+                final_text = await self._run_function_calling_loop(response, contents, dynamic_config)
             else:
                 # No tools - extract text directly (fallback to BaseAgent behavior)
                 final_text = await self._extract_text_from_response(response)
@@ -348,12 +368,14 @@ class BookingAgent(BaseAgent):
         self,
         response: Any,
         contents: list[types.Content],
+        config: types.GenerateContentConfig,
     ) -> str:
         """Run function calling loop until text response or max iterations.
 
         Args:
             response: Initial Gemini API response.
             contents: Current conversation contents.
+            config: Generation config with system instruction and language context.
 
         Returns:
             Final text response.
@@ -406,13 +428,12 @@ class BookingAgent(BaseAgent):
             # Add function response parts (user role)
             contents.append(types.Content(role="user", parts=function_response_parts))
 
-            # Generate next response with system_instruction parameter
+            # Generate next response with system_instruction in config
             # (maintain language context through function calling loop)
             response = await self.client.aio.models.generate_content(
                 model=self.model_name,
                 contents=contents,  # type: ignore[arg-type]
-                config=self.generation_config,
-                system_instruction=system_instruction,
+                config=config,
             )
 
         # Exhausted iterations
