@@ -855,9 +855,12 @@ class PromptManager:
         """
         if user_lang == "en":
             # English prompts in base/ directory (best performance)
-            return f"base/{template_name}"
+            template_path = f"base/{template_name}"
+            logger.info(f"🌐 TEMPLATE_SELECTION: user_lang={user_lang} → {template_path}")
+            return template_path
         else:
             # Spanish (and any other) in root (backward compatibility)
+            logger.info(f"🌐 TEMPLATE_SELECTION: user_lang={user_lang} → {template_name}")
             return template_name
 
     def _get_spanish_day(self, weekday: int) -> str:

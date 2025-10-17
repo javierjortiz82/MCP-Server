@@ -156,6 +156,58 @@ class AgentOrchestrator:
             f"Routing: {'ENABLED' if self.routing_enabled else 'DISABLED (single-agent mode)'}"
         )
 
+    def _has_linguistic_context(self, query: str) -> bool:
+        """Check if query has enough linguistic context for language detection.
+
+        Returns False for ambiguous inputs like:
+        - Single numbers ("1", "2", "42")
+        - Very short responses without letters ("ok", "yes", "no")
+        - Queries with < 3 characters
+        - Queries that are only digits, punctuation, or whitespace
+
+        Args:
+            query: User query to check
+
+        Returns:
+            True if query has enough context for language detection
+            False if query is ambiguous and should maintain current language
+
+        Examples:
+            >>> self._has_linguistic_context("i want reserve")
+            True
+            >>> self._has_linguistic_context("2")
+            False
+            >>> self._has_linguistic_context("ok")
+            False
+            >>> self._has_linguistic_context("Technical Support")
+            True
+        """
+        if not query or len(query.strip()) < 2:
+            return False
+
+        # Remove whitespace and check if it's only digits/punctuation
+        cleaned = query.strip()
+
+        # If query is purely numeric, it's ambiguous
+        if cleaned.isdigit():
+            return False
+
+        # Remove punctuation and check if we have at least some letters
+        import re
+        letters_only = re.sub(r'[^a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]', '', cleaned)
+
+        # Need at least 3 letters to have linguistic context
+        # This filters out "ok", "no", "si", etc. which are ambiguous
+        if len(letters_only) < 3:
+            return False
+
+        # If we have at least 3 letters and at least one word, we have context
+        words = cleaned.split()
+        if len(words) >= 1 and len(letters_only) >= 3:
+            return True
+
+        return False
+
     async def initialize(self, customer_email: str | None = None) -> None:
         """Initialize orchestrator and agents based on feature flag.
 
@@ -322,17 +374,22 @@ class AgentOrchestrator:
 
         logger.debug(f"Processing query in SINGLE-AGENT mode: '{query[:50]}...'")
 
-        # Detect language from query for single-agent mode
-        detected_lang = detect_language_from_query(query)
-        if detected_lang in ("es", "en"):
-            if detected_lang != self.language:
-                logger.info(
-                    f"🌐 Language detected from query: {detected_lang.upper()} "
-                    f"(was: {self.language.upper()})"
-                )
-                self.language = detected_lang
-            else:
-                logger.debug(f"🌐 Query language confirmed: {self.language.upper()}")
+        # Detect language from query for single-agent mode (only if query has linguistic context)
+        if self._has_linguistic_context(query):
+            detected_lang = detect_language_from_query(query)
+            if detected_lang in ("es", "en"):
+                if detected_lang != self.language:
+                    logger.info(
+                        f"🌐 Language detected from query: {detected_lang.upper()} "
+                        f"(was: {self.language.upper()})"
+                    )
+                    self.language = detected_lang
+                else:
+                    logger.debug(f"🌐 Query language confirmed: {self.language.upper()}")
+        else:
+            logger.debug(
+                f"🌐 Query too ambiguous for detection, maintaining language: {self.language.upper()}"
+            )
 
         # Set language context for MCP handlers
         set_current_language(self.language)
@@ -370,17 +427,25 @@ class AgentOrchestrator:
         # Step 0: Detect language from query if not available from memory
         # Priority: Memory (with email) > Query detection > Default Spanish
         if not customer_email or not self.memory_manager:
-            # No customer email or memory available - try query-based detection
-            detected_lang = detect_language_from_query(query)
-            if detected_lang in ("es", "en"):
-                if detected_lang != self.language:
-                    logger.info(
-                        f"🌐 Language detected from query: {detected_lang.upper()} "
-                        f"(was: {self.language.upper()})"
-                    )
-                    self.language = detected_lang
-                else:
-                    logger.debug(f"🌐 Query language confirmed: {self.language.upper()}")
+            # Check if query has enough linguistic context for language detection
+            # Queries like "2", "ok", "yes" should maintain current language
+            if self._has_linguistic_context(query):
+                # Query has sufficient context - perform language detection
+                detected_lang = detect_language_from_query(query)
+                if detected_lang in ("es", "en"):
+                    if detected_lang != self.language:
+                        logger.info(
+                            f"🌐 Language detected from query: {detected_lang.upper()} "
+                            f"(was: {self.language.upper()})"
+                        )
+                        self.language = detected_lang
+                    else:
+                        logger.debug(f"🌐 Query language confirmed: {self.language.upper()}")
+            else:
+                # Query is ambiguous (numbers, short responses) - maintain current language
+                logger.debug(
+                    f"🌐 Query too ambiguous for detection, maintaining language: {self.language.upper()}"
+                )
 
         # Step 1: Classify intent with context
         try:
@@ -829,8 +894,8 @@ class AgentOrchestrator:
         set_current_language(self.language)
         logger.debug(f"🌐 Language context set to: {self.language}")
 
-        # Call SalesAgent's send_message method
-        response = await self.sales_agent.send_message(query)
+        # Call SalesAgent's send_message method with language parameter
+        response = await self.sales_agent.send_message(query, language=self.language)
         return response
 
     async def _route_to_booking(
@@ -872,6 +937,7 @@ class AgentOrchestrator:
             query,
             customer_email=effective_email,
             include_history=include_history,
+            language=self.language,  # Pass language to agent for dynamic template selection
         )
 
         return response
@@ -904,6 +970,7 @@ class AgentOrchestrator:
         response = await self.general_agent.generate_response(
             query,
             include_history=include_history,
+            language=self.language,  # Pass language to agent for dynamic template selection
         )
 
         return response

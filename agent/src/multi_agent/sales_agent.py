@@ -213,10 +213,11 @@ class SalesAgent(BaseAgent):
             self.logger.debug("🎨 Initializing PromptManager (Jinja2 templates)")
             self.prompt_manager_instance = PromptManager()
 
-        # Get prompt with A/B testing support
+        # Get prompt with A/B testing support and multilingual
         prompt = self.prompt_manager_instance.get_sales_prompt(
             mcp_tools=kwargs.get("mcp_tools", self.mcp_tools),
             user_id=kwargs.get("user_id", self.user_id),
+            user_lang=kwargs.get("user_lang", "es"),  # Pass language context for template selection
         )
 
         self.logger.debug(
@@ -452,7 +453,7 @@ class SalesAgent(BaseAgent):
 
         return types.GenerateContentConfig(**config_params)
 
-    async def send_message(self, user_message: str) -> str:
+    async def send_message(self, user_message: str, **kwargs) -> str:
         """Send message and get response (SalesAgent's main method).
 
         Refactored for better maintainability (was 123 lines → ~35 lines).
@@ -467,17 +468,26 @@ class SalesAgent(BaseAgent):
 
         Args:
             user_message: User's message/query.
+            **kwargs: Additional parameters including language.
 
         Returns:
             Bot's response text.
 
         Example:
             >>> response = await bot.send_message("Busco una laptop gaming")
+            >>> response = await bot.send_message("I want a gaming laptop", language="en")
 
         Raises:
             RuntimeError: If bot not initialized.
         """
         try:
+            # Update agent language if provided in kwargs (allows orchestrator to change language per-query)
+            if 'language' in kwargs:
+                new_language = kwargs['language']
+                if new_language != self.language:
+                    self.logger.info(f"🌐 Updating agent language: {self.language} → {new_language}")
+                    self.language = new_language
+
             # 1. Validate client is ready
             self._validate_client_initialized()
 

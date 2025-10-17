@@ -755,6 +755,13 @@ class BaseAgent(ABC):
         try:
             self.logger.info(f"Generating response for: '{query[:100]}...'")
 
+            # Update agent language if provided in kwargs (allows orchestrator to change language per-query)
+            if 'language' in kwargs:
+                new_language = kwargs['language']
+                if new_language != self.language:
+                    self.logger.info(f"🌐 Updating agent language: {self.language} → {new_language}")
+                    self.language = new_language
+
             # Build conversation contents (uses template method pattern)
             contents = self._build_contents(query, include_history, **kwargs)
 

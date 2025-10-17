@@ -87,9 +87,10 @@ class GeneralAgent(BaseAgent):
             self.logger.debug("Initializing PromptManager for GeneralAgent (Jinja2)")
             self._prompt_manager = PromptManager()
 
-        # Get prompt from PromptManager (supports A/B testing)
+        # Get prompt from PromptManager (supports A/B testing and multilingual)
         prompt = self._prompt_manager.get_general_prompt(
-            user_id=kwargs.get("user_id")
+            user_id=kwargs.get("user_id"),
+            user_lang=kwargs.get("user_lang", "es"),  # Pass language context for template selection
         )
         self.logger.debug(
             f"Loaded general prompt from Jinja2 ({len(prompt)} chars)"
