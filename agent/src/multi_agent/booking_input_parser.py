@@ -40,11 +40,12 @@ try:
     CLARIFICATION_THRESHOLD = settings.BOOKING_CLARIFICATION_THRESHOLD
 except (ImportError, ModuleNotFoundError):
     # Fallback to hardcoded defaults if mcp_server settings not available
-    CHOICE_CONFIDENCE_THRESHOLD = 0.6
+    # These should match the defaults in mcp_server/config/settings.py
+    CHOICE_CONFIDENCE_THRESHOLD = 0.75  # Increased from 0.6 to reduce misclassification
     PARTIAL_MATCH_CONFIDENCE = 0.95
     MIN_KEYWORD_LENGTH = 3
     FUZZY_MATCH_THRESHOLD = 0.75
-    CONFIRMATION_THRESHOLD = 0.6
+    CONFIRMATION_THRESHOLD = 0.75  # Increased from 0.6 to reduce misclassification
     CLARIFICATION_THRESHOLD = 0.6
 
 # Try to import keyword constants
@@ -75,8 +76,8 @@ class BookingChoice(Enum):
 class BookingInputParser:
     """Parser for flexible booking user responses."""
 
-    # Reschedule keywords (Spanish variants)
-    RESCHEDULE_KEYWORDS = {
+    # Spanish keywords
+    RESCHEDULE_KEYWORDS_ES = {
         "reprograma",
         "reprogramar",
         "cambiar",
@@ -88,59 +89,147 @@ class BookingInputParser:
         "otra hora",
         "nuevo horario",
         "nuevo tiempo",
-        "rescheduled",
-        "change",
-        "modify",
-        "rescheduling",
-        "reschedule",
-        "a",  # Letter option
-        "1",  # Numeric option
     }
 
-    # Cancel keywords (Spanish variants)
-    CANCEL_KEYWORDS = {
+    CANCEL_KEYWORDS_ES = {
         "cancela",
         "cancelar",
         "cancelacion",
         "borrar",
         "eliminar",
         "quitar",
-        "no deseo",  # For phrases like "no deseo ir"
-        "delete",
-        "remove",
-        "b",  # Letter option
-        "2",  # Numeric option
+        "no deseo",
     }
 
-    # Confirmation keywords (Yes/Confirm)
-    CONFIRM_KEYWORDS = {
+    CONFIRM_KEYWORDS_ES = {
         "si",
         "sí",
-        "yes",
         "confirmar",
         "confirmo",
         "aceptar",
         "acepto",
         "de acuerdo",
-        "ok",
-        "okay",
         "bueno",
         "claro",
         "adelante",
         "proceder",
     }
 
-    # Denial keywords (No/Deny)
-    DENY_KEYWORDS = {
+    DENY_KEYWORDS_ES = {
         "no",
-        "nope",
         "nada",
         "ninguno",
         "negativo",
         "rechazar",
         "rechazo",
-        "cancelar",  # In confirmation context means "no, don't proceed"
     }
+
+    # English keywords
+    RESCHEDULE_KEYWORDS_EN = {
+        "reschedule",
+        "rescheduled",
+        "change",
+        "modify",
+        "rescheduling",
+    }
+
+    CANCEL_KEYWORDS_EN = {
+        "delete",
+        "remove",
+        "cancel",
+    }
+
+    CONFIRM_KEYWORDS_EN = {
+        "yes",
+        "ok",
+        "okay",
+        "confirm",
+        "accept",
+        "agree",
+    }
+
+    DENY_KEYWORDS_EN = {
+        "no",
+        "nope",
+        "reject",
+        "deny",
+    }
+
+    # Combined keywords for backward compatibility
+    RESCHEDULE_KEYWORDS = RESCHEDULE_KEYWORDS_ES | RESCHEDULE_KEYWORDS_EN | {"a", "1"}
+    CANCEL_KEYWORDS = CANCEL_KEYWORDS_ES | CANCEL_KEYWORDS_EN | {"b", "2"}
+    CONFIRM_KEYWORDS = CONFIRM_KEYWORDS_ES | CONFIRM_KEYWORDS_EN
+    DENY_KEYWORDS = DENY_KEYWORDS_ES | DENY_KEYWORDS_EN
+
+    # Language detection indicators
+    ES_INDICATORS = {
+        "que", "de", "el", "la", "los", "las", "en", "para", "por", "con",
+        "una", "un", "unos", "unas", "mi", "mis", "tu", "tus", "su", "sus",
+        "quisiera", "quiero", "necesito", "puedo", "puede", "tengo",
+    }
+
+    # Negative keywords (words that should NOT match common keywords)
+    # Used to prevent false positives from substring matching
+    NEGATIVE_KEYWORDS = {
+        "bueno",  # Contains "no" but is a confirmation keyword
+        "bien",  # Spanish: "well/good" - should not match "no"
+        "malo",  # Spanish: "bad" - contains "no"
+        "numero",  # Contains "no"
+        "novela",  # Contains "no"
+        "noviembre",  # Contains "no"
+    }
+
+    @classmethod
+    def detect_language(cls, normalized_input: str) -> str:
+        """
+        Detect the language of the input (Spanish or English).
+
+        Uses heuristic approach: counts Spanish indicators in the input.
+        Returns 'es' for Spanish, 'en' for English.
+
+        Args:
+            normalized_input: Normalized user input
+
+        Returns:
+            'es' for Spanish, 'en' for English (default)
+        """
+        if not normalized_input:
+            return 'en'  # Default to English
+
+        words = set(normalized_input.split())
+        es_count = len(words & cls.ES_INDICATORS)
+
+        # If more than 30% of words are Spanish indicators, classify as Spanish
+        if len(words) > 0 and es_count / len(words) > 0.3:
+            return 'es'
+
+        return 'en'
+
+    @classmethod
+    def _get_language_keywords(cls, language: str) -> Tuple[set, set, set, set]:
+        """
+        Get keyword sets for the specified language.
+
+        Args:
+            language: 'es' for Spanish, 'en' for English
+
+        Returns:
+            Tuple of (reschedule_kw, cancel_kw, confirm_kw, deny_kw)
+        """
+        if language == 'es':
+            return (
+                cls.RESCHEDULE_KEYWORDS_ES | {"a", "1"},
+                cls.CANCEL_KEYWORDS_ES | {"b", "2"},
+                cls.CONFIRM_KEYWORDS_ES,
+                cls.DENY_KEYWORDS_ES,
+            )
+        else:  # 'en'
+            return (
+                cls.RESCHEDULE_KEYWORDS_EN | {"a", "1"},
+                cls.CANCEL_KEYWORDS_EN | {"b", "2"},
+                cls.CONFIRM_KEYWORDS_EN,
+                cls.DENY_KEYWORDS_EN,
+            )
 
     @classmethod
     def parse_booking_choice(cls, user_input: str) -> Tuple[BookingChoice, float]:
@@ -153,12 +242,23 @@ class BookingInputParser:
         Returns:
             Tuple of (BookingChoice, confidence_score)
             - confidence_score: 0.0 to 1.0 indicating confidence in classification
+
+        Raises:
+            ValueError: If user_input is None or empty after normalization
         """
-        if not user_input:
-            return BookingChoice.UNKNOWN, 0.0
+        if not user_input or not user_input.strip():
+            raise ValueError("parse_booking_choice: User input cannot be empty or whitespace only")
 
         # Normalize input
         normalized = cls._normalize_input(user_input)
+
+        # Validate that normalization didn't result in empty string
+        if not normalized:
+            raise ValueError(f"parse_booking_choice: Input '{user_input}' resulted in empty normalized string")
+
+        # Detect language and get language-specific keywords
+        language = cls.detect_language(normalized)
+        reschedule_kw, cancel_kw, _, _ = cls._get_language_keywords(language)
 
         # Check exact matches first (highest confidence)
         if normalized in RESCHEDULE_OPTIONS:
@@ -167,9 +267,9 @@ class BookingInputParser:
         if normalized in CANCEL_OPTIONS:
             return BookingChoice.CANCEL, 1.0
 
-        # Check keyword matches
-        reschedule_score = cls._calculate_match_score(normalized, cls.RESCHEDULE_KEYWORDS)
-        cancel_score = cls._calculate_match_score(normalized, cls.CANCEL_KEYWORDS)
+        # Check keyword matches using language-specific keywords
+        reschedule_score = cls._calculate_match_score(normalized, reschedule_kw)
+        cancel_score = cls._calculate_match_score(normalized, cancel_kw)
 
         if reschedule_score > cancel_score and reschedule_score > CHOICE_CONFIDENCE_THRESHOLD:
             return BookingChoice.RESCHEDULE, reschedule_score
@@ -197,15 +297,26 @@ class BookingInputParser:
         Returns:
             Tuple of (BookingChoice, confidence_score)
             - Confidence: 0.0 to 1.0
+
+        Raises:
+            ValueError: If user_input is None or empty after normalization
         """
-        if not user_input:
-            return BookingChoice.UNKNOWN, 0.0
+        if not user_input or not user_input.strip():
+            raise ValueError("parse_confirmation: User input cannot be empty or whitespace only")
 
         normalized = cls._normalize_input(user_input)
 
-        # Check confirmation
-        confirm_score = cls._calculate_match_score(normalized, cls.CONFIRM_KEYWORDS)
-        deny_score = cls._calculate_match_score(normalized, cls.DENY_KEYWORDS)
+        # Validate that normalization didn't result in empty string
+        if not normalized:
+            raise ValueError(f"parse_confirmation: Input '{user_input}' resulted in empty normalized string")
+
+        # Detect language and get language-specific keywords
+        language = cls.detect_language(normalized)
+        _, _, confirm_kw, deny_kw = cls._get_language_keywords(language)
+
+        # Check confirmation using language-specific keywords
+        confirm_score = cls._calculate_match_score(normalized, confirm_kw)
+        deny_score = cls._calculate_match_score(normalized, deny_kw)
 
         if confirm_score > deny_score and confirm_score > CONFIRMATION_THRESHOLD:
             return BookingChoice.CONFIRM, confirm_score
@@ -258,7 +369,8 @@ class BookingInputParser:
         """
         Calculate match score between input and keyword set using fuzzy matching.
 
-        Uses SequenceMatcher to handle typos and partial matches.
+        Uses SequenceMatcher to handle typos and partial matches with smart filtering
+        to avoid false positives from substring matching.
 
         Args:
             normalized_input: Normalized user input
@@ -268,6 +380,10 @@ class BookingInputParser:
             Match score from 0.0 to 1.0
         """
         if not normalized_input or not keywords:
+            return 0.0
+
+        # Skip if input is in negative keyword list (false positive prevention)
+        if normalized_input in cls.NEGATIVE_KEYWORDS:
             return 0.0
 
         best_score = 0.0
@@ -289,12 +405,17 @@ class BookingInputParser:
                 best_score = max(best_score, PARTIAL_MATCH_CONFIDENCE)
                 continue
 
-            # Substring match (only for multi-word keywords)
-            # For short single-word inputs, require length match to avoid matching "no" in "bueno"
-            if len(keyword) >= MIN_KEYWORD_LENGTH and len(normalized_input) >= MIN_KEYWORD_LENGTH:
-                if keyword in normalized_input or normalized_input in keyword:
-                    # For longer keywords, substring match is very confident
-                    return 1.0
+            # Substring match with improved filtering
+            # Only for keywords >= 4 chars to avoid matching short substrings like "no"
+            if (
+                len(keyword) >= 4  # Increased from MIN_KEYWORD_LENGTH (3) for safety
+                and len(normalized_input) >= 4
+                and (keyword in normalized_input or normalized_input in keyword)
+            ):
+                # Use lower confidence for substring matches (not 1.0)
+                # This prevents false positives while still recognizing partial matches
+                best_score = max(best_score, 0.9)
+                continue
 
             # Fuzzy match using SequenceMatcher
             score = SequenceMatcher(

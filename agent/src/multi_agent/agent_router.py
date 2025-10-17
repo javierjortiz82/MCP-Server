@@ -227,6 +227,50 @@ NO agregues explicaciones ni puntuación adicional."""
             logger.exception(f"Failed to initialize AgentRouter: {e}")
             raise RuntimeError(f"AgentRouter initialization failed: {e}") from e
 
+    @staticmethod
+    def _validate_memory_block(block: dict[str, Any] | Any, logger_func: Any) -> bool:
+        """Validate memory block structure and content.
+
+        Ensures memory blocks have the required structure to avoid crashes
+        when accessing dictionary keys.
+
+        Args:
+            block: Memory block to validate
+            logger_func: Logger function for warnings
+
+        Returns:
+            True if block is valid, False otherwise
+        """
+        # Type check: block must be a dictionary
+        if not isinstance(block, dict):
+            logger_func(f"Invalid memory block type: {type(block).__name__}, expected dict")
+            return False
+
+        # Required fields check
+        required_fields = {"block_label", "block_value"}
+        missing_fields = required_fields - set(block.keys())
+        if missing_fields:
+            logger_func(f"Memory block missing required fields: {missing_fields}")
+            return False
+
+        # Content type checks
+        block_label = block.get("block_label")
+        block_value = block.get("block_value")
+
+        if not isinstance(block_label, str):
+            logger_func(
+                f"block_label must be str, got {type(block_label).__name__}: {block_label}"
+            )
+            return False
+
+        if not isinstance(block_value, str):
+            logger_func(
+                f"block_value must be str, got {type(block_value).__name__}: {block_value}"
+            )
+            return False
+
+        return True
+
     def _get_memory_context(self) -> str:
         """Get memory context for classification (session + user-level).
 
@@ -281,12 +325,16 @@ NO agregues explicaciones ni puntuación adicional."""
 
                 # Add high-priority session memories (configurable limit)
                 for block in high_priority[:high_limit]:
+                    if not self._validate_memory_block(block, logger.warning):
+                        continue
                     label = block.get("block_label", "unknown")
                     value = block.get("block_value", "")
                     memory_lines.append(f"- {label}: {value[:100]}")
 
                 # Add medium-priority if space allows (configurable limit)
                 for block in medium_priority[:medium_limit]:
+                    if not self._validate_memory_block(block, logger.warning):
+                        continue
                     label = block.get("block_label", "unknown")
                     value = block.get("block_value", "")
                     memory_lines.append(f"- {label}: {value[:100]}")
@@ -307,6 +355,8 @@ NO agregues explicaciones ni puntuación adicional."""
 
                         # Take top user-level blocks (configurable limit, already sorted by priority in DB)
                         for block in user_blocks[:user_limit]:
+                            if not self._validate_memory_block(block, logger.warning):
+                                continue
                             label = block.get("block_label", "unknown")
                             value = block.get("block_value", "")
                             priority = block.get("priority", 0)
