@@ -140,6 +140,7 @@ class EmailQueueManager:
         """Get pending emails ready for delivery.
 
         Uses FOR UPDATE SKIP LOCKED to prevent race conditions.
+        Deserializes template_context from JSON string to dict for template rendering.
 
         Args:
             limit: Max emails to retrieve (default: 50).
@@ -162,14 +163,33 @@ class EmailQueueManager:
                 conn.commit()
 
                 # Convert to Pydantic models
-                return [
-                    EmailRecord(
-                        **row,
-                        created_at=datetime.now(),  # Placeholder
-                        updated_at=datetime.now(),  # Placeholder
+                email_records = []
+                for row in rows:
+                    # Convert row dict to regular dict to modify
+                    row_dict = dict(row)
+
+                    # CRITICAL FIX: Deserialize template_context from JSON string to dict
+                    # PostgreSQL stores template_context as JSONB, but psycopg2 returns it as
+                    # a string when using regular DictCursor (not RealDictCursor with json support)
+                    template_context_raw = row_dict.get("template_context")
+                    if template_context_raw:
+                        if isinstance(template_context_raw, str):
+                            # Deserialize JSON string to dict
+                            row_dict["template_context"] = json.loads(template_context_raw)
+                        # else: already a dict (RealDictCursor with json support)
+                    else:
+                        row_dict["template_context"] = None
+
+                    # Create EmailRecord with deserialized template_context
+                    email_records.append(
+                        EmailRecord(
+                            **row_dict,
+                            created_at=datetime.now(),  # Placeholder
+                            updated_at=datetime.now(),  # Placeholder
+                        )
                     )
-                    for row in rows
-                ]
+
+                return email_records
         finally:
             self._return_connection(conn)
 
