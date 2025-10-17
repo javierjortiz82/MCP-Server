@@ -776,12 +776,16 @@ def get_available_slots(
             current_time += interval
             continue
 
-        # Skip times that don't meet minimum advance requirement (only for today)
-        if dt.date() == current_date and (current_datetime + min_advance_delta) > current_time:
-            required_time = current_datetime + min_advance_delta
+        # Skip times that don't meet minimum advance requirement (applies to ALL dates)
+        # The booking time must be at least min_advance_minutes in the future
+        min_allowed_booking_time = current_datetime + min_advance_delta
+        if current_time < min_allowed_booking_time:
+            required_time = min_allowed_booking_time
             logger.debug(
-                f"Skipping {time_str} - does not meet minimum advance requirement "
-                f"(need by {required_time.strftime('%H:%M')}, current min: {min_advance_minutes} min)"
+                f"Skipping {time_str} on {date} - does not meet minimum advance requirement "
+                f"(required by: {required_time.strftime('%Y-%m-%d %H:%M')}, "
+                f"current time: {current_datetime.strftime('%Y-%m-%d %H:%M')}, "
+                f"minimum advance: {min_advance_minutes} minutes)"
             )
             current_time += interval
             continue
