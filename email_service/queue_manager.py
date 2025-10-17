@@ -13,6 +13,7 @@ Version: 1.0.0
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -103,6 +104,9 @@ class EmailQueueManager:
         conn = self._get_connection()
         try:
             with conn.cursor() as cur:
+                # Convert template_context dict to JSON string for PostgreSQL
+                template_json = json.dumps(template_context) if template_context else None
+
                 # Use SQL function from create_email_queue.sql
                 cur.execute(
                     f"""
@@ -118,7 +122,7 @@ class EmailQueueManager:
                         body_html,
                         body_text,
                         booking_id,
-                        template_context,
+                        template_json,  # ✅ FIXED: Converted to JSON string
                         scheduled_for or datetime.now(),
                         priority,
                     ),
@@ -126,6 +130,9 @@ class EmailQueueManager:
                 email_id = cur.fetchone()["enqueue_email"]
                 conn.commit()
                 return email_id
+        except Exception as exc:
+            conn.rollback()
+            raise RuntimeError(f"Failed to enqueue email: {exc}") from exc
         finally:
             self._return_connection(conn)
 
