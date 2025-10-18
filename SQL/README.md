@@ -175,81 +175,343 @@ flowchart TD
 
 ### Quick Start
 
-#### ✨ **NEW: Master Initialization Script (Recommended)**
+#### ✨ **NEW: Automated Deployment Script (Recommended)**
 
-Initialize **all database schemas** with a single command:
+Deploy the **complete database** from zero to functional with a single command:
 
 ```bash
-# Initialize all schemas (products, memory, bookings, email queue)
-python3 src/init_all_schemas.py
+cd SQL
+./deploy_database.sh
 ```
 
-This master script executes all initialization scripts in the correct dependency order:
-1. **Products schema** (`init-db.py`) - Base tables, extensions, vector search
-2. **Memory system** (`init_memory_system.py`) - Agent memory, sessions, context transfers
-3. **Bookings schema** (`init_bookings.py`) - Appointments, business hours, services
-4. **Email queue** (`init_email_queue.py`) - Email notification system
+This master deployment script handles **everything automatically**:
+1. ✅ **Validates prerequisites** (Docker, Python, PostgreSQL, .env, packages)
+2. ✅ **Deploys all schemas** (products, memory, bookings, email queue)
+3. ✅ **Populates data** (90 products with Gemini embeddings)
+4. ✅ **Creates indexes** (15 optimized indexes)
+5. ✅ **Seeds test data** (optional booking data)
+6. ✅ **Verifies deployment** (comprehensive health checks)
+7. ✅ **Provides detailed reporting** (color-coded progress)
 
-**Advanced Usage:**
+**Deployment Modes:**
 
 ```bash
-# Initialize only specific schemas
-python3 src/init_all_schemas.py --only products,memory
+# Full deployment (recommended for development)
+./deploy_database.sh
 
-# Skip specific schemas
-python3 src/init_all_schemas.py --skip email
+# Production deployment (skip test data)
+./deploy_database.sh --skip-seed
 
-# Dry run (show what would be executed)
-python3 src/init_all_schemas.py --dry-run
+# Minimal deployment (core schema + products only)
+./deploy_database.sh --only-core
 
-# Verbose output
-python3 src/init_all_schemas.py -v
+# Verification only (check existing database)
+./deploy_database.sh --verify-only
+
+# Help and options
+./deploy_database.sh --help
 ```
 
-#### Individual Schema Initialization
+#### Quick Verification
+
+Check database health after deployment:
 
 ```bash
-# 1. Initialize products schema only
+# Full verification (11 checks)
+./verify_database.sh
+
+# Quick health check only
+./verify_database.sh --quick
+
+# Detailed status report
+./verify_database.sh --report
+```
+
+#### Manual Deployment (Advanced)
+
+For manual control, you can still run individual scripts:
+
+```bash
+# 1. Initialize core schema
 python3 src/init-db.py
 
-# 2. Initialize memory system
-python3 src/init_memory_system.py
-
-# 3. Initialize bookings
-python3 src/init_bookings.py
-
-# 4. Initialize email queue
-python3 src/init_email_queue.py
-```
-
-#### Populate with Data
-
-```bash
-# Populate products with embeddings
+# 2. Populate products with embeddings
 python3 src/populate-db.py
 
-# Seed booking data (optional)
+# 3. Initialize memory system
+python3 src/init_memory_system.py
+
+# 4. Initialize bookings
+python3 src/init_bookings.py
+
+# 5. Initialize email queue
+python3 src/init_email_queue.py
+
+# 6. Seed test data (optional)
 python3 src/seed_booking_data.py
 ```
 
-### Using Shell Scripts
+### Step-by-Step Deployment Guide
+
+Complete walkthrough from **zero to functional database**:
+
+#### Step 1: Verify Docker PostgreSQL Container
 
 ```bash
-# Initialize database
-./scripts/init-db.sh
+# Navigate to DockerConfig directory
+cd /home/javort/Lab01-MCP/DockerConfig
 
-# Populate database
-./scripts/populate-db.sh
+# Check if container is running
+docker ps | grep mcp-postgres
+
+# If not running, start the container
+docker-compose up -d
+
+# Verify container is healthy
+docker logs mcp-postgres --tail 50
+```
+
+**Expected output:**
+```
+✅ Container mcp-postgres is running
+✅ PostgreSQL is ready to accept connections
+✅ Port 5434:5432 is mapped correctly
+```
+
+#### Step 2: Configure Environment Variables
+
+```bash
+# Navigate to SQL directory
+cd /home/javort/Lab01-MCP/SQL
+
+# Check if .env exists
+ls -la .env
+
+# If not, copy the example
+cp .env.example .env
+
+# Edit the configuration
+nano .env
+```
+
+**Required variables:**
+```bash
+DATABASE_URL=postgresql://mcp_user:mcp_password@localhost:5434/mcpdb
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5434
+POSTGRES_USER=mcp_user
+POSTGRES_PASSWORD=mcp_password
+POSTGRES_DB=mcpdb
+SCHEMA_NAME=test
+GOOGLE_API_KEY=your_google_api_key_here  # Get from https://aistudio.google.com/app/apikey
+EMBEDDING_MODEL=text-embedding-004
+OUTPUT_DIMENSIONALITY=1536
+BATCH_SIZE=8
+```
+
+#### Step 3: Verify Python Dependencies
+
+```bash
+# Check Python version (requires 3.10+)
+python3 --version
+
+# Install required packages
+pip install psycopg2-binary python-dotenv google-genai pgvector tenacity
+
+# Verify installation
+python3 -c "import psycopg2, dotenv, google.genai; print('✅ All packages installed')"
+```
+
+#### Step 4: Run Automated Deployment
+
+```bash
+# Ensure you're in the SQL directory
+cd /home/javort/Lab01-MCP/SQL
+
+# Make scripts executable (if not already)
+chmod +x deploy_database.sh verify_database.sh
+
+# Run full deployment
+./deploy_database.sh
+```
+
+**What happens during deployment:**
+```
+🚀 Phase 1: Prerequisites Check
+   ✅ Docker container running
+   ✅ PostgreSQL accessible on port 5434
+   ✅ .env file configured
+   ✅ Python packages installed
+
+🚀 Phase 2: Core Schema Deployment
+   ✅ Schema 'test' created
+   ✅ Extensions installed (vector, pg_trgm, unaccent, uuid-ossp)
+   ✅ Products table created
+   ✅ Pagination contexts table created
+
+🚀 Phase 3: Data Population
+   ✅ Loading 90 products from data/products.json
+   ✅ Generating embeddings via Google Gemini API
+   ✅ Batch processing (8 products per batch)
+   ✅ UPSERT operations (insert new, update existing)
+
+🚀 Phase 4: Index Creation
+   ✅ 15 indexes created
+   ✅ IVFFlat vector index (100 lists)
+   ✅ Trigram GIN indexes (fuzzy search)
+   ✅ B-Tree indexes (SKU, category, price)
+
+🚀 Phase 5: Memory System
+   ✅ Agent memory tables created
+   ✅ Conversation contexts table
+   ✅ Context transfers table
+
+🚀 Phase 6: Bookings System
+   ✅ Appointments table created
+   ✅ Business hours configuration
+   ✅ Available services table
+
+🚀 Phase 7: Email Queue System
+   ✅ Email queue table created
+   ✅ Email templates support
+
+🚀 Phase 8: Verification
+   ✅ All 90 products loaded
+   ✅ All 90 embeddings generated
+   ✅ Fuzzy search working
+   ✅ Vector search working
+
+✅ DEPLOYMENT COMPLETE!
+```
+
+#### Step 5: Verify Deployment
+
+```bash
+# Run comprehensive verification
+./verify_database.sh
+
+# Or quick check only
+./verify_database.sh --quick
+
+# Or detailed status report
+./verify_database.sh --report
+```
+
+**Expected verification output:**
+```
+╔═══════════════════════════════════════════════════════════╗
+║       Lab01-MCP Database Verification                    ║
+╚═══════════════════════════════════════════════════════════╝
+
+Running quick health checks...
+
+✅ Container running
+✅ Connection successful
+✅ Schema 'test' exists
+✅ Found 7 tables
+✅ All 90 products loaded
+✅ All 90 embeddings generated
+
+Running detailed checks...
+
+✅ All 4 extensions installed
+✅ Found 15 indexes
+✅ Found 3 functions
+✅ Fuzzy search working (12 results)
+✅ Vector search available
+
+═══════════════════════════════════════════════════════════
+  VERIFICATION SUMMARY
+═══════════════════════════════════════════════════════════
+
+✅ All checks passed! Database is healthy. 🎉
+ℹ️  Port: 5434
+ℹ️  Database: mcpdb
+ℹ️  Schema: test
+
+ℹ️  Run './verify_database.sh --report' for detailed status
+```
+
+#### Step 6: Test Database Queries
+
+```bash
+# Connect to database
+docker exec -it mcp-postgres psql -U mcp_user -d mcpdb
+
+# Test queries
+mcpdb=# SELECT COUNT(*) FROM test.products;
+ count
+-------
+    90
+(1 row)
+
+mcpdb=# SELECT COUNT(*) FROM test.products WHERE embedding IS NOT NULL;
+ count
+-------
+    90
+(1 row)
+
+mcpdb=# SELECT name, brand, price FROM test.products LIMIT 5;
+                    name                    |    brand     |  price
+--------------------------------------------+--------------+---------
+ Laptop Gaming Asus ROG Strix G15           | Asus         | 1299.99
+ Laptop HP Pavilion 15                      | HP           |  749.99
+ MacBook Air M2                             | Apple        | 1199.99
+ Dell XPS 13 Plus                           | Dell         | 1399.99
+ Lenovo ThinkPad X1 Carbon Gen 11           | Lenovo       | 1599.99
+(5 rows)
+
+mcpdb=# \dt test.*
+              List of relations
+ Schema |         Name          | Type  |   Owner
+--------+-----------------------+-------+-----------
+ test   | agent_memory          | table | mcp_user
+ test   | appointments          | table | mcp_user
+ test   | context_transfers     | table | mcp_user
+ test   | conversation_contexts | table | mcp_user
+ test   | email_queue           | table | mcp_user
+ test   | pagination_contexts   | table | mcp_user
+ test   | products              | table | mcp_user
+(7 rows)
+
+mcpdb=# \q
+```
+
+#### Step 7: Test Search Capabilities
+
+```bash
+# Test fuzzy search
+docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "
+SELECT name,
+       similarity(normalize_text(name), normalize_text('laptop')) as score
+FROM test.products
+WHERE similarity(normalize_text(name), normalize_text('laptop')) > 0.3
+ORDER BY score DESC
+LIMIT 5;"
+
+# Test vector search availability
+docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "
+SELECT COUNT(*) as products_with_vectors
+FROM test.products
+WHERE embedding IS NOT NULL;"
+
+# Test category search
+docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "
+SELECT category, COUNT(*) as count
+FROM test.products
+GROUP BY category
+ORDER BY count DESC;"
 ```
 
 ### Verify Installation
 
 ```bash
-# Check products count
+# Quick count checks
 docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "SELECT COUNT(*) FROM test.products;"
-
-# Check embeddings
 docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "SELECT COUNT(*) FROM test.products WHERE embedding IS NOT NULL;"
+
+# Or use the verification script (recommended)
+./verify_database.sh
 ```
 
 Expected output: **90 products** with embeddings
@@ -258,29 +520,44 @@ Expected output: **90 products** with embeddings
 
 ```
 SQL/
+├── deploy_database.sh         # ✨ MASTER DEPLOYMENT SCRIPT (680 lines) - NEW!
+├── verify_database.sh         # ✨ VERIFICATION SCRIPT (450 lines) - NEW!
 ├── data/
 │   └── products.json          # 90 products dataset (laptops, electronics)
 ├── src/
-│   ├── init_all_schemas.py    # ✨ MASTER SCRIPT - Initialize all schemas (NEW)
 │   ├── init-db.py             # Products schema initialization (324 lines)
+│   ├── populate-db.py         # Data population with embeddings (221 lines)
 │   ├── init_memory_system.py  # Agent memory system initialization
 │   ├── init_bookings.py       # Bookings schema initialization
 │   ├── init_email_queue.py    # Email queue system initialization
-│   ├── populate-db.py         # Data population with embeddings (221 lines)
-│   └── seed_booking_data.py   # Seed booking test data
+│   ├── seed_booking_data.py   # Seed booking test data
+│   └── migrations/            # Database migration scripts
+│       └── *.sql              # SQL migration files
 ├── scripts/
 │   ├── create_bookings_schema.sql  # Bookings SQL DDL
 │   ├── create_email_queue.sql      # Email queue SQL DDL
-│   ├── init-db.sh             # Shell wrapper for init-db.py
-│   └── populate-db.sh         # Shell wrapper for populate-db.py
+│   ├── init-db.sh             # Legacy shell wrapper
+│   └── populate-db.sh         # Legacy shell wrapper
 ├── examples/
 │   ├── README_TESTING.md      # Testing guide
 │   ├── test_pagination.sh     # Pagination test script
 │   └── test_pagination_persistence.sql  # SQL pagination tests
 ├── .env                       # Environment configuration (DO NOT commit)
 ├── .env.example               # Environment template (safe to commit)
-└── README.md                  # This file
+└── README.md                  # This comprehensive guide
 ```
+
+### Deployment Scripts Overview
+
+| Script | Lines | Purpose | Usage |
+|--------|-------|---------|-------|
+| `deploy_database.sh` | 680 | Master deployment orchestrator | `./deploy_database.sh` |
+| `verify_database.sh` | 450 | Health check and verification | `./verify_database.sh` |
+| `init-db.py` | 324 | Core schema initialization | Called by deploy script |
+| `populate-db.py` | 221 | Data population with embeddings | Called by deploy script |
+| `init_memory_system.py` | ~200 | Memory system tables | Called by deploy script |
+| `init_bookings.py` | ~180 | Bookings system tables | Called by deploy script |
+| `init_email_queue.py` | ~150 | Email queue system | Called by deploy script |
 
 ## Database Schema
 
@@ -566,7 +843,71 @@ ORDER BY total DESC;
 
 ## Troubleshooting
 
-### Error: "DATABASE_URL not found"
+### Common Issues with Automated Deployment
+
+#### ✅ Using the Verification Script
+
+Before troubleshooting manually, **always run the verification script first**:
+
+```bash
+./verify_database.sh --report
+```
+
+This provides a comprehensive diagnostic report that identifies most issues automatically.
+
+### Deployment Script Issues
+
+#### Error: "Permission denied: ./deploy_database.sh"
+
+**Cause**: Script not executable
+
+**Solution**:
+```bash
+chmod +x deploy_database.sh verify_database.sh
+./deploy_database.sh
+```
+
+#### Error: "Prerequisites check failed"
+
+**Cause**: Missing Docker, Python, or PostgreSQL container
+
+**Solution**:
+```bash
+# Check what's missing
+./deploy_database.sh --verify-only
+
+# Start PostgreSQL if needed
+cd ../DockerConfig && docker-compose up -d
+
+# Verify Python version
+python3 --version  # Must be 3.10+
+
+# Install missing packages
+pip install psycopg2-binary python-dotenv google-genai pgvector tenacity
+```
+
+#### Error: "Phase X failed" during deployment
+
+**Cause**: Specific phase encountered an error
+
+**Solution**:
+```bash
+# Check the detailed error message in the output
+# The script shows exactly which phase failed
+
+# Common fixes:
+# - Phase 1 (Prerequisites): Check .env file and Docker
+# - Phase 2 (Core Schema): Database connection issues
+# - Phase 3 (Data Population): Google API key or rate limiting
+# - Phase 4-7 (Additional Schemas): Permission or schema conflicts
+
+# Re-run deployment after fixing the issue
+./deploy_database.sh
+```
+
+### Database Connection Issues
+
+#### Error: "DATABASE_URL not found"
 
 **Cause**: Missing `.env` file or incorrect variable name
 
@@ -577,44 +918,12 @@ cp .env.example .env
 
 # Edit with your credentials
 nano .env
+
+# Verify .env contains required variables
+grep -E "DATABASE_URL|GOOGLE_API_KEY|SCHEMA_NAME" .env
 ```
 
-### Error: "GOOGLE_API_KEY not found"
-
-**Cause**: Missing or invalid Google API key
-
-**Solution**:
-1. Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
-2. Add to `.env`:
-   ```bash
-   GOOGLE_API_KEY=AIzaSy...
-   ```
-
-### Error: "Embedding response not contains embedding"
-
-**Cause**: API structure change or outdated `google-genai` package
-
-**Solution**:
-```bash
-# Update package
-pip install --upgrade google-genai
-
-# The script has automatic fallback handling
-```
-
-### Rate Limiting (429 Error)
-
-**Cause**: Too many API calls
-
-**Solution**:
-```bash
-# Reduce batch size in .env
-BATCH_SIZE=4
-
-# The script has automatic retry with exponential backoff
-```
-
-### PostgreSQL Connection Failed
+#### PostgreSQL Connection Failed
 
 **Cause**: Container not running or incorrect credentials
 
@@ -623,12 +932,253 @@ BATCH_SIZE=4
 # Check container status
 docker ps | grep mcp-postgres
 
-# Start container if needed
-cd ../DockerConfig && ./start.sh
+# If not running, start it
+cd ../DockerConfig && docker-compose up -d
+
+# Wait for PostgreSQL to be ready (10-15 seconds)
+sleep 15
 
 # Verify connection
-docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "\dt test.*"
+docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "SELECT version();"
+
+# Check logs if still failing
+docker logs mcp-postgres --tail 50
 ```
+
+#### Error: "Port 5434 already in use"
+
+**Cause**: Another service using port 5434
+
+**Solution**:
+```bash
+# Check what's using the port
+lsof -i :5434
+
+# Option 1: Stop the conflicting service
+# Option 2: Change the port in docker-compose.yml and .env
+
+# Restart PostgreSQL
+cd ../DockerConfig && docker-compose down && docker-compose up -d
+```
+
+### Google API Issues
+
+#### Error: "GOOGLE_API_KEY not found"
+
+**Cause**: Missing or invalid Google API key
+
+**Solution**:
+1. Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. Add to `.env`:
+   ```bash
+   GOOGLE_API_KEY=AIzaSy...your_key_here
+   ```
+3. Re-run deployment:
+   ```bash
+   ./deploy_database.sh
+   ```
+
+#### Error: "Embedding response not contains embedding"
+
+**Cause**: API structure change or outdated `google-genai` package
+
+**Solution**:
+```bash
+# Update package to latest version
+pip install --upgrade google-genai
+
+# Verify version
+pip show google-genai
+
+# The populate-db.py script has automatic fallback handling
+# Re-run deployment
+./deploy_database.sh
+```
+
+#### Rate Limiting (429 Error)
+
+**Cause**: Too many API calls to Google Gemini
+
+**Solution**:
+```bash
+# Option 1: Reduce batch size in .env
+nano .env
+# Change: BATCH_SIZE=4  (from 8)
+
+# Option 2: Wait and retry (script has auto-retry)
+# The deploy script automatically retries with exponential backoff
+
+# Option 3: Check your API quota
+# Visit https://aistudio.google.com/app/apikey
+```
+
+### Data and Schema Issues
+
+#### Error: "Table already exists"
+
+**Cause**: Re-running deployment on existing database
+
+**Solution**:
+```bash
+# Option 1: Drop existing schema (⚠️ DESTROYS DATA)
+docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "DROP SCHEMA test CASCADE;"
+./deploy_database.sh
+
+# Option 2: Use UPSERT behavior (populate-db.py handles this)
+# Just re-run populate script
+python3 src/populate-db.py
+
+# Option 3: Fresh start with new database
+cd ../DockerConfig
+docker-compose down -v  # ⚠️ Removes all data
+docker-compose up -d
+cd ../SQL
+./deploy_database.sh
+```
+
+#### Error: "Only X/90 products loaded"
+
+**Cause**: Incomplete data population (API errors, interruption)
+
+**Solution**:
+```bash
+# Re-run just the population phase
+python3 src/populate-db.py
+
+# Or re-deploy everything
+./deploy_database.sh
+
+# Verify with detailed report
+./verify_database.sh --report
+```
+
+#### Error: "Embeddings not generated"
+
+**Cause**: Google API key issue or network problem
+
+**Solution**:
+```bash
+# Verify API key is correct
+echo $GOOGLE_API_KEY
+
+# Test API key manually
+python3 -c "
+from dotenv import load_dotenv
+import os
+import google.genai as genai
+load_dotenv()
+genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
+print('✅ API key is valid')
+"
+
+# Re-run population with embeddings
+python3 src/populate-db.py
+```
+
+### Extension Issues
+
+#### Error: "Extension 'vector' does not exist"
+
+**Cause**: pgvector extension not installed in PostgreSQL
+
+**Solution**:
+```bash
+# Check if extension is available
+docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "SELECT * FROM pg_available_extensions WHERE name='vector';"
+
+# If not available, rebuild container with pgvector
+cd ../DockerConfig
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+# Wait for PostgreSQL to start
+sleep 15
+
+# Re-run deployment
+cd ../SQL
+./deploy_database.sh
+```
+
+### Verification Failures
+
+#### Verification shows "X/11 checks failed"
+
+**Cause**: Incomplete or failed deployment
+
+**Solution**:
+```bash
+# Get detailed report
+./verify_database.sh --report
+
+# Common fixes based on failed checks:
+# - Container not running → cd ../DockerConfig && docker-compose up -d
+# - Connection failed → Check DATABASE_URL in .env
+# - Schema missing → Re-run: python3 src/init-db.py
+# - Products missing → Re-run: python3 src/populate-db.py
+# - Embeddings missing → Check GOOGLE_API_KEY and re-run populate-db.py
+# - Indexes missing → Already created by init-db.py, check logs
+# - Functions missing → Re-run: python3 src/init-db.py
+# - Search not working → Check extensions: \dx in psql
+
+# Full re-deployment (safest option)
+./deploy_database.sh
+```
+
+### Performance Issues
+
+#### Deployment is very slow (>5 minutes)
+
+**Cause**: Rate limiting or network latency
+
+**Solution**:
+```bash
+# Check current batch size
+grep BATCH_SIZE .env
+
+# Reduce batch size to avoid rate limits
+# Edit .env: BATCH_SIZE=4
+
+# Monitor API calls during deployment
+# The script shows progress for each batch
+
+# Check network connectivity
+ping ai.google.dev
+```
+
+### Getting Help
+
+If issues persist after trying these solutions:
+
+1. **Check detailed logs**:
+   ```bash
+   # PostgreSQL logs
+   docker logs mcp-postgres --tail 100
+
+   # Deployment script output (run in verbose mode)
+   ./deploy_database.sh 2>&1 | tee deployment.log
+   ```
+
+2. **Get comprehensive status**:
+   ```bash
+   ./verify_database.sh --report > status_report.txt
+   cat status_report.txt
+   ```
+
+3. **Test individual components**:
+   ```bash
+   # Test database connection
+   python3 -c "import psycopg2; from dotenv import load_dotenv; import os; load_dotenv(); print('✅ Can import required packages')"
+
+   # Test Google API
+   python3 -c "import google.genai; print('✅ Google GenAI available')"
+   ```
+
+4. **Review environment**:
+   ```bash
+   # Check all environment variables (⚠️ be careful not to expose secrets)
+   cat .env | grep -v "PASSWORD\|API_KEY"
+   ```
 
 ## Performance
 

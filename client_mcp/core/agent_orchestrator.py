@@ -156,58 +156,6 @@ class AgentOrchestrator:
             f"Routing: {'ENABLED' if self.routing_enabled else 'DISABLED (single-agent mode)'}"
         )
 
-    def _has_linguistic_context(self, query: str) -> bool:
-        """Check if query has enough linguistic context for language detection.
-
-        Returns False for ambiguous inputs like:
-        - Single numbers ("1", "2", "42")
-        - Very short responses without letters ("ok", "yes", "no")
-        - Queries with < 3 characters
-        - Queries that are only digits, punctuation, or whitespace
-
-        Args:
-            query: User query to check
-
-        Returns:
-            True if query has enough context for language detection
-            False if query is ambiguous and should maintain current language
-
-        Examples:
-            >>> self._has_linguistic_context("i want reserve")
-            True
-            >>> self._has_linguistic_context("2")
-            False
-            >>> self._has_linguistic_context("ok")
-            False
-            >>> self._has_linguistic_context("Technical Support")
-            True
-        """
-        if not query or len(query.strip()) < 2:
-            return False
-
-        # Remove whitespace and check if it's only digits/punctuation
-        cleaned = query.strip()
-
-        # If query is purely numeric, it's ambiguous
-        if cleaned.isdigit():
-            return False
-
-        # Remove punctuation and check if we have at least some letters
-        import re
-        letters_only = re.sub(r'[^a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]', '', cleaned)
-
-        # Need at least 3 letters to have linguistic context
-        # This filters out "ok", "no", "si", etc. which are ambiguous
-        if len(letters_only) < 3:
-            return False
-
-        # If we have at least 3 letters and at least one word, we have context
-        words = cleaned.split()
-        if len(words) >= 1 and len(letters_only) >= 3:
-            return True
-
-        return False
-
     async def initialize(self, customer_email: str | None = None) -> None:
         """Initialize orchestrator and agents based on feature flag.
 
@@ -367,34 +315,24 @@ class AgentOrchestrator:
 
         Raises:
             RuntimeError: If SalesAgent not initialized.
+
+        Note:
+            Language detection is now handled automatically by Gemini via system instructions.
+            The language parameter passed during initialization is used for template selection,
+            but Gemini will automatically respond in the language of the user's query.
         """
         if not self.sales_bot:
             logger.error("SalesAgent not initialized in single-agent mode")
             raise RuntimeError("SalesAgent not initialized")
 
         logger.debug(f"Processing query in SINGLE-AGENT mode: '{query[:50]}...'")
+        logger.debug(f"🌐 Agent configured for language: {self.language.upper()} (Gemini handles auto-detection)")
 
-        # Detect language from query for single-agent mode (only if query has linguistic context)
-        if self._has_linguistic_context(query):
-            detected_lang = detect_language_from_query(query)
-            if detected_lang in ("es", "en"):
-                if detected_lang != self.language:
-                    logger.info(
-                        f"🌐 Language detected from query: {detected_lang.upper()} "
-                        f"(was: {self.language.upper()})"
-                    )
-                    self.language = detected_lang
-                else:
-                    logger.debug(f"🌐 Query language confirmed: {self.language.upper()}")
-        else:
-            logger.debug(
-                f"🌐 Query too ambiguous for detection, maintaining language: {self.language.upper()}"
-            )
-
-        # Set language context for MCP handlers
+        # Set language context for MCP handlers (for tool responses)
         set_current_language(self.language)
 
         # Call SalesAgent's send_message method
+        # Gemini will automatically respond in the language of the query
         response = await self.sales_bot.send_message(query)
         return response
 
@@ -417,35 +355,18 @@ class AgentOrchestrator:
 
         Raises:
             RuntimeError: If agents not initialized.
+
+        Note:
+            Language detection is now handled automatically by Gemini via system instructions.
+            The language parameter is used for template selection and MCP context, but Gemini
+            will automatically respond in the language of the user's query.
         """
         if not self.router:
             logger.error("AgentRouter not initialized in multi-agent mode")
             raise RuntimeError("AgentRouter not initialized")
 
         logger.debug(f"Processing query in MULTI-AGENT mode: '{query[:50]}...'")
-
-        # Step 0: Detect language from query if not available from memory
-        # Priority: Memory (with email) > Query detection > Default Spanish
-        if not customer_email or not self.memory_manager:
-            # Check if query has enough linguistic context for language detection
-            # Queries like "2", "ok", "yes" should maintain current language
-            if self._has_linguistic_context(query):
-                # Query has sufficient context - perform language detection
-                detected_lang = detect_language_from_query(query)
-                if detected_lang in ("es", "en"):
-                    if detected_lang != self.language:
-                        logger.info(
-                            f"🌐 Language detected from query: {detected_lang.upper()} "
-                            f"(was: {self.language.upper()})"
-                        )
-                        self.language = detected_lang
-                    else:
-                        logger.debug(f"🌐 Query language confirmed: {self.language.upper()}")
-            else:
-                # Query is ambiguous (numbers, short responses) - maintain current language
-                logger.debug(
-                    f"🌐 Query too ambiguous for detection, maintaining language: {self.language.upper()}"
-                )
+        logger.debug(f"🌐 Agent configured for language: {self.language.upper()} (Gemini handles auto-detection)")
 
         # Step 1: Classify intent with context
         try:
