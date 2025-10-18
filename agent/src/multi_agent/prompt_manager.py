@@ -71,6 +71,12 @@ class PromptManager:
 
     Jinja2 is MANDATORY for this system - all prompts are loaded from templates.
 
+    Note:
+        As of 2025-10-18, all templates use Gemini's automatic multilingual
+        detection. The user_lang parameter is kept for backward compatibility
+        but no longer affects template selection. All agents use templates
+        from the base/ directory with multilingual system instructions.
+
     Example:
         >>> manager = PromptManager()
         >>> prompt = manager.get_router_prompt()
@@ -224,9 +230,15 @@ class PromptManager:
     ) -> str:
         """Get router classification prompt.
 
+        Note:
+            As of 2025-10-18, user_lang is informational only. All templates use
+            Google Gemini's automatic multilingual detection. Gemini responds in
+            the language of the user's query automatically.
+
         Args:
             version: Specific version (e.g., "v2.0"), or None for active version
-            user_lang: Language for prompt ("es" or "en", default: "es")
+            user_lang: Language preference (informational only, default: "es")
+                      Template selection is no longer language-dependent.
 
         Returns:
             Router classification prompt text
@@ -260,6 +272,11 @@ class PromptManager:
         Uses modular Jinja2 template architecture with A/B testing support
         for confirmation flow optimization.
 
+        **Multilingual Support** (as of 2025-10-18):
+        All templates use Google Gemini's automatic language detection.
+        user_lang parameter is informational only - Gemini responds in the
+        language of the user's query automatically.
+
         **A/B Testing Support**: If user_id is provided and A/B testing is enabled,
         automatically selects version and confirmation flow based on active experiments
         (e.g., direct confirmation vs pre-confirmation summary).
@@ -271,7 +288,8 @@ class PromptManager:
             show_pre_confirmation_summary: Whether to show pre-confirmation summary
                 (default: from A/B test if user_id provided, else False)
             user_id: Optional user ID for A/B test bucketing (deterministic assignment)
-            user_lang: Language for prompt ("es" or "en", default: "es")
+            user_lang: Language preference (informational only, default: "es")
+                      Template selection is no longer language-dependent.
 
         Returns:
             Booking agent system prompt with services data
@@ -353,6 +371,11 @@ class PromptManager:
         Uses modular Jinja2 template architecture with A/B testing support
         for response style optimization.
 
+        **Multilingual Support** (as of 2025-10-18):
+        All templates use Google Gemini's automatic language detection.
+        user_lang parameter is informational only - Gemini responds in the
+        language of the user's query automatically.
+
         **A/B Testing Support**: If user_id is provided and A/B testing is enabled,
         automatically selects version and response style based on active experiments
         (e.g., detailed vs concise responses).
@@ -362,7 +385,8 @@ class PromptManager:
             response_detail_level: Response style "detailed" or "concise"
                 (default: from A/B test if user_id provided, else "detailed")
             user_id: Optional user ID for A/B test bucketing (deterministic assignment)
-            user_lang: Language for prompt ("es" or "en", default: "es")
+            user_lang: Language preference (informational only, default: "es")
+                      Template selection is no longer language-dependent.
 
         Returns:
             General agent system prompt with business info and policies
@@ -436,6 +460,11 @@ class PromptManager:
         practices 2025. Prompt is split into specialized modules for easier
         maintenance, versioning, and A/B testing.
 
+        **Multilingual Support** (as of 2025-10-18):
+        All templates use Google Gemini's automatic language detection.
+        user_lang parameter is informational only - Gemini responds in the
+        language of the user's query automatically.
+
         **A/B Testing Support**: If user_id is provided and A/B testing is enabled
         in prompt_versions.yaml, automatically selects version and pagination based
         on active experiments (e.g., 4 vs 6 products pagination).
@@ -445,7 +474,8 @@ class PromptManager:
             pagination_page_size: Number of products per page (default: 4, or from A/B test)
             version: Specific version, or None for active version (or from A/B test)
             user_id: Optional user ID for A/B test bucketing (deterministic assignment)
-            user_lang: Language for prompt ("es" or "en", default: "es")
+            user_lang: Language preference (informational only, default: "es")
+                      Template selection is no longer language-dependent.
 
         Returns:
             Sales agent system prompt with tools context
@@ -835,33 +865,33 @@ class PromptManager:
     def _get_template_path(self, template_name: str, user_lang: str) -> str:
         """Get template path based on language.
 
-        Strategy:
-        - If user_lang == "en": Look for "base/{template_name}"
-        - If user_lang == "es" (or other): Use "{template_name}" (Spanish in root for backward compatibility)
+        NEW STRATEGY (2025-10-18): ALWAYS use base/ templates with Gemini multilingual support.
+        Gemini automatically detects and responds in the user's language via system instructions.
+
+        .. deprecated:: 2025-10-18
+           The user_lang parameter no longer affects template selection.
+           All templates now use Gemini's automatic multilingual detection.
+           This parameter is kept for backward compatibility only.
 
         Args:
             template_name: Base template name (e.g., "booking_agent/booking_agent.jinja2")
-            user_lang: Language code ("es" or "en")
+            user_lang: Language code ("es" or "en") - informational only, not used for template selection
 
         Returns:
-            Full template path to load
+            Full template path to load (always from base/ directory)
 
         Example:
             >>> manager = PromptManager()
             >>> manager._get_template_path("booking_agent/booking_agent.jinja2", "en")
             "base/booking_agent/booking_agent.jinja2"
             >>> manager._get_template_path("booking_agent/booking_agent.jinja2", "es")
-            "booking_agent/booking_agent.jinja2"
+            "base/booking_agent/booking_agent.jinja2"  # Same! Gemini handles language automatically
         """
-        if user_lang == "en":
-            # English prompts in base/ directory (best performance)
-            template_path = f"base/{template_name}"
-            logger.info(f"🌐 TEMPLATE_SELECTION: user_lang={user_lang} → {template_path}")
-            return template_path
-        else:
-            # Spanish (and any other) in root (backward compatibility)
-            logger.info(f"🌐 TEMPLATE_SELECTION: user_lang={user_lang} → {template_name}")
-            return template_name
+        # ALWAYS use base/ templates with Google Gemini multilingual best practice
+        # Templates in base/ have the instruction: "respond in the same language as the user's query"
+        template_path = f"base/{template_name}"
+        logger.info(f"🌐 TEMPLATE_SELECTION: user_lang={user_lang} → {template_path} (Gemini handles multilingual)")
+        return template_path
 
     def _get_spanish_day(self, weekday: int) -> str:
         """Get Spanish day name from weekday number.
