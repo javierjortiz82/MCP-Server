@@ -1,21 +1,39 @@
-# SQL - Database Initialization and Population Scripts
+# Lab01-MCP Database Schema
 
-Database initialization and data population tools for Lab01-MCP PostgreSQL database with vector embeddings support.
+Professional, modular PostgreSQL database schema for Lab01-MCP multi-agent booking system with vector embeddings and memory management.
 
-## Description
+## Structure
 
-This directory contains Python scripts and SQL utilities to initialize and populate a PostgreSQL database with product data, including automatic generation of multilingual embeddings using Google Gemini AI. The database is optimized for fuzzy search, semantic search, and pagination features.
+Modular, production-ready database deployment with clear separation of concerns:
+
+```
+SQL/
+├── 00_init/                 # Database initialization (extensions, schema, permissions)
+├── 01_ddl/                  # Data Definition Language (tables)
+│   ├── bookings/            # Appointment & scheduling tables
+│   ├── email/               # Email queue system
+│   ├── memory/              # Multi-agent memory system
+│   └── utils/               # Utility tables
+├── 02_functions/            # Stored procedures & business logic
+├── 03_indexes/              # (Indexes included inline in DDL)
+├── 04_seed/                 # Optional seed data
+└── deploy.sql               # Master deployment script
+
+Legacy files archived: sql-backup/ (scripts_legacy, src_legacy, etc.)
+```
 
 ## Features
 
-- **Automated Database Initialization**: Creates schemas, tables, indexes, and functions
-- **Vector Embeddings**: Automatic generation of 1536-dimensional embeddings using Google Gemini
-- **Fuzzy Search Support**: Trigram-based search with accent and case insensitivity
-- **Pagination System**: Persistent pagination context storage for stateful sessions
-- **UPSERT Operations**: Smart insert/update of products without duplicates
-- **Batch Processing**: Configurable batch size for API calls with retry logic
-- **Multilingual Support**: Embeddings optimized for Spanish and English
-- **90 Product Dataset**: Pre-loaded with 90 realistic products (laptops, electronics, etc.)
+- **14 Tables**: Products, bookings, email queue, multi-agent memory, pagination
+- **Modular Deployment**: Execute individual files or use master `deploy.sql`
+- **Vector Search**: pgvector embeddings (1536-dim) with IVFFlat indexes
+- **Fuzzy Search**: Trigram GIN indexes for accent-insensitive search
+- **Memory System**: Session-based and user-level memory with TTL management
+- **Email Queue**: Asynchronous delivery with retry logic and priority
+- **Hybrid Scheduling**: Service-specific hours with business_hours fallback
+- **GDPR Compliant**: Soft-delete archiving and lifecycle management
+- **29 Optimized Indexes**: B-tree, GIN, GiST, IVFFlat for various patterns
+- **Production Ready**: Error handling, triggers, constraints, comprehensive functions
 
 ## Prerequisites
 
