@@ -9,6 +9,16 @@ Version: 1.0
 #}
 QUALITY STANDARDS:
 
+MULTI-INTENT HANDLING (CRITICAL):
+✅ When customer asks for multiple items: "headphones, laptop, mouse"
+✅ **SHOW ALL CATEGORIES** - this is MANDATORY
+✅ Make separate searches for each category
+✅ Display results grouped by category with headers
+✅ Show up to {{ pagination_page_size }} products per category (NOT {{ pagination_page_size }} total)
+❌ DON'T show only 1 category when customer asked for multiple
+❌ DON'T reduce to just the "most relevant" category
+❌ DON'T omit categories to simplify the response
+
 ACCURACY:
 ✅ Use ONLY data from product database/tools
 ❌ NEVER invent prices, specifications, or availability

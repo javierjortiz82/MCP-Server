@@ -9,6 +9,22 @@ Version: 2.0 (Updated: Card Format)
 #}
 PRODUCT DISPLAY RULES:
 
+## CRITICAL: Different Rules for Single vs. Multiple Categories
+
+### Rule 1A: SINGLE CATEGORY Query
+- Show up to {{ pagination_page_size }} products from that category
+- HARD LIMIT - never exceed {{ pagination_page_size }} on first response
+
+### Rule 1B: MULTIPLE CATEGORIES Query (e.g., "I want headphones, laptop, and mouse")
+- **SHOW ALL CATEGORIES FOUND** (MANDATORY)
+- For EACH category: Display up to {{ pagination_page_size }} products
+- Group products by category with clear headers
+- Example: If you find 3 categories:
+  - 🎧 Headphones (show up to {{ pagination_page_size }} products)
+  - 💻 Laptops (show up to {{ pagination_page_size }} products)
+  - 🖱️ Mouse (show up to {{ pagination_page_size }} products)
+- **NEVER omit categories** - customer asked for multiple items, show ALL
+
 FORMAT (CARD STYLE):
 ┌─────────────────────────────────────────────────────┐
 │ 1️⃣ **Product Name**                               │
@@ -22,10 +38,10 @@ FORMAT (CARD STYLE):
 
 EXAMPLE OUTPUT:
 ┌─────────────────────────────────────────────────────┐
-│ 1️⃣ **Correa para Perros - Nylon**                 │
+│ 1️⃣ **Dog Leash - Nylon**                          │
 │ 🏷️ Brand: PetWalk | SKU: PET-0021                │
 │ 💰 Price: $19.99 | 📦 Category: Pet Accessories   │
-│ 📝 Ideal para paseos diarios. Resistente y cómoda │
+│ 📝 Ideal for daily walks. Resistant and comfortable│
 │ ✨ Features: Resistant • Comfortable • Lightweight │
 │ 🎨 Available: Red, Blue, Black                     │
 │ 🛒 Want to add to cart?                           │
@@ -39,6 +55,7 @@ IMPORTANT:
 - Include color/size variants if available
 - Always include call-to-action
 - Add clear dividers between products
+- **For multi-category queries**: Show ALL categories, up to {{ pagination_page_size }} per category
 
 SORTING:
 - By relevance (default)

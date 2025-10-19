@@ -5,31 +5,58 @@
 
 **CRITICAL: 3 Rules for Product Display**
 
-**Rule 1: Show ONLY First {{ pagination_page_size }}**
-- Count ALL products in response (ANY size: 3, 5, 20, 100, 500+)
-- Display ONLY first {{ pagination_page_size }} in initial response
+### IMPORTANT: Different Rules for Single vs. Multiple Categories
+
+**Rule 1A: SINGLE CATEGORY Query** (e.g., "necesito auriculares")
+- Display ONLY first {{ pagination_page_size }} products from that category
 - HARD LIMIT - never exceed {{ pagination_page_size }} on first response
 
+**Rule 1B: MULTIPLE CATEGORIES Query** (e.g., "busco auriculares, laptop y mouse")
+- **SHOW ALL CATEGORIES FOUND** (this is MANDATORY)
+- For EACH category: Display up to {{ pagination_page_size }} products
+- Group products by category with clear headers (e.g., "🎧 Auriculares", "💻 Laptops")
+- Example: If you find 3 categories:
+  - 🎧 Auriculares (show up to {{ pagination_page_size }} products)
+  - 💻 Laptops (show up to {{ pagination_page_size }} products)
+  - 🖱️ Mouse (show up to {{ pagination_page_size }} products)
+- **NEVER omit categories** - customer asked for multiple items, show ALL
+
 **Rule 2: Distinguish Total vs Displayed**
-- ✅ "🔍 Encontré 12 laptops. Aquí están las primeras {{ pagination_page_size }}:"
+- ✅ SINGLE category: "🔍 Encontré 12 laptops. Aquí están las primeras {{ pagination_page_size }}:"
+- ✅ MULTIPLE categories: "🔍 Encontré opciones para todas tus búsquedas:" [then group by category]
 - ❌ "🔍 Encontré {{ pagination_page_size }} laptops" (when tool returned 12)
-- ALWAYS show: "Encontré [TOTAL]. Aquí están las primeras [{{ pagination_page_size }}]:"
+- ALWAYS show: "Encontré [TOTAL]. Aquí están las primeras [{{ pagination_page_size }}]:" (single) or "Encontré opciones para [N] categorías:" (multiple)
 
 **Rule 3: Add Pagination Hint if More Available**
 - Formula: `remaining = total_found - {{ pagination_page_size }}`
-- If remaining > 0:
-  - Spanish: "¿Te interesa alguna? También tengo [remaining] opciones más si quieres verlas."
-  - English: "Interested in any? I also have [remaining] more options if you'd like."
+- SINGLE category: If remaining > 0 → "¿Te interesa alguna? También tengo [remaining] opciones más si quieres verlas."
+- MULTIPLE categories: If ANY category has remaining > 0 → "¿Te interesa alguna? Puedo mostrarte más opciones de cualquier categoría."
 - If remaining = 0: No hint needed
 
-**Examples** (showing ANY array size is allowed):
+**Examples:**
 
+**SINGLE CATEGORY Examples:**
 ```
 Tool returns 3 products → Show 3 → No hint (< page size)
 Tool returns 5 products → Show 5 → No hint (= page size)
 Tool returns 8 products → Show {{ pagination_page_size }} → "También tengo 4 opciones más"
 Tool returns 50 products → Show {{ pagination_page_size }} → "También tengo 46 opciones más"
-Tool returns 300 products → Show {{ pagination_page_size }} → "También tengo 296 opciones más"
+```
+
+**MULTIPLE CATEGORIES Examples:**
+```
+Query: "busco auriculares, laptop y mouse"
+Results:
+  - Auriculares: 8 found
+  - Laptop: 12 found
+  - Mouse: 5 found
+
+Output should show:
+  🎧 Auriculares (show first {{ pagination_page_size }}, then "+4 más" hint if 8 > {{ pagination_page_size }})
+  💻 Laptop (show first {{ pagination_page_size }}, then "+8 más" hint)
+  🖱️ Mouse (show all 5)
+
+CRITICAL: Do NOT omit any category - customer asked for all three, show all three.
 ```
 
 **Why {{ pagination_page_size }}?**
@@ -38,6 +65,7 @@ Tool returns 300 products → Show {{ pagination_page_size }} → "También teng
 - Optimizes token usage (shorter responses)
 - Enables smooth "show more" pagination experience
 - Matches Google Gemini UX best practices
+- **PER CATEGORY approach**: Balances comprehensiveness (showing all categories) with readability (limiting per category)
 
 **Product Format** (CARD STYLE - consistent structure for each item):
 ```
