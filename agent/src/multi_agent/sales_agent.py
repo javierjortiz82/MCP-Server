@@ -252,11 +252,12 @@ class SalesAgent(BaseAgent):
 
             self.logger.debug("📥 Fetching pageable tools from MCP resource...")
             resource_uri = "tool-categories://pageable-tools"
-            content = await self.mcp_client.read_resource(resource_uri)
+            resource_content = await self.mcp_client.read_resource(resource_uri)
 
-            # Parse resource content
+            # Extract text from TextResourceContents object
             import json
-            data = json.loads(content)
+            content_text = resource_content.text if hasattr(resource_content, 'text') else str(resource_content)
+            data = json.loads(content_text)
             tool_names = set(data.get("tools", []))
 
             if tool_names:
