@@ -352,6 +352,16 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # SalesAgent Function Calling Configuration
+    # ============================================================================
+    FUNCTION_CALL_MAX_ITERATIONS: int = Field(
+        default=10,
+        gt=0,
+        le=50,
+        description="Maximum iterations for function calling loop in SalesAgent",
+    )
+
+    # ============================================================================
     # SalesAgent Error Handling & Fallback Messages
     # ============================================================================
     FALLBACK_ERROR_MESSAGE_ES: str = Field(
