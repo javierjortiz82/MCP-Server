@@ -137,6 +137,36 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # Retry Configuration
+    # ============================================================================
+    RETRY_MAX_ATTEMPTS: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum retry attempts for API calls",
+    )
+
+    RETRY_INITIAL_DELAY_MS: int = Field(
+        default=1000,
+        ge=100,
+        le=60000,
+        description="Initial retry delay in milliseconds",
+    )
+
+    # ============================================================================
+    # Error Pattern Configuration
+    # ============================================================================
+    CACHE_ERROR_PATTERNS: str = Field(
+        default="CacheError,RESOURCE_EXHAUSTED,cache",
+        description="Cache error patterns to detect (comma-separated)",
+    )
+
+    RATE_LIMIT_ERROR_PATTERNS: str = Field(
+        default="429,RATE_LIMIT_EXCEEDED,quota",
+        description="Rate limit error patterns to detect (comma-separated)",
+    )
+
+    # ============================================================================
     # CORS Configuration
     # ============================================================================
     ALLOWED_ORIGINS: str = Field(
