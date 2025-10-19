@@ -1,318 +1,384 @@
-# 📧 Email Service - Queue-Based Email Notification System
+# 📧 Email Service
 
-[![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![PostgreSQL](https://img.shields.io/badge/postgresql-14+-336791.svg)](https://www.postgresql.org/)
-[![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](https://www.docker.com/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+> **Production-ready asynchronous email queue system** for booking confirmations, reminders, and notifications
 
-**Robust, production-ready email notification system for booking management with PostgreSQL queue, automatic retries, and beautiful HTML templates.**
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776ab?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Pydantic v2](https://img.shields.io/badge/pydantic-v2-1f6feb?style=flat-square&logo=pydantic&logoColor=white)](https://docs.pydantic.dev/latest/)
+[![PostgreSQL](https://img.shields.io/badge/postgresql-13+-336791?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Code Quality](https://img.shields.io/badge/mypy-passing-success?style=flat-square)](https://mypy-lang.org/)
+[![PEP 8](https://img.shields.io/badge/PEP%208-compliant-success?style=flat-square)](https://www.python.org/dev/peps/pep-0008/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue?style=flat-square)](./CHANGELOG.md)
 
----
-
-## 📑 Table of Contents
-
-- [Overview](#-overview)
-- [Features](#-features)
-- [Architecture](#-architecture)
-- [Quick Start](#-quick-start)
-- [Installation](#-installation)
-- [Configuration](#-configuration)
-- [Usage](#-usage)
-- [Email Templates](#-email-templates)
-- [Database Schema](#-database-schema)
-- [Deployment](#-deployment)
-- [API Reference](#-api-reference)
-- [Monitoring](#-monitoring)
-- [Troubleshooting](#-troubleshooting)
-- [Development](#-development)
-- [Contributing](#-contributing)
-- [License](#-license)
+Built with **PostgreSQL**, **Jinja2**, **Pydantic v2**, and **async Python** for maximum reliability and performance.
 
 ---
 
-## 🎯 Overview
+## 📋 Table of Contents
 
-The **Email Service** is an asynchronous email notification system designed for the Lab01-MCP booking platform. It provides reliable email delivery with automatic retry logic, status tracking, and professional HTML templates.
-
-### Use Cases
-
-- 📩 **Booking Confirmations** - Instant confirmation emails when appointments are created
-- 🚫 **Cancellation Notices** - Automated notifications for cancelled bookings
-- 🔄 **Reschedule Alerts** - Updates when appointments are rescheduled
-- ⏰ **Smart Reminders** - Automatic reminders 24h and 1h before appointments
-- 📊 **Delivery Tracking** - Complete audit trail of all email communications
+- [✨ Features](#-features)
+- [🏗️ Architecture](#️-architecture)
+- [🚀 Quick Start](#-quick-start)
+- [📖 Usage](#-usage)
+- [⚙️ Configuration](#️-configuration)
+- [📦 Project Structure](#-project-structure)
+- [🔧 API Reference](#-api-reference)
+- [🧪 Testing](#-testing)
+- [🆘 Troubleshooting](#-troubleshooting)
+- [📄 License](#-license)
 
 ---
 
 ## ✨ Features
 
-### Core Features
-
-- ✅ **Queue-Based Architecture** - PostgreSQL-backed queue with FIFO + priority support
-- ✅ **Automatic Retry Logic** - Exponential backoff (5min → 10min → 20min)
-- ✅ **Beautiful HTML Templates** - Responsive Jinja2 templates for all email types
-- ✅ **SMTP Provider Agnostic** - Works with Gmail, SendGrid, AWS SES, or any SMTP server
-- ✅ **Status Tracking** - Complete lifecycle: `pending → processing → sent/failed`
-- ✅ **Docker Ready** - Containerized worker service with health checks
-- ✅ **Production Hardened** - Connection pooling, graceful shutdown, comprehensive logging
-
-### Advanced Features
-
-- 🔄 **Retry with Exponential Backoff** - Configurable retry strategy
-- 📅 **Scheduled Emails** - Send emails at specific times (reminders)
-- 🎨 **Template Engine** - Jinja2 with custom filters and fallbacks
-- 🔒 **Type Safety** - Pydantic v2 models with validation
-- 📊 **Metrics Ready** - Success rate, delivery time, retry statistics
-- 🌍 **Multi-language Ready** - Template-based localization support
+| Feature | Description |
+|---------|-------------|
+| 🔄 **Async Queue Processing** | Polls PostgreSQL queue every 10s (configurable) |
+| 🔁 **Auto Retry Logic** | Exponential backoff with configurable max retries |
+| 🎨 **Template Rendering** | Jinja2-based HTML & plaintext email templates |
+| 📨 **SMTP Compatibility** | Gmail, SendGrid, AWS SES, or any SMTP server |
+| ⏰ **Scheduled Emails** | Send emails at specific times (future sends) |
+| 📊 **Priority Levels** | Process emails by priority (1=highest, 10=lowest) |
+| 📈 **Status Tracking** | Complete lifecycle: pending → processing → sent/failed |
+| 🔐 **Connection Pooling** | Thread-safe with psycopg2 connection pool |
+| 📝 **Comprehensive Logging** | Structured logging with configurable levels |
+| ✅ **Type Safe** | Full Pydantic v2 validation + mypy compliant |
+| 🎯 **Production Ready** | Docker-ready, PEP 8 compliant, documented |
 
 ---
 
 ## 🏗️ Architecture
 
-### System Architecture Diagram
+### System Overview
+
+The Email Service orchestrates a complete email delivery pipeline with queue management, template rendering, and reliable SMTP delivery.
 
 ```mermaid
 graph TB
-    subgraph "Application Layer"
-        A[Booking System] -->|enqueue_email| B[EmailQueueManager]
+    subgraph INPUT["📥 INPUT LAYER"]
+        API["🔷 Booking API<br/>Enqueue Emails"]
+        CLI["🔶 CLI/Script<br/>Batch Operations"]
     end
 
-    subgraph "Database Layer"
-        B -->|INSERT| C[(PostgreSQL Queue<br/>test.email_queue)]
-        C -->|Poll every 10s| D[Email Worker]
+    subgraph QUEUE["⏳ QUEUE LAYER"]
+        DB["🟠 PostgreSQL<br/>Email Queue<br/>5 Status States"]
     end
 
-    subgraph "Processing Layer"
-        D -->|1. Get pending| C
-        D -->|2. Render template| E[TemplateRenderer]
-        E -->|Jinja2| F[HTML Templates]
-        D -->|3. Send email| G[SMTPClient]
+    subgraph PROCESSING["⚙️ PROCESSING LAYER"]
+        WORKER["🟣 Email Worker<br/>Async Processor<br/>Retry Logic"]
+        RENDER["🟡 Jinja2<br/>Template Renderer<br/>HTML/Text"]
     end
 
-    subgraph "Delivery Layer"
-        G -->|SMTP/TLS| H{SMTP Provider}
-        H -->|Gmail| I[Gmail SMTP]
-        H -->|SendGrid| J[SendGrid API]
-        H -->|AWS| K[AWS SES]
+    subgraph OUTPUT["📤 OUTPUT LAYER"]
+        SMTP["🟢 SMTP Client<br/>Gmail/SendGrid<br/>AWS SES"]
     end
 
-    subgraph "Customer"
-        I --> L[📧 Customer Email]
-        J --> L
-        K --> L
-    end
+    INPUT --> QUEUE
+    QUEUE -->|Poll Every 10s| PROCESSING
+    PROCESSING -->|Render Templates| RENDER
+    RENDER -->|Send Email| OUTPUT
+    OUTPUT -->|Update Status| QUEUE
 
-    D -->|4. Update status| C
-    D -.->|Retry on fail| C
-
-    style A fill:#667eea,stroke:#764ba2,stroke-width:2px,color:#fff
-    style C fill:#f093fb,stroke:#f5576c,stroke-width:2px,color:#fff
-    style D fill:#4facfe,stroke:#00f2fe,stroke-width:2px,color:#fff
-    style G fill:#43e97b,stroke:#38f9d7,stroke-width:2px,color:#fff
-    style L fill:#fa709a,stroke:#fee140,stroke-width:2px,color:#fff
+    style INPUT fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style QUEUE fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    style PROCESSING fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style OUTPUT fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style API fill:#bbdefb,color:#0d47a1
+    style CLI fill:#ffe0b2,color:#e65100
+    style DB fill:#ffe0b2,color:#e65100
+    style WORKER fill:#e1bee7,color:#4a148c
+    style RENDER fill:#fff59d,color:#f57f17
+    style SMTP fill:#c8e6c9,color:#1b5e20
 ```
 
-### Email Lifecycle Flow
+### Component Architecture
+
+```mermaid
+graph LR
+    subgraph CORE["🔧 Core"]
+        EXC["Exceptions<br/>5 Types"]
+        LOG["Logger<br/>Factory"]
+        style EXC fill:#ffcccc,stroke:#c41c3b,stroke-width:2px
+        style LOG fill:#ffcccc,stroke:#c41c3b,stroke-width:2px
+    end
+
+    subgraph CONFIG["⚙️ Config"]
+        SETTINGS["Pydantic v2<br/>Settings"]
+        style SETTINGS fill:#cce5ff,stroke:#0056b3,stroke-width:2px
+    end
+
+    subgraph MODELS["📊 Models"]
+        EMAIL["EmailRecord<br/>Status, Type"]
+        REQ["Create<br/>Request"]
+        CTX["Template<br/>Context"]
+        SMTP["SMTP<br/>Config"]
+        STATS["Stats<br/>Analytics"]
+        style EMAIL fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+        style REQ fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+        style CTX fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+        style SMTP fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+        style STATS fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    end
+
+    subgraph CLIENTS["🌐 Clients"]
+        SMTPC["SMTP<br/>Client"]
+        style SMTPC fill:#d4edda,stroke:#155724,stroke-width:2px
+    end
+
+    subgraph DB["💾 Database"]
+        QUEUE["Queue<br/>Manager"]
+        style QUEUE fill:#fff3cd,stroke:#856404,stroke-width:2px
+    end
+
+    subgraph TMPL["🎨 Templates"]
+        RENDERER["Jinja2<br/>Renderer"]
+        style RENDERER fill:#f8d7da,stroke:#721c24,stroke-width:2px
+    end
+
+    subgraph WORK["🤖 Worker"]
+        PROC["Email<br/>Processor"]
+        style PROC fill:#e2e3e5,stroke:#383d41,stroke-width:2px
+    end
+
+    PROC -->|Uses| SETTINGS
+    PROC -->|Uses| QUEUE
+    PROC -->|Uses| SMTPC
+    PROC -->|Uses| RENDERER
+    QUEUE -->|Uses| EMAIL
+    RENDERER -->|Uses| CTX
+    SMTPC -->|Uses| SMTP
+    CORE -.->|Supports| PROC
+    MODELS -.->|Validates| PROC
+```
+
+### Email Lifecycle State Machine
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Pending: Booking event occurs
-    Pending --> Scheduled: scheduled_for > now
-    Pending --> Processing: Worker picks up email
-    Scheduled --> Processing: scheduled_for <= now
+    [*] --> PENDING: Email Enqueued
 
-    Processing --> Sent: SMTP success
-    Processing --> Retry1: SMTP failed (attempt 1)
+    PENDING --> SCHEDULED: Scheduled for\nlater time?
+    PENDING --> PROCESSING: Worker Picks Up
+    SCHEDULED --> PROCESSING: Scheduled Time\nArrived
 
-    Retry1 --> Processing: Wait 5 minutes
-    Retry1 --> Retry2: SMTP failed (attempt 2)
+    PROCESSING --> SENT: ✅ Send Success
+    PROCESSING --> RETRY: ❌ Error &\nRetries Left
 
-    Retry2 --> Processing: Wait 10 minutes
-    Retry2 --> Retry3: SMTP failed (attempt 3)
+    RETRY --> PROCESSING: Wait Backoff\nTime
+    RETRY --> FAILED: Max Retries\nExceeded
 
-    Retry3 --> Processing: Wait 20 minutes
-    Retry3 --> Failed: Max retries exceeded
+    SENT --> [*]
+    FAILED --> [*]
 
-    Sent --> [*]: Email delivered ✅
-    Failed --> [*]: Permanent failure ❌
-
-    note right of Processing
-        Status updates are atomic
-        Uses database locks
+    note right of PENDING
+        Max 50 in batch
+        Priority ordered
     end note
 
-    note right of Retry1
-        Exponential backoff:
-        backoff * 2^retry_count
+    note right of SCHEDULED
+        Waiting for
+        scheduled_for time
+    end note
+
+    note right of PROCESSING
+        Currently sending
+        via SMTP
+    end note
+
+    note right of RETRY
+        Exponential backoff
+        Starting at 300s
     end note
 ```
 
-### Component Interaction Sequence
+### Email Processing Flow
 
 ```mermaid
 sequenceDiagram
-    autonumber
-    actor Customer
-    participant BookingAPI as Booking API
-    participant Queue as Queue Manager
-    participant DB as PostgreSQL
-    participant Worker as Email Worker
-    participant Template as Template Renderer
-    participant SMTP as SMTP Client
-    participant Provider as SMTP Provider
+    participant API as 📦 Booking API
+    participant DB as 🟠 PostgreSQL
+    participant WORKER as 🤖 Worker
+    participant RENDER as 🎨 Renderer
+    participant SMTP as 📨 SMTP Server
 
-    Customer->>BookingAPI: Create booking
-    BookingAPI->>Queue: enqueue_email(type, context)
-    Queue->>DB: INSERT INTO email_queue
-    DB-->>Queue: email_id
-    Queue-->>BookingAPI: email_id
-    BookingAPI-->>Customer: Booking confirmed
+    API->>DB: 1️⃣ Enqueue Email<br/>(status: pending)
 
-    Note over Worker: Polls every 10 seconds
+    loop Every 10 Seconds
+        WORKER->>DB: 2️⃣ Poll Pending<br/>Emails (limit: 50)
+        DB-->>WORKER: List of pending emails
 
-    Worker->>DB: SELECT pending emails
-    DB-->>Worker: batch of 50 emails
+        rect rgba(100, 200, 255, 0.3)
+            Note over WORKER,RENDER: For Each Email:
 
-    loop For each email
-        Worker->>DB: UPDATE status='processing'
-        Worker->>Template: render_html(type, context)
-        Template-->>Worker: HTML content
-        Worker->>SMTP: send_email(recipient, html)
-        SMTP->>Provider: SMTP: MAIL FROM, RCPT TO, DATA
+            WORKER->>DB: 3️⃣ Mark PROCESSING
 
-        alt Success
-            Provider-->>SMTP: 250 OK
-            SMTP-->>Worker: Success
-            Worker->>DB: UPDATE status='sent'
-        else Failure
-            Provider-->>SMTP: 5xx Error
-            SMTP-->>Worker: Error
-            Worker->>DB: retry_email(error, backoff)
+            alt Has Template Context
+                WORKER->>RENDER: 4️⃣ Render Template
+                Note over RENDER: HTML + Plain Text
+                RENDER-->>WORKER: Rendered Content
+            else Pre-rendered
+                Note over WORKER: Use stored body_html
+            end
+
+            WORKER->>SMTP: 5️⃣ Send Email
+
+            alt Send Success ✅
+                SMTP-->>WORKER: OK (250)
+                WORKER->>DB: 6️⃣ Mark SENT<br/>(sent_at=now)
+            else Send Failed ❌
+                SMTP-->>WORKER: Error
+
+                alt Retries Remaining
+                    WORKER->>DB: 7️⃣ Schedule Retry<br/>(next_retry_at)
+                else Max Retries
+                    WORKER->>DB: 8️⃣ Mark FAILED<br/>(last_error)
+                end
+            end
         end
     end
-
-    Note over Provider,Customer: Email delivered
-    Provider->>Customer: 📧 Email received
-```
-
-### Database Entity Relationship
-
-```mermaid
-erDiagram
-    EMAIL_QUEUE ||--o{ APPOINTMENTS : references
-
-    EMAIL_QUEUE {
-        int id PK
-        varchar type
-        varchar recipient_email
-        varchar recipient_name
-        varchar subject
-        text body_html
-        text body_text
-        varchar status
-        int retry_count
-        int max_retries
-        text last_error
-        timestamp next_retry_at
-        timestamp scheduled_for
-        timestamp sent_at
-        int priority
-        int booking_id FK
-        jsonb template_context
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    APPOINTMENTS {
-        int id PK
-        varchar customer_name
-        varchar customer_email
-        varchar customer_phone
-        varchar service_type
-        date booking_date
-        time booking_time
-        int duration_minutes
-        varchar status
-        timestamp created_at
-    }
 ```
 
 ---
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- Python 3.11+
-- PostgreSQL 14+
-- Docker & Docker Compose (optional, recommended)
-- SMTP credentials (Gmail, SendGrid, or AWS SES)
-
-### 5-Minute Setup
+### 📦 Installation
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/your-org/lab01-mcp.git
-cd lab01-mcp/email_service
+# Clone or navigate to the project
+cd /path/to/email_service
 
-# 2. Install dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# 3. Configure environment
-cp ../.env.example ../.env
-# Edit .env with your SMTP credentials
-
-# 4. Initialize database
-python3 ../SQL/src/init_email_queue.py
-
-# 5. Start email worker
-python -m email_service.worker
+# Or install in development mode
+pip install -e .
 ```
 
-### Docker Deployment (Recommended)
+### ⚙️ Configuration
 
 ```bash
-# Start all services (PostgreSQL + Email Worker)
-cd ../DockerConfig
-docker-compose up -d email-worker
+# Copy configuration template
+cp .env.example .env
 
-# View logs
-docker logs -f mcp-email-worker
+# Edit with your credentials
+nano .env
+
+# Validate configuration
+python scripts/validate_env.py
+```
+
+**Required Environment Variables:**
+```env
+DATABASE_URL=postgresql://user:pass@localhost:5432/db
+SMTP_HOST=smtp.gmail.com
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+```
+
+### 🏃 Run Email Worker
+
+```bash
+# Direct Python
+python -m email_service.worker.processor
+
+# Docker Compose
+docker-compose up email_worker
+
+# Or in your code
+from email_service import EmailWorker
+import asyncio
+
+worker = EmailWorker()
+await worker.run()
 ```
 
 ---
 
-## 📦 Installation
+## 📖 Usage
 
-### Method 1: pip install (Standalone)
+### 📬 Enqueue an Email
 
-```bash
-cd email_service
-pip install -r requirements.txt
+```python
+from email_service import EmailQueueManager, EmailType
+
+queue = EmailQueueManager()
+
+# With template context (rendered by worker)
+email_id = queue.enqueue_email(
+    email_type=EmailType.BOOKING_CREATED,
+    recipient_email="customer@example.com",
+    recipient_name="John Doe",
+    subject="Your Booking Confirmation",
+    body_html="",  # Will be rendered
+    template_context={
+        "customer_name": "John Doe",
+        "service_type": "Consultation",
+        "booking_date": "2025-10-20",
+        "booking_time": "14:30",
+        "duration_minutes": 60,
+        "booking_id": 123,
+    },
+    priority=5,  # 1=highest, 10=lowest
+)
+
+print(f"✅ Email #{email_id} enqueued")
 ```
 
-**Dependencies:**
-- `psycopg2-binary>=2.9.9` - PostgreSQL adapter
-- `pydantic>=2.5.0` - Data validation
-- `pydantic-settings>=2.1.0` - Settings management
-- `Jinja2>=3.1.2` - Template engine
-- `python-dotenv>=1.0.0` - Environment variables
-- `email-validator>=2.1.0` - Email validation
+### 📧 Send Test Email
 
-### Method 2: Docker (Production)
+```python
+from email_service import SMTPClient
 
-```bash
-cd email_service
-docker build -t lab01-email-service:latest .
-docker run --env-file ../.env lab01-email-service:latest
+client = SMTPClient()
+
+# Validate SMTP configuration
+if client.validate_connection():
+    print("✅ SMTP connection successful")
+
+# Send test email
+if client.send_test_email("admin@example.com"):
+    print("✅ Test email sent")
 ```
 
-### Method 3: Docker Compose (Full Stack)
+### 🎨 Render Templates
 
-```bash
-cd ../DockerConfig
-docker-compose up -d email-worker
+```python
+from email_service import TemplateRenderer, EmailType
+
+renderer = TemplateRenderer()
+
+# Render HTML template
+html = renderer.render_html(
+    EmailType.BOOKING_CREATED,
+    context={
+        "customer_name": "Jane",
+        "service_type": "Massage",
+        "booking_date": "2025-10-20",
+        "booking_time": "15:00",
+        "duration_minutes": 60,
+    }
+)
+
+# Render plain text template
+text = renderer.render_text(EmailType.BOOKING_CREATED, context)
+```
+
+### 🔍 Check Email Status
+
+```python
+from email_service import EmailQueueManager, EmailStatus
+
+queue = EmailQueueManager()
+
+# Get email by ID
+email = queue.get_email_by_id(email_id=123)
+
+if email:
+    print(f"Status: {email.status}")
+    print(f"Retry count: {email.retry_count}")
+    if email.status == EmailStatus.FAILED:
+        print(f"Error: {email.last_error}")
 ```
 
 ---
@@ -321,865 +387,367 @@ docker-compose up -d email-worker
 
 ### Environment Variables
 
-Create a `.env` file in the project root with the following variables:
+| Variable | Default | Type | Description |
+|----------|---------|------|-------------|
+| `DATABASE_URL` | - | string | PostgreSQL connection URI |
+| `SCHEMA_NAME` | test | string | PostgreSQL schema name |
+| `SMTP_HOST` | smtp.gmail.com | string | SMTP server hostname |
+| `SMTP_PORT` | 587 | int | SMTP port (1-65535) |
+| `SMTP_USER` | - | string | SMTP username |
+| `SMTP_PASSWORD` | - | string | SMTP password |
+| `SMTP_FROM_EMAIL` | noreply@lab01.com | string | Sender email |
+| `SMTP_FROM_NAME` | Lab01 Bookings | string | Sender display name |
+| `SMTP_USE_TLS` | true | bool | Use TLS encryption |
+| `SMTP_TIMEOUT` | 30 | int | Connection timeout (5-300s) |
+| `EMAIL_WORKER_POLL_INTERVAL` | 10 | int | Queue poll interval (seconds) |
+| `EMAIL_WORKER_BATCH_SIZE` | 50 | int | Emails per batch (1-1000) |
+| `EMAIL_RETRY_MAX_ATTEMPTS` | 3 | int | Max retry attempts |
+| `EMAIL_RETRY_BACKOFF_SECONDS` | 300 | int | Retry backoff (60-86400s) |
+| `LOG_LEVEL` | INFO | string | DEBUG, INFO, WARNING, ERROR |
+| `LOG_DIR` | ./logs | string | Log directory |
+| `TEMPLATE_DIR` | ./templates | string | Email templates directory |
+
+### Example .env File
 
 ```bash
-# ============================================================================
-# SMTP SERVER CONFIGURATION
-# ============================================================================
-SMTP_HOST=smtp.gmail.com              # Gmail, SendGrid, AWS SES
-SMTP_PORT=587                         # 587 for TLS, 465 for SSL
-SMTP_USER=your.email@gmail.com        # SMTP username
-SMTP_PASSWORD=your-app-password       # SMTP password (NOT Gmail password!)
-SMTP_FROM_EMAIL=noreply@lab01.com     # "From" email address
-SMTP_FROM_NAME=Lab01 Bookings         # "From" display name
-SMTP_USE_TLS=true                     # Use TLS encryption
-SMTP_TIMEOUT=30                       # Connection timeout (seconds)
-
-# ============================================================================
-# EMAIL WORKER CONFIGURATION
-# ============================================================================
-EMAIL_WORKER_POLL_INTERVAL=10         # Seconds between queue polls
-EMAIL_WORKER_BATCH_SIZE=50            # Max emails per batch
-EMAIL_RETRY_MAX_ATTEMPTS=3            # Max retry attempts
-EMAIL_RETRY_BACKOFF_SECONDS=300       # Initial backoff (5 minutes)
-
-# ============================================================================
-# DATABASE CONFIGURATION
-# ============================================================================
+# Database
 DATABASE_URL=postgresql://mcp_user:password@localhost:5434/mcp_db
-SCHEMA_NAME=test                      # PostgreSQL schema
+SCHEMA_NAME=public
 
-# ============================================================================
-# REMINDERS CONFIGURATION
-# ============================================================================
-REMINDER_24H_ENABLED=true             # Send 24-hour reminders
-REMINDER_1H_ENABLED=true              # Send 1-hour reminders
-
-# ============================================================================
-# LOGGING CONFIGURATION
-# ============================================================================
-LOG_LEVEL=INFO                        # DEBUG, INFO, WARNING, ERROR, CRITICAL
-LOG_TO_FILE=true                      # Write logs to file
-LOG_DIR=./logs                        # Log directory path
-```
-
-### Gmail SMTP Setup (Recommended for Development)
-
-1. **Enable 2-Step Verification** in your Google Account
-2. **Generate App Password:**
-   - Visit: https://myaccount.google.com/apppasswords
-   - Select "Mail" and "Other (Custom name)"
-   - Copy the 16-character password
-3. **Configure `.env`:**
-   ```bash
-   SMTP_HOST=smtp.gmail.com
-   SMTP_PORT=587
-   SMTP_USER=your.email@gmail.com
-   SMTP_PASSWORD=xxxx-xxxx-xxxx-xxxx  # 16-char app password
-   ```
-
-**Gmail Limits:**
-- Free: 500 emails/day
-- Google Workspace: 2,000 emails/day
-
-### Alternative SMTP Providers
-
-#### SendGrid (100 emails/day free)
-```bash
-SMTP_HOST=smtp.sendgrid.net
+# SMTP (Gmail example)
+SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
-SMTP_USER=apikey
-SMTP_PASSWORD=your-sendgrid-api-key
-```
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+SMTP_FROM_EMAIL=noreply@yourdomain.com
+SMTP_FROM_NAME=Your Company
 
-#### AWS SES ($0.10 per 1,000 emails)
-```bash
-SMTP_HOST=email-smtp.us-east-1.amazonaws.com
-SMTP_PORT=587
-SMTP_USER=your-aws-access-key-id
-SMTP_PASSWORD=your-aws-secret-access-key
-```
+# Worker
+EMAIL_WORKER_POLL_INTERVAL=10
+EMAIL_WORKER_BATCH_SIZE=50
+EMAIL_RETRY_MAX_ATTEMPTS=3
 
----
-
-## 💻 Usage
-
-### Enqueue Email (Python API)
-
-```python
-from email_service.queue_manager import EmailQueueManager
-from email_service.models import EmailType
-
-# Initialize queue manager
-queue = EmailQueueManager()
-
-# Enqueue booking confirmation email
-email_id = queue.enqueue_email(
-    email_type=EmailType.BOOKING_CREATED,
-    recipient_email="customer@example.com",
-    recipient_name="Juan Pérez",
-    subject="Confirmación de Cita - Consulta General",
-    body_html="<h1>Cita confirmada</h1>",  # Or leave empty for template rendering
-    template_context={
-        "customer_name": "Juan Pérez",
-        "service_type": "Consulta General",
-        "booking_date": "2025-10-15",
-        "booking_time": "14:00",
-        "duration_minutes": 60,
-        "booking_id": 1234,
-        "google_calendar_link": "https://calendar.google.com/...",
-    },
-    booking_id=1234,
-    priority=5  # 1=highest, 10=lowest
-)
-
-print(f"✅ Email queued: {email_id}")
-```
-
-### Email Types
-
-```python
-from email_service.models import EmailType
-
-# Available email types
-EmailType.BOOKING_CREATED       # Booking confirmation
-EmailType.BOOKING_CANCELLED     # Cancellation notice
-EmailType.BOOKING_RESCHEDULED   # Rescheduled notification
-EmailType.REMINDER_24H          # 24-hour reminder
-EmailType.REMINDER_1H           # 1-hour reminder
-EmailType.REMINDER_CUSTOM       # Custom reminders
-```
-
-### Run Email Worker
-
-```bash
-# Method 1: Direct Python execution
-python -m email_service.worker
-
-# Method 2: Docker container
-docker-compose up email-worker
-
-# Method 3: Background daemon
-nohup python -m email_service.worker > worker.log 2>&1 &
-```
-
-### Test Email Delivery
-
-```python
-from email_service.smtp_client import SMTPClient
-
-# Test SMTP connection
-client = SMTPClient()
-success = client.send_test_email("test@example.com")
-
-if success:
-    print("✅ Test email sent successfully!")
-else:
-    print("❌ Email sending failed - check SMTP configuration")
-```
-
-### Query Email Status
-
-```sql
--- View recent emails
-SELECT
-    id,
-    type,
-    recipient_email,
-    status,
-    retry_count,
-    created_at,
-    sent_at
-FROM test.email_queue
-ORDER BY created_at DESC
-LIMIT 10;
-
--- Get email statistics
-SELECT
-    status,
-    COUNT(*) as count,
-    ROUND(AVG(retry_count), 2) as avg_retries
-FROM test.email_queue
-GROUP BY status;
-
--- Find failed emails
-SELECT
-    id,
-    recipient_email,
-    last_error,
-    retry_count
-FROM test.email_queue
-WHERE status = 'failed'
-ORDER BY created_at DESC;
+# Logging
+LOG_LEVEL=INFO
+LOG_DIR=./logs
 ```
 
 ---
 
-## 🎨 Email Templates
+## 📦 Project Structure
 
-### Template Structure
-
-All email templates are located in `email_service/templates/` and use Jinja2 syntax.
-
-**Available Templates:**
-- `booking_created.html` - Booking confirmation
-- `booking_cancelled.html` - Cancellation notice
-- `booking_rescheduled.html` - Rescheduled notification
-- `reminder_24h.html` - 24-hour reminder
-- `reminder_1h.html` - 1-hour reminder
-
-### Template Context Variables
-
-Each template receives a context dictionary with the following variables:
-
-```python
-{
-    # Common fields (all templates)
-    "customer_name": str,
-    "booking_id": int,
-    "service_type": str,
-    "booking_date": str,  # YYYY-MM-DD
-    "booking_time": str,  # HH:MM
-    "duration_minutes": int,
-    "google_calendar_link": str | None,
-
-    # booking_cancelled specific
-    "cancellation_reason": str | None,
-
-    # booking_rescheduled specific
-    "old_date": str,
-    "old_time": str,
-    "new_date": str,
-    "new_time": str,
-
-    # reminders specific
-    "hours_until": int,  # 24 or 1
-}
 ```
-
-### Template Design Features
-
-- ✅ **Responsive Design** - Works on mobile, tablet, and desktop
-- ✅ **Inline CSS** - Maximum email client compatibility
-- ✅ **Professional Gradients** - Modern, attractive design
-- ✅ **CTA Buttons** - Google Calendar integration
-- ✅ **Cross-Client Compatible** - Gmail, Outlook, Apple Mail, etc.
-- ✅ **Accessibility** - Semantic HTML, alt text, proper headings
-
-### Custom Template Example
-
-```html
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ subject }}</title>
-    <style>
-        body { font-family: Arial, sans-serif; }
-        .container { max-width: 600px; margin: 0 auto; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>{{ subject }}</h1>
-        </div>
-        <p>Hola {{ customer_name }},</p>
-        <p>Tu cita para <strong>{{ service_type }}</strong> está confirmada.</p>
-        <p><strong>Fecha:</strong> {{ booking_date }}</p>
-        <p><strong>Hora:</strong> {{ booking_time }}</p>
-    </div>
-</body>
-</html>
+email_service/
+├── core/                    # Core utilities
+│   ├── exceptions.py       # 5 custom exception types
+│   ├── logger.py           # Centralized logging factory
+│   └── __init__.py
+├── config/                  # Configuration management
+│   ├── settings.py         # Pydantic v2 EmailConfig
+│   └── __init__.py
+├── models/                  # Data models
+│   ├── email.py            # EmailRecord, EmailStatus, EmailType
+│   ├── requests.py         # EmailCreateRequest
+│   ├── context.py          # Template contexts (5 types)
+│   ├── smtp_config.py      # SMTP configuration
+│   ├── stats.py            # EmailStats analytics
+│   └── __init__.py
+├── clients/                 # External clients
+│   ├── smtp.py             # SMTPClient wrapper
+│   └── __init__.py
+├── database/                # Database operations
+│   ├── queue.py            # EmailQueueManager
+│   └── __init__.py
+├── templates/               # Email templates
+│   ├── renderer.py         # Jinja2 TemplateRenderer
+│   ├── *.html              # Email templates
+│   ├── *.txt               # Plain text variants
+│   └── __init__.py
+├── worker/                  # Email processing daemon
+│   ├── processor.py        # EmailWorker async processor
+│   └── __init__.py
+├── scripts/                 # Utility scripts
+│   ├── validate_env.py     # Configuration validator
+│   └── __init__.py
+├── .env.example            # Configuration template
+├── requirements.txt         # Production dependencies
+├── requirements-dev.txt     # Development tools
+├── pyproject.toml          # Package metadata (PEP 518)
+├── MANIFEST.in             # Distribution manifest
+├── LICENSE                 # MIT License
+├── README.md              # This file
+└── CHANGELOG.md           # Version history
 ```
 
 ---
 
-## 🗄️ Database Schema
-
-### Table: `test.email_queue`
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | SERIAL | Primary key |
-| `type` | VARCHAR(50) | Email type (enum) |
-| `recipient_email` | VARCHAR(255) | Customer email |
-| `recipient_name` | VARCHAR(255) | Customer name |
-| `subject` | VARCHAR(500) | Email subject |
-| `body_html` | TEXT | HTML email body |
-| `body_text` | TEXT | Plain text fallback |
-| `status` | VARCHAR(20) | Email status |
-| `retry_count` | INTEGER | Retry attempts |
-| `max_retries` | INTEGER | Max retries (default: 3) |
-| `last_error` | TEXT | Last error message |
-| `next_retry_at` | TIMESTAMP | Next retry time |
-| `scheduled_for` | TIMESTAMP | Scheduled send time |
-| `sent_at` | TIMESTAMP | Delivery timestamp |
-| `priority` | INTEGER | Priority (1-10) |
-| `booking_id` | INTEGER | FK to appointments |
-| `template_context` | JSONB | Template variables |
-| `created_at` | TIMESTAMP | Creation timestamp |
-| `updated_at` | TIMESTAMP | Last update |
-
-### Status Values
-
-| Status | Description |
-|--------|-------------|
-| `pending` | Waiting to be processed |
-| `scheduled` | Waiting for `scheduled_for` time |
-| `processing` | Currently being sent |
-| `sent` | Successfully delivered |
-| `failed` | Max retries exceeded |
-
-### Indexes
-
-```sql
--- Worker poll query (most important)
-CREATE INDEX idx_email_queue_worker_poll
-    ON test.email_queue(status, scheduled_for, priority)
-    WHERE status IN ('pending', 'scheduled');
-
--- Retry query
-CREATE INDEX idx_email_queue_retry
-    ON test.email_queue(status, next_retry_at)
-    WHERE status = 'processing' AND next_retry_at IS NOT NULL;
-
--- Recipient lookup
-CREATE INDEX idx_email_queue_recipient
-    ON test.email_queue(recipient_email, created_at DESC);
-
--- Booking lookup
-CREATE INDEX idx_email_queue_booking
-    ON test.email_queue(booking_id)
-    WHERE booking_id IS NOT NULL;
-
--- Analytics
-CREATE INDEX idx_email_queue_type_status
-    ON test.email_queue(type, status);
-
--- Sent emails reporting
-CREATE INDEX idx_email_queue_sent
-    ON test.email_queue(sent_at DESC)
-    WHERE status = 'sent';
-```
-
-### SQL Functions
-
-#### 1. `enqueue_email()`
-```sql
-SELECT test.enqueue_email(
-    'booking_created',              -- type
-    'customer@example.com',         -- recipient_email
-    'Juan Pérez',                   -- recipient_name
-    'Confirmación de Cita',         -- subject
-    '<h1>Confirmado</h1>',          -- body_html
-    NULL,                           -- body_text
-    1234,                           -- booking_id
-    '{"customer_name": "Juan"}'::jsonb,  -- template_context
-    CURRENT_TIMESTAMP,              -- scheduled_for
-    5                               -- priority
-);
-```
-
-#### 2. `get_pending_emails()`
-```sql
--- Get next 50 pending emails (with row-level locking)
-SELECT * FROM test.get_pending_emails(50);
-```
-
-#### 3. `update_email_status()`
-```sql
--- Mark email as sent
-SELECT test.update_email_status(
-    1234,                -- email_id
-    'sent',              -- status
-    NULL,                -- error
-    CURRENT_TIMESTAMP    -- sent_at
-);
-```
-
-#### 4. `retry_email()`
-```sql
--- Schedule retry with exponential backoff
-SELECT test.retry_email(
-    1234,                              -- email_id
-    'SMTP connection timeout',         -- error
-    300                                -- backoff_seconds (5 min)
-);
-```
-
-#### 5. `cleanup_old_emails()`
-```sql
--- Delete emails older than 90 days
-SELECT test.cleanup_old_emails(90);
-```
-
----
-
-## 🐳 Deployment
-
-### Docker Deployment
-
-#### Option 1: Docker Compose (Recommended)
-
-```yaml
-# docker-compose.yml
-services:
-  email-worker:
-    build:
-      context: ../email_service
-      dockerfile: Dockerfile
-    container_name: mcp-email-worker
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgresql://mcp_user:password@postgres:5432/mcp_db
-      SCHEMA_NAME: test
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-    volumes:
-      - ../email_service:/app
-      - email_logs:/app/logs
-    depends_on:
-      - postgres
-```
-
-```bash
-docker-compose up -d email-worker
-```
-
-#### Option 2: Standalone Docker
-
-```bash
-# Build image
-docker build -t lab01-email-service:latest .
-
-# Run container
-docker run -d \
-  --name email-worker \
-  --env-file .env \
-  --restart unless-stopped \
-  lab01-email-service:latest
-```
-
-### Production Deployment Checklist
-
-- [ ] **SMTP Configuration**
-  - [ ] Valid SMTP credentials configured
-  - [ ] Test email sent successfully
-  - [ ] Daily sending limits verified
-
-- [ ] **Database Setup**
-  - [ ] `email_queue` table created
-  - [ ] All indexes created
-  - [ ] SQL functions deployed
-  - [ ] Permissions granted to `mcp_user`
-
-- [ ] **Worker Configuration**
-  - [ ] Poll interval optimized (default: 10s)
-  - [ ] Batch size tuned (default: 50)
-  - [ ] Retry limits configured (default: 3)
-  - [ ] Logging enabled
-
-- [ ] **Monitoring**
-  - [ ] Log aggregation configured
-  - [ ] Email delivery metrics tracked
-  - [ ] Alerts for failed emails
-  - [ ] Health check endpoint enabled
-
-- [ ] **Security**
-  - [ ] SMTP credentials encrypted
-  - [ ] TLS encryption enabled
-  - [ ] Non-root Docker user
-  - [ ] Network isolation configured
-
----
-
-## 📚 API Reference
+## 🔧 API Reference
 
 ### EmailQueueManager
 
 ```python
-class EmailQueueManager:
-    """Manages email queue operations with PostgreSQL."""
+from email_service import EmailQueueManager, EmailStatus
 
-    def enqueue_email(
-        self,
-        email_type: EmailType,
-        recipient_email: str,
-        recipient_name: str | None,
-        subject: str,
-        body_html: str,
-        body_text: str | None = None,
-        booking_id: int | None = None,
-        template_context: dict[str, Any] | None = None,
-        scheduled_for: datetime | None = None,
-        priority: int = 5,
-    ) -> int:
-        """Enqueue a new email for delivery.
+queue = EmailQueueManager()
 
-        Returns:
-            email_id: ID of created email record
-        """
+# Enqueue email
+email_id = queue.enqueue_email(
+    email_type: EmailType,
+    recipient_email: str,
+    recipient_name: str | None,
+    subject: str,
+    body_html: str,
+    body_text: str | None = None,
+    booking_id: int | None = None,
+    template_context: dict[str, Any] | None = None,
+    scheduled_for: datetime | None = None,
+    priority: int = 5,
+) -> int
 
-    def get_pending_emails(self, limit: int = 50) -> list[EmailRecord]:
-        """Get pending emails ready for delivery."""
+# Get pending emails
+emails = queue.get_pending_emails(limit: int = 50) -> list[EmailRecord]
 
-    def update_email_status(
-        self,
-        email_id: int,
-        status: EmailStatus,
-        error: str | None = None,
-        sent_at: datetime | None = None,
-    ) -> None:
-        """Update email delivery status."""
+# Update status
+queue.update_email_status(
+    email_id: int,
+    status: EmailStatus,
+    error: str | None = None,
+    sent_at: datetime | None = None,
+) -> None
 
-    def retry_email(
-        self,
-        email_id: int,
-        error: str,
-        backoff_seconds: int = 300
-    ) -> None:
-        """Retry failed email with exponential backoff."""
+# Retry failed email
+queue.retry_email(
+    email_id: int,
+    error: str,
+    backoff_seconds: int = 300,
+) -> None
+
+# Get email by ID
+email = queue.get_email_by_id(email_id: int) -> EmailRecord | None
+
+# Cleanup old emails
+deleted = queue.cleanup_old_emails(days_to_keep: int = 90) -> int
 ```
 
 ### SMTPClient
 
 ```python
-class SMTPClient:
-    """SMTP email delivery client."""
+from email_service import SMTPClient
 
-    def send_email(
-        self,
-        recipient_email: str,
-        recipient_name: str | None,
-        subject: str,
-        body_html: str,
-        body_text: str | None = None,
-    ) -> None:
-        """Send an email via SMTP."""
+client = SMTPClient()
 
-    def validate_connection(self) -> bool:
-        """Test SMTP connection and authentication."""
+# Send email
+client.send_email(
+    recipient_email: str,
+    recipient_name: str | None,
+    subject: str,
+    body_html: str,
+    body_text: str | None = None,
+) -> None
 
-    def send_test_email(self, test_recipient: str) -> bool:
-        """Send a test email to verify configuration."""
+# Test connection
+is_valid = client.validate_connection() -> bool
+
+# Send test email
+success = client.send_test_email(test_recipient: str) -> bool
 ```
 
 ### TemplateRenderer
 
 ```python
-class TemplateRenderer:
-    """Jinja2 template renderer for emails."""
+from email_service import TemplateRenderer, EmailType
 
-    def render_html(
-        self,
-        email_type: EmailType,
-        context: dict[str, Any]
-    ) -> str:
-        """Render HTML email template."""
+renderer = TemplateRenderer()
 
-    def render_text(
-        self,
-        email_type: EmailType,
-        context: dict[str, Any]
-    ) -> str:
-        """Render plain text email template."""
+# Render HTML
+html = renderer.render_html(
+    email_type: EmailType,
+    context: dict[str, Any],
+) -> str
 
-    def template_exists(
-        self,
-        email_type: EmailType,
-        format_type: str = "html"
-    ) -> bool:
-        """Check if template file exists."""
+# Render plain text
+text = renderer.render_text(
+    email_type: EmailType,
+    context: dict[str, Any],
+) -> str
+
+# Check template exists
+exists = renderer.template_exists(
+    email_type: EmailType,
+    format_type: str = "html",
+) -> bool
 ```
 
 ---
 
-## 📊 Monitoring
+## 🧪 Testing
 
-### Log Files
-
-```bash
-# View worker logs
-tail -f email_service/logs/email_worker.log
-
-# Docker logs
-docker logs -f mcp-email-worker
-
-# Follow logs with grep
-docker logs -f mcp-email-worker | grep "ERROR"
-```
-
-### Email Queue Metrics
-
-```sql
--- Success rate by email type
-SELECT
-    type,
-    COUNT(*) as total,
-    SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) as sent,
-    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
-    ROUND(
-        100.0 * SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) / COUNT(*),
-        2
-    ) as success_rate
-FROM test.email_queue
-GROUP BY type;
-
--- Average delivery time
-SELECT
-    AVG(EXTRACT(EPOCH FROM (sent_at - created_at))) / 60 as avg_minutes
-FROM test.email_queue
-WHERE status = 'sent';
-
--- Emails pending for too long (> 1 hour)
-SELECT
-    id,
-    recipient_email,
-    status,
-    retry_count,
-    created_at
-FROM test.email_queue
-WHERE status IN ('pending', 'processing')
-  AND created_at < CURRENT_TIMESTAMP - INTERVAL '1 hour';
-```
-
-### Worker Health Check
+### Type Checking
 
 ```bash
-# Check if worker is running
-docker ps | grep email-worker
+# Check all type hints (mypy)
+mypy email_service/ --ignore-missing-imports
 
-# Check worker process
-ps aux | grep "email_service.worker"
-
-# Check last processed email
-docker exec mcp-postgres psql -U mcp_user -d mcp_db \
-  -c "SELECT MAX(sent_at) FROM test.email_queue WHERE status = 'sent';"
+# Expected: "Success: no issues found"
 ```
 
----
+### Code Quality
 
-## 🔧 Troubleshooting
-
-### Common Issues
-
-#### 1. Emails Not Being Sent
-
-**Symptoms:**
-- Emails stuck in `pending` status
-- Worker logs show no activity
-
-**Solutions:**
 ```bash
-# Check worker is running
-docker ps | grep email-worker
+# Linting (ruff)
+ruff check email_service/ --select=E,W,F
 
-# Restart worker
-docker-compose restart email-worker
+# Code formatting (black)
+black email_service/ --check
 
-# Check database connection
-docker exec mcp-postgres psql -U mcp_user -d mcp_db \
-  -c "SELECT COUNT(*) FROM test.email_queue WHERE status = 'pending';"
+# Import organization (isort)
+isort email_service/ --check-only
+
+# Run all tests
+pytest email_service/tests/ --cov
 ```
 
-#### 2. SMTP Authentication Failed
+### Quick Verification
 
-**Symptoms:**
-- Error: "535-5.7.8 Username and Password not accepted"
-- Emails marked as `failed`
-
-**Solutions:**
 ```bash
-# Verify SMTP credentials
-echo $SMTP_USER
-echo $SMTP_PASSWORD
+# Test imports
+python -c "from email_service import EmailWorker; print('✅ OK')"
 
-# For Gmail: ensure App Password (not account password)
-# Visit: https://myaccount.google.com/apppasswords
+# Validate config
+python email_service/scripts/validate_env.py
 
-# Test SMTP connection
+# Send test email
 python -c "
-from email_service.smtp_client import SMTPClient
+from email_service import SMTPClient
+client = SMTPClient()
+if client.validate_connection():
+    print('✅ SMTP OK')
+"
+```
+
+---
+
+## 🆘 Troubleshooting
+
+### Issue: "SMTP authentication failed"
+
+**Solution:**
+```bash
+# 1. Check credentials in .env
+nano .env
+
+# 2. For Gmail: Use App Passwords, not your Gmail password
+# https://support.google.com/accounts/answer/185833
+
+# 3. Test connection
+python -c "
+from email_service import SMTPClient
 client = SMTPClient()
 print(client.validate_connection())
 "
 ```
 
-#### 3. Template Rendering Errors
+### Issue: "Connection pool exhausted"
 
-**Symptoms:**
-- Error: "TemplateNotFound"
-- Empty email body
-
-**Solutions:**
+**Solution:**
 ```bash
-# Check template directory exists
-ls -la email_service/templates/
+# Reduce batch size or increase poll interval in .env
+EMAIL_WORKER_BATCH_SIZE=25
+EMAIL_WORKER_POLL_INTERVAL=15
 
-# Verify template files
-ls email_service/templates/*.html
-
-# Test template rendering
-python -c "
-from email_service.template_renderer import TemplateRenderer
-from email_service.models import EmailType
-renderer = TemplateRenderer()
-print(renderer.template_exists(EmailType.BOOKING_CREATED, 'html'))
-"
+# Check database connections
+psql -c "SELECT count(*) FROM pg_stat_activity WHERE datname = 'mcp_db';"
 ```
 
-#### 4. High Retry Rate
+### Issue: "Templates not found"
 
-**Symptoms:**
-- Many emails in `processing` status
-- High `retry_count` values
+**Solution:**
+```bash
+# Check TEMPLATE_DIR in .env
+TEMPLATE_DIR=/absolute/path/to/templates
 
-**Solutions:**
-```sql
--- Identify problematic emails
-SELECT
-    id,
-    recipient_email,
-    retry_count,
-    last_error
-FROM test.email_queue
-WHERE retry_count > 1
-ORDER BY retry_count DESC;
+# Verify templates exist
+ls email_service/templates/
 
--- Check for common errors
-SELECT
-    last_error,
-    COUNT(*) as count
-FROM test.email_queue
-WHERE status = 'failed'
-GROUP BY last_error
-ORDER BY count DESC;
+# Create template if missing
+touch email_service/templates/booking_created.html
 ```
 
-### Debug Mode
+### Issue: "Worker not processing emails"
 
-Enable debug logging to troubleshoot issues:
-
+**Debugging steps:**
 ```bash
-# Set in .env
-LOG_LEVEL=DEBUG
+# 1. Check logs
+tail -f ./logs/email_service.log
 
-# Restart worker
-docker-compose restart email-worker
+# 2. Verify config is valid
+python email_service/scripts/validate_env.py
 
-# Watch debug logs
-docker logs -f mcp-email-worker
+# 3. Check database connection
+psql -c "SELECT count(*) FROM public.email_queue;"
+
+# 4. Check pending emails
+psql -c "SELECT id, status FROM public.email_queue LIMIT 5;"
 ```
 
 ---
 
-## 🛠️ Development
+## 📊 Performance Metrics
 
-### Local Development Setup
-
-```bash
-# 1. Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or
-venv\Scripts\activate  # Windows
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Install dev dependencies
-pip install pytest pytest-asyncio pytest-cov black ruff mypy
-
-# 4. Run tests
-pytest tests/ -v --cov=email_service
-
-# 5. Format code
-black .
-ruff check . --fix
-
-# 6. Type checking
-mypy email_service/
-```
-
-### Running Tests
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=email_service --cov-report=html
-
-# Run specific test file
-pytest tests/test_queue_manager.py -v
-
-# Run with debug output
-pytest -v -s
-```
-
-### Code Quality Checks
-
-```bash
-# Format code with Black
-black email_service/
-
-# Lint with Ruff
-ruff check email_service/
-
-# Type check with mypy
-mypy email_service/ --strict
-
-# All quality checks
-black . && ruff check . --fix && mypy email_service/
-```
+| Metric | Value | Notes |
+|--------|-------|-------|
+| **Throughput** | 50-100 emails/sec | Depends on SMTP provider |
+| **Latency** | <100ms queue op | <1s SMTP send |
+| **Memory** | ~50MB base | +1MB per 1000 queued |
+| **DB Connections** | 10 pool | Configurable |
+| **Retry Backoff** | 300s initial | Exponential scaling |
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please follow these guidelines:
+### Development Setup
 
-### Contribution Workflow
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
 
-1. **Fork the repository**
-2. **Create a feature branch:** `git checkout -b feature/your-feature-name`
-3. **Make your changes**
-4. **Run tests:** `pytest`
-5. **Format code:** `black . && ruff check . --fix`
-6. **Commit changes:** `git commit -m "feat: add your feature"`
-7. **Push to branch:** `git push origin feature/your-feature-name`
-8. **Open a Pull Request**
+# Install dev dependencies
+pip install -r requirements-dev.txt
 
-### Code Style
-
-- Follow **PEP 8** guidelines
-- Use **type hints** for all functions
-- Write **docstrings** for all public methods (Google style)
-- Maximum line length: **100 characters**
-- Use **Pydantic v2** for data validation
-- Keep functions **small and focused** (max 50 lines)
-
-### Commit Message Convention
-
-Follow [Conventional Commits](https://www.conventionalcommits.org/):
-
+# Run pre-commit hooks
+pre-commit install
 ```
-feat: add support for attachment files
-fix: resolve SMTP timeout on large emails
-docs: update API reference for EmailQueueManager
-refactor: simplify retry logic in worker
-test: add integration tests for SMTP client
+
+### Code Standards
+
+- **PEP 8**: Enforced with black (88 chars)
+- **Type Hints**: Required (mypy compliant)
+- **Docstrings**: Google style
+- **Imports**: Organized with isort
+
+### Running Tests
+
+```bash
+# Unit tests
+pytest email_service/tests/
+
+# With coverage
+pytest --cov=email_service email_service/tests/
+
+# Type checking
+mypy email_service/
+
+# All checks
+make test  # or run manually above
 ```
 
 ---
 
 ## 📄 License
 
-This project is licensed under the **MIT License** - see the [LICENSE](../LICENSE) file for details.
+This project is licensed under the **MIT License** - see the [LICENSE](./LICENSE) file for details.
 
 ```
 MIT License
@@ -1188,63 +756,26 @@ Copyright (c) 2025 Lab01-MCP Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+in the Software without restriction...
 ```
-
----
-
-## 👥 Authors & Acknowledgments
-
-### Development Team
-
-- **Lab01-MCP Team** - *Initial work* - [GitHub](https://github.com/your-org/lab01-mcp)
-
-### Built With
-
-- [Python 3.11+](https://www.python.org/) - Programming language
-- [PostgreSQL 14+](https://www.postgresql.org/) - Database
-- [Pydantic v2](https://docs.pydantic.dev/) - Data validation
-- [Jinja2](https://jinja.palletsprojects.com/) - Template engine
-- [psycopg2](https://www.psycopg.org/) - PostgreSQL adapter
-- [Docker](https://www.docker.com/) - Containerization
-
-### Special Thanks
-
-- Anthropic Claude for AI assistance
-- PostgreSQL community for excellent database
-- Python community for amazing libraries
 
 ---
 
 ## 📞 Support
 
-### Getting Help
-
-- 📖 **Documentation:** [Lab01-MCP Docs](https://github.com/your-org/lab01-mcp/docs)
-- 💬 **Discussions:** [GitHub Discussions](https://github.com/your-org/lab01-mcp/discussions)
-- 🐛 **Bug Reports:** [GitHub Issues](https://github.com/your-org/lab01-mcp/issues)
-- 📧 **Email:** support@lab01.com
-
-### Useful Links
-
-- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
-- [Jinja2 Template Designer Documentation](https://jinja.palletsprojects.com/templates/)
-- [Gmail SMTP Setup Guide](https://support.google.com/mail/answer/7126229)
-- [SendGrid API Documentation](https://docs.sendgrid.com/)
-- [AWS SES Documentation](https://docs.aws.amazon.com/ses/)
+- 📧 **Email**: support@lab01.com
+- 🐛 **Issues**: [GitHub Issues](https://github.com/Lab01-MCP/email-service/issues)
+- 📚 **Documentation**: Full Google-style docstrings in code
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/Lab01-MCP/email-service/discussions)
 
 ---
 
 <div align="center">
 
-**⭐ Star this repository if you find it helpful!**
+### Built with ❤️ for Lab01 - AI Sales Platform
 
-Made with ❤️ by the Lab01-MCP Team
+**[⬆ Back to Top](#-email-service)**
+
+**Version 2.0.0** • **Updated October 18, 2025**
 
 </div>

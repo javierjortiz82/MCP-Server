@@ -36,8 +36,8 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from mcp_server.utils.logger import setup_logging
-from mcp_server.utils.i18n import t, get_language
+from .logger import setup_logging  # Proper relative import
+from .i18n import t, get_language  # Proper relative import
 
 # Type variable for retry decorator
 T = TypeVar("T")

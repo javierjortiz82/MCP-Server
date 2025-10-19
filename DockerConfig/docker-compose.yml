@@ -69,11 +69,11 @@ services:
       BATCH_SIZE: ${BATCH_SIZE:-8}
       PGVECTOR_IVF_LISTS: ${PGVECTOR_IVF_LISTS:-100}
 
-      # Google Calendar (optional)
-      GOOGLE_CALENDAR_ENABLED: ${GOOGLE_CALENDAR_ENABLED:-false}
-      GOOGLE_CALENDAR_CREDENTIALS_PATH: ${GOOGLE_CALENDAR_CREDENTIALS_PATH:-credentials/service-account.json}
-      GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-primary}
-      GOOGLE_CALENDAR_TIMEZONE: ${GOOGLE_CALENDAR_TIMEZONE:-America/Costa_Rica}
+      # Google Calendar (REQUIRED for bookings - set in .env)
+      GOOGLE_CALENDAR_ENABLED: ${GOOGLE_CALENDAR_ENABLED}
+      GOOGLE_CALENDAR_CREDENTIALS_PATH: ${GOOGLE_CALENDAR_CREDENTIALS_PATH}
+      GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID}
+      GOOGLE_CALENDAR_TIMEZONE: ${GOOGLE_CALENDAR_TIMEZONE}
 
       # Booking configuration (optional)
       BOOKING_DEFAULT_DURATION_MINUTES: ${BOOKING_DEFAULT_DURATION_MINUTES:-60}
@@ -93,6 +93,8 @@ services:
       - "8009:8009"
     volumes:
       - mcp_logs:/app/logs
+      - ../email_service:/app/email_service:ro
+      - ../credentials:/app/credentials:ro
     networks:
       - mcp-network
     depends_on:
