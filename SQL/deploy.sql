@@ -87,10 +87,13 @@
 \echo ''
 
 -- ============================================================================
--- Phase 8: Optional Seed Data
+-- Phase 8: Seed Data (DML - Critical for full deployment)
 -- ============================================================================
-\echo '[9/9] (Optional) Seeding initial data...'
--- Uncomment to enable seed data
+\echo '[9/9] Seeding product data...'
+\i '04_seed/01_products_data.sql'
+\echo ''
+
+-- Optional: Additional seed data can be uncommented
 -- \i '04_seed/service_types.sql'
 -- \i '04_seed/business_hours.sql'
 \echo ''
