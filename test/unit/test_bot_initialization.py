@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-DEPRECATED: Legacy OdiseoBot Initialization Tests
+"""DEPRECATED: Legacy OdiseoBot Initialization Tests.
 
 ⚠️  WARNING: This test file tests Legacy OdiseoBot internal implementation.
 
@@ -20,15 +19,15 @@ See: agent/docs/TEST_MIGRATION_ANALYSIS.md for migration decision details.
 """
 
 import sys
-from pathlib import Path
 import warnings
+from pathlib import Path
 
 warnings.warn(
     "test_bot_initialization.py tests deprecated Legacy OdiseoBot. "
     "Use agent/test_odiseo_bot_v2_integration.py instead. "
     "This file will be removed in Week 6-8 of Legacy elimination.",
     DeprecationWarning,
-    stacklevel=2
+    stacklevel=2,
 )
 
 # Add src to path
@@ -44,100 +43,76 @@ load_dotenv()
 
 def test_bot_constructor():
     """Test bot constructor (sync)."""
-    print("\n" + "=" * 60)
-    print("🏗️ TEST: Bot Constructor")
-    print("=" * 60)
-
     try:
-        from client_mcp.config.settings import settings
         from client_mcp.core.odiseo_bot import OdiseoBot
 
         # Check API key
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
-            print("❌ GOOGLE_API_KEY not found in environment")
             return False
 
-        print(f"✅ API Key found: {api_key[:10]}...")
-        print(f"✅ Model: {settings.MODEL}")
-
         # Create bot instance
-        print("\n📦 Creating OdiseoBot instance...")
         bot = OdiseoBot()
 
         # Check attributes after __init__
-        print("\n🔍 Checking bot attributes (after __init__):")
 
         # Client should be None until initialize()
         if hasattr(bot, "client"):
             if bot.client is None:
-                print("  ✅ client: None (as expected before initialize)")
+                pass
             else:
-                print(f"  ⚠️ client: {type(bot.client).__name__} (should be None)")
+                pass
         else:
-            print("  ❌ client attribute missing")
             return False
 
         # System prompt should be empty until initialize()
         if hasattr(bot, "system_prompt"):
             if bot.system_prompt == "":
-                print("  ✅ system_prompt: empty (as expected before initialize)")
+                pass
             else:
-                print("  ⚠️ system_prompt: has content (should be empty)")
+                pass
         else:
-            print("  ❌ system_prompt attribute missing")
             return False
 
         # MCP tools should be empty list
         if hasattr(bot, "mcp_tools"):
             if isinstance(bot.mcp_tools, list) and len(bot.mcp_tools) == 0:
-                print("  ✅ mcp_tools: empty list (as expected)")
+                pass
             else:
-                print(f"  ⚠️ mcp_tools: {len(bot.mcp_tools)} items")
+                pass
         else:
-            print("  ❌ mcp_tools attribute missing")
             return False
 
         # Conversation history should be empty list
         if hasattr(bot, "conversation_history"):
-            if (
-                isinstance(bot.conversation_history, list)
-                and len(bot.conversation_history) == 0
-            ):
-                print("  ✅ conversation_history: empty list (as expected)")
+            if isinstance(bot.conversation_history, list) and len(bot.conversation_history) == 0:
+                pass
             else:
-                print(
-                    f"  ⚠️ conversation_history: {len(bot.conversation_history)} items"
-                )
+                pass
         else:
-            print("  ❌ conversation_history attribute missing")
             return False
 
         # Generation config should be None until initialize()
         if hasattr(bot, "_generation_config"):
             if bot._generation_config is None:
-                print("  ✅ _generation_config: None (as expected)")
+                pass
             else:
-                print(f"  ⚠️ _generation_config: {type(bot._generation_config)}")
+                pass
         else:
-            print("  ❌ _generation_config attribute missing")
             return False
 
         # Tools param should be None until initialize()
         if hasattr(bot, "_tools_param"):
             if bot._tools_param is None:
-                print("  ✅ _tools_param: None (as expected)")
+                pass
             else:
-                print(f"  ⚠️ _tools_param: {type(bot._tools_param)}")
+                pass
         else:
-            print("  ❌ _tools_param attribute missing")
             return False
 
-        print("\n✅ Bot constructor working correctly!")
         return True
 
-    except Exception as e:
-        print(f"\n❌ Error during constructor: {e}")
+    except Exception:
         import traceback
 
         traceback.print_exc()
@@ -146,10 +121,6 @@ def test_bot_constructor():
 
 def test_method_existence():
     """Test that all critical methods exist."""
-    print("\n" + "=" * 60)
-    print("🔧 TEST: Method Existence")
-    print("=" * 60)
-
     try:
         from client_mcp.core.odiseo_bot import OdiseoBot
 
@@ -167,18 +138,16 @@ def test_method_existence():
         all_exist = True
         for method_name in required_methods:
             if hasattr(OdiseoBot, method_name):
-                print(f"  ✅ {method_name}")
+                pass
             else:
-                print(f"  ❌ {method_name} MISSING")
                 all_exist = False
 
         if all_exist:
-            print("\n✅ All critical methods exist!")
+            pass
 
         return all_exist
 
-    except Exception as e:
-        print(f"\n❌ Error checking methods: {e}")
+    except Exception:
         import traceback
 
         traceback.print_exc()
@@ -186,10 +155,6 @@ def test_method_existence():
 
 
 if __name__ == "__main__":
-    print("\n" + "=" * 60)
-    print("🧪 BOT INITIALIZATION TEST SUITE")
-    print("=" * 60)
-
     results = []
 
     # Test 1: Method existence
@@ -199,26 +164,16 @@ if __name__ == "__main__":
     results.append(("Bot Constructor", test_bot_constructor()))
 
     # Summary
-    print("\n" + "=" * 60)
-    print("📊 TEST SUMMARY")
-    print("=" * 60)
 
     passed = sum(1 for _, result in results if result)
     total = len(results)
 
-    for test_name, result in results:
+    for _test_name, result in results:
         status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{status}: {test_name}")
-
-    print("\n" + "=" * 60)
-    print(f"📈 Score: {passed}/{total} ({passed / total * 100:.1f}%)")
 
     if passed == total:
-        print("\n🎉 ¡Bot constructor funciona correctamente con google-genai 1.41.0!")
-        print("✅ Todos los atributos críticos inicializados correctamente")
+        pass
     else:
-        print(f"\n⚠️ {total - passed} test(s) fallaron")
-
-    print("=" * 60 + "\n")
+        pass
 
     sys.exit(0 if passed == total else 1)

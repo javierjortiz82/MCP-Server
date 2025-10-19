@@ -7,16 +7,17 @@ Author: Lab01-MCP Team
 Created: 2025-10-16
 """
 
-import pytest
 import sys
 from pathlib import Path
+
+import pytest
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from booking_input_parser import (
-    BookingInputParser,
     BookingChoice,
+    BookingInputParser,
     parse_booking_choice,
     parse_confirmation,
 )
@@ -60,7 +61,7 @@ class TestRescheduleKeywordParsing:
         inputs = ["REPROGRAMA", "RePrOgRaM", "Cambiar", "MODIFICAR"]
 
         for user_input in inputs:
-            choice, confidence = parse_booking_choice(user_input)
+            choice, _confidence = parse_booking_choice(user_input)
             assert choice == BookingChoice.RESCHEDULE
 
     def test_reschedule_with_accents(self):
@@ -68,7 +69,7 @@ class TestRescheduleKeywordParsing:
         inputs = ["reprogramá", "cambíar", "modificár"]
 
         for user_input in inputs:
-            choice, confidence = parse_booking_choice(user_input)
+            choice, _confidence = parse_booking_choice(user_input)
             assert choice == BookingChoice.RESCHEDULE
 
 
@@ -139,7 +140,7 @@ class TestEdgeCases:
 
     def test_none_input(self):
         """Test None input handling."""
-        choice, confidence = parse_booking_choice("")
+        choice, _confidence = parse_booking_choice("")
         assert choice == BookingChoice.UNKNOWN
 
     def test_ambiguous_input(self):

@@ -35,54 +35,54 @@ from multi_agent import OdiseoBotV2
 
 # Fixtures
 
+
 @pytest.fixture
 def mock_mcp_connector():
     """Mock MCPConnector to avoid real MCP server dependency."""
     with patch("multi_agent.odiseo_bot_v2.MCPConnector") as mock:
         # Mock health check (healthy)
-        mock.check_server_health = AsyncMock(return_value={
-            "status": "healthy",
-            "checks": {
-                "database": {
-                    "status": "healthy",
-                    "product_count": 100,
-                    "extensions": ["unaccent", "pg_trgm"]
-                }
+        mock.check_server_health = AsyncMock(
+            return_value={
+                "status": "healthy",
+                "checks": {
+                    "database": {
+                        "status": "healthy",
+                        "product_count": 100,
+                        "extensions": ["unaccent", "pg_trgm"],
+                    }
+                },
             }
-        })
+        )
 
         # Mock connector instance
         mock_instance = AsyncMock()
         mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
         mock_instance.__aexit__ = AsyncMock(return_value=None)
-        mock_instance.list_tools = AsyncMock(return_value=[
-            {
-                "name": "search_products",
-                "description": "Search products by query",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string"}
-                    }
-                }
-            },
-            {
-                "name": "fuzzy_search_smart",
-                "description": "Fuzzy search with typo tolerance",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "search_term": {"type": "string"}
-                    }
-                }
-            }
-        ])
-        mock_instance.call_tool = AsyncMock(return_value={
-            "items": [
-                {"name": "Product 1", "price": 100.0, "sku": "P1"},
-                {"name": "Product 2", "price": 200.0, "sku": "P2"}
+        mock_instance.list_tools = AsyncMock(
+            return_value=[
+                {
+                    "name": "search_products",
+                    "description": "Search products by query",
+                    "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}},
+                },
+                {
+                    "name": "fuzzy_search_smart",
+                    "description": "Fuzzy search with typo tolerance",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"search_term": {"type": "string"}},
+                    },
+                },
             ]
-        })
+        )
+        mock_instance.call_tool = AsyncMock(
+            return_value={
+                "items": [
+                    {"name": "Product 1", "price": 100.0, "sku": "P1"},
+                    {"name": "Product 2", "price": 200.0, "sku": "P2"},
+                ]
+            }
+        )
 
         mock.return_value = mock_instance
         yield mock
@@ -99,10 +99,11 @@ def mock_gemini_client():
         # Mock genai.Client
         mock_client = Mock()
         mock_client.caches = Mock()
-        mock_client.caches.create = Mock(return_value=Mock(
-            name="cached_content_123",
-            usage_metadata=Mock(total_token_count=1000)
-        ))
+        mock_client.caches.create = Mock(
+            return_value=Mock(
+                name="cached_content_123", usage_metadata=Mock(total_token_count=1000)
+            )
+        )
         mock_client.caches.delete = Mock()
 
         mock_genai.Client.return_value = mock_client
@@ -111,6 +112,7 @@ def mock_gemini_client():
 
 
 # Test Suite
+
 
 class TestOdiseoBotV2Initialization:
     """Test OdiseoBotV2 initialization and configuration."""
@@ -153,11 +155,7 @@ class TestOdiseoBotV2Initialization:
         assert bot.function_call_handler is not None
 
     @pytest.mark.asyncio
-    async def test_initialization_with_mocks(
-        self,
-        mock_mcp_connector,
-        mock_gemini_client
-    ):
+    async def test_initialization_with_mocks(self, mock_mcp_connector, mock_gemini_client):
         """Test full initialization with mocked dependencies."""
         bot = OdiseoBotV2(user_id="test_user")
 
@@ -193,9 +191,7 @@ class TestOdiseoBotV2SystemPrompt:
         bot = OdiseoBotV2()
 
         # Mock mcp_tools
-        bot.mcp_tools = [
-            Mock(name="search_products", description="Search products")
-        ]
+        bot.mcp_tools = [Mock(name="search_products", description="Search products")]
 
         prompt = bot.get_system_prompt(mcp_tools=bot.mcp_tools)
 
@@ -288,9 +284,7 @@ class TestOdiseoBotV2Pagination:
 
         # Track results
         bot._track_search_results(
-            tool_name="search_products",
-            args={"query": "laptop"},
-            result=result
+            tool_name="search_products", args={"query": "laptop"}, result=result
         )
 
         # Verify pagination context created
@@ -314,7 +308,7 @@ class TestOdiseoBotV2Pagination:
                 {"name": "Product 4", "sku": "P4", "price": 400},
                 {"name": "Product 5", "sku": "P5", "price": 500},
             ],
-            page_size=2
+            page_size=2,
         )
 
         # First page is already shown, request more
@@ -339,7 +333,7 @@ class TestOdiseoBotV2Pagination:
                 {"name": "Product 1", "sku": "P1", "price": 100},
                 {"name": "Product 2", "sku": "P2", "price": 200},
             ],
-            page_size=2
+            page_size=2,
         )
 
         # Get first page (already shown)
@@ -348,7 +342,10 @@ class TestOdiseoBotV2Pagination:
 
         # Verify response indicates no more results
         assert response is not None
-        assert "todos los resultados" in response.lower() or "all available results" in response.lower()
+        assert (
+            "todos los resultados" in response.lower()
+            or "all available results" in response.lower()
+        )
 
 
 class TestOdiseoBotV2ThinkingMode:
@@ -413,6 +410,7 @@ class TestOdiseoBotV2Repr:
 
 # Demo and Manual Testing
 
+
 async def demo_odiseo_bot_v2_basic():
     """Demo 1: Basic instantiation and configuration."""
     print("\n" + "=" * 80)
@@ -476,7 +474,7 @@ async def demo_odiseo_bot_v2_pagination():
 
     # Create mock search results
     products = [
-        {"name": f"Laptop {i}", "sku": f"LAP{i}", "price": 100 + i*50}
+        {"name": f"Laptop {i}", "sku": f"LAP{i}", "price": 100 + i * 50}
         for i in range(1, 11)  # 10 products
     ]
 
@@ -488,7 +486,7 @@ async def demo_odiseo_bot_v2_pagination():
         tool="search_products",
         query="laptop gaming",
         results=products,
-        page_size=3  # Show 3 per page
+        page_size=3,  # Show 3 per page
     )
 
     print("   ✅ Saved to pagination manager")

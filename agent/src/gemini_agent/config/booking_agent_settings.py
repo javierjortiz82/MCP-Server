@@ -11,9 +11,10 @@ Created: 2025-10-16
 Version: 1.0.0
 """
 
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pathlib import Path
 
 
 class BookingAgentSettings(BaseSettings):

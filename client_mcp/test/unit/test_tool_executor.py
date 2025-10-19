@@ -3,7 +3,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from core.tool_cache import ToolCache
 from core.tool_executor import ToolExecutor
 from core.tool_validator import ToolValidator
@@ -372,7 +371,7 @@ class TestToolExecutorFallback:
         }
         await executor.register_tool_schemas([fuzzy_tool])
 
-        result = await executor.execute_tool("search_products", {"query": "laptop", "k": 5})
+        await executor.execute_tool("search_products", {"query": "laptop", "k": 5})
 
         # Should have called both tools
         assert mock_connector.call_tool.call_count == 2
@@ -437,7 +436,7 @@ class TestToolExecutorRetry:
         executor = ToolExecutor(mock_connector)
         await executor.register_tool_schemas(sample_mcp_tools)
 
-        result = await executor.execute_tool("search_products", {"query": "laptop", "limit": 5})
+        await executor.execute_tool("search_products", {"query": "laptop", "limit": 5})
 
         # Should call once (retry not configured in test environment)
         assert mock_connector.call_tool.call_count == 1

@@ -5,7 +5,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from config.settings import Settings, settings
 
 
@@ -63,7 +62,7 @@ class TestSettings:
         monkeypatch.setenv("GOOGLE_API_KEY", test_key)
 
         # Create new settings instance to reload from env
-        test_settings = Settings()
+        Settings()
 
         # Verify the env var is set
         assert os.environ.get("GOOGLE_API_KEY") == test_key
@@ -88,7 +87,7 @@ class TestSettings:
     def test_rpm_less_than_rpd(self):
         """Test RPM limit makes sense relative to RPD."""
         # RPM * 60 * 24 should be >= RPD (rough check)
-        max_daily_from_rpm = settings.GEMINI_RPM_LIMIT * 60 * 24
+        settings.GEMINI_RPM_LIMIT * 60 * 24
         # RPD should be <= theoretical max from RPM
         # (This is a loose check as burst limits may differ)
         assert settings.GEMINI_RPD_LIMIT > 0

@@ -23,7 +23,7 @@ from pathlib import Path
 agent_src = Path(__file__).parent / "src"
 sys.path.insert(0, str(agent_src))
 
-from multi_agent.prompt_manager import PromptManager
+from multi_agent.prompt_manager import PromptManager  # noqa: E402
 
 
 class ABTestingDemo:
@@ -59,20 +59,26 @@ class ABTestingDemo:
         self.print_header("📋 CURRENT A/B TESTING CONFIGURATION")
 
         config = self.prompt_manager.config
-        ab_config = config.get('ab_testing', {})
+        ab_config = config.get("ab_testing", {})
 
         print(f"A/B Testing Enabled: {ab_config.get('enabled', False)}")
         print(f"Active Sales Version: {config['active_versions']['sales']}")
 
-        experiments = ab_config.get('experiments', [])
+        experiments = ab_config.get("experiments", [])
         for exp in experiments:
-            if exp.get('agent') == 'sales':
+            if exp.get("agent") == "sales":
                 print(f"\nExperiment: {exp['name']}")
                 print(f"  Description: {exp['description']}")
                 print(f"  Enabled: {exp['enabled']}")
-                print(f"  Traffic Split: {exp['traffic_split']} ({int(exp['traffic_split']*100)}% to variant B)")
-                print(f"  Variant A: {exp['version_a']} (pagination: {exp['version_a_params']['pagination_page_size']})")
-                print(f"  Variant B: {exp['version_b']} (pagination: {exp['version_b_params']['pagination_page_size']})")
+                print(
+                    f"  Traffic Split: {exp['traffic_split']} ({int(exp['traffic_split'] * 100)}% to variant B)"
+                )
+                print(
+                    f"  Variant A: {exp['version_a']} (pagination: {exp['version_a_params']['pagination_page_size']})"
+                )
+                print(
+                    f"  Variant B: {exp['version_b']} (pagination: {exp['version_b_params']['pagination_page_size']})"
+                )
 
     def simulate_user_bucketing_disabled(self):
         """Simulate user bucketing when A/B testing is DISABLED."""
@@ -83,13 +89,12 @@ class ABTestingDemo:
         results = {}
         for user_id in self.test_users[:4]:  # Test 4 users
             version, pagination = self.prompt_manager._select_ab_test_version(
-                agent='sales',
-                user_id=user_id
+                agent="sales", user_id=user_id
             )
             results[user_id] = {
-                'version': version,
-                'pagination': pagination,
-                'variant': 'A' if version == 'v1.0' else 'B'
+                "version": version,
+                "pagination": pagination,
+                "variant": "A" if version == "v1.0" else "B",
             }
 
         # Display results
@@ -97,15 +102,21 @@ class ABTestingDemo:
         print(f"{'User ID':<25} {'Version':<10} {'Pagination':<12} {'Variant':<10}")
         print("-" * 60)
         for user_id, result in results.items():
-            print(f"{user_id:<25} {result['version']:<10} {result['pagination']:<12} {result['variant']:<10}")
+            print(
+                f"{user_id:<25} {result['version']:<10} {result['pagination']:<12} {result['variant']:<10}"
+            )
 
         # Summary
-        variant_a_count = sum(1 for r in results.values() if r['variant'] == 'A')
-        variant_b_count = sum(1 for r in results.values() if r['variant'] == 'B')
+        variant_a_count = sum(1 for r in results.values() if r["variant"] == "A")
+        variant_b_count = sum(1 for r in results.values() if r["variant"] == "B")
 
         print("\n📊 Summary:")
-        print(f"  Variant A (4 products): {variant_a_count} users ({variant_a_count/len(results)*100:.0f}%)")
-        print(f"  Variant B (6 products): {variant_b_count} users ({variant_b_count/len(results)*100:.0f}%)")
+        print(
+            f"  Variant A (4 products): {variant_a_count} users ({variant_a_count / len(results) * 100:.0f}%)"
+        )
+        print(
+            f"  Variant B (6 products): {variant_b_count} users ({variant_b_count / len(results) * 100:.0f}%)"
+        )
         print("\n✅ Expected: 100% Variant A (A/B testing disabled)")
 
     def simulate_user_bucketing_enabled(self):
@@ -113,24 +124,23 @@ class ABTestingDemo:
         self.print_header("🟢 SCENARIO 2: A/B Testing ENABLED (Experiment Active)")
 
         # Enable A/B testing temporarily
-        original_enabled = self.prompt_manager.config['ab_testing']['enabled']
-        original_exp_enabled = self.prompt_manager.config['ab_testing']['experiments'][0]['enabled']
+        original_enabled = self.prompt_manager.config["ab_testing"]["enabled"]
+        original_exp_enabled = self.prompt_manager.config["ab_testing"]["experiments"][0]["enabled"]
 
-        self.prompt_manager.config['ab_testing']['enabled'] = True
-        self.prompt_manager.config['ab_testing']['experiments'][0]['enabled'] = True
+        self.prompt_manager.config["ab_testing"]["enabled"] = True
+        self.prompt_manager.config["ab_testing"]["experiments"][0]["enabled"] = True
 
         print("A/B test active: 50% users → Variant A (4 products), 50% → Variant B (6 products)\n")
 
         results = {}
         for user_id in self.test_users:
             version, pagination = self.prompt_manager._select_ab_test_version(
-                agent='sales',
-                user_id=user_id
+                agent="sales", user_id=user_id
             )
             results[user_id] = {
-                'version': version,
-                'pagination': pagination,
-                'variant': 'A' if version == 'v1.0' else 'B'
+                "version": version,
+                "pagination": pagination,
+                "variant": "A" if version == "v1.0" else "B",
             }
 
         # Display results
@@ -138,28 +148,34 @@ class ABTestingDemo:
         print(f"{'User ID':<25} {'Version':<10} {'Pagination':<12} {'Variant':<10}")
         print("-" * 60)
         for user_id, result in results.items():
-            print(f"{user_id:<25} {result['version']:<10} {result['pagination']:<12} {result['variant']:<10}")
+            print(
+                f"{user_id:<25} {result['version']:<10} {result['pagination']:<12} {result['variant']:<10}"
+            )
 
         # Summary
-        variant_a_count = sum(1 for r in results.values() if r['variant'] == 'A')
-        variant_b_count = sum(1 for r in results.values() if r['variant'] == 'B')
+        variant_a_count = sum(1 for r in results.values() if r["variant"] == "A")
+        variant_b_count = sum(1 for r in results.values() if r["variant"] == "B")
 
         print("\n📊 Summary:")
-        print(f"  Variant A (4 products): {variant_a_count} users ({variant_a_count/len(results)*100:.0f}%)")
-        print(f"  Variant B (6 products): {variant_b_count} users ({variant_b_count/len(results)*100:.0f}%)")
+        print(
+            f"  Variant A (4 products): {variant_a_count} users ({variant_a_count / len(results) * 100:.0f}%)"
+        )
+        print(
+            f"  Variant B (6 products): {variant_b_count} users ({variant_b_count / len(results) * 100:.0f}%)"
+        )
         print("\n✅ Expected: ~50% each variant (50/50 split)")
 
         # Restore original config
-        self.prompt_manager.config['ab_testing']['enabled'] = original_enabled
-        self.prompt_manager.config['ab_testing']['experiments'][0]['enabled'] = original_exp_enabled
+        self.prompt_manager.config["ab_testing"]["enabled"] = original_enabled
+        self.prompt_manager.config["ab_testing"]["experiments"][0]["enabled"] = original_exp_enabled
 
     def test_deterministic_bucketing(self):
         """Test that same user always gets same variant."""
         self.print_header("🎯 SCENARIO 3: Deterministic Bucketing (Consistency)")
 
         # Enable A/B testing
-        self.prompt_manager.config['ab_testing']['enabled'] = True
-        self.prompt_manager.config['ab_testing']['experiments'][0]['enabled'] = True
+        self.prompt_manager.config["ab_testing"]["enabled"] = True
+        self.prompt_manager.config["ab_testing"]["experiments"][0]["enabled"] = True
 
         user_id = "consistent_user@example.com"
         print(f"Testing user '{user_id}' 10 times...\n")
@@ -167,14 +183,9 @@ class ABTestingDemo:
         results = []
         for i in range(10):
             version, pagination = self.prompt_manager._select_ab_test_version(
-                agent='sales',
-                user_id=user_id
+                agent="sales", user_id=user_id
             )
-            results.append({
-                'attempt': i + 1,
-                'version': version,
-                'pagination': pagination
-            })
+            results.append({"attempt": i + 1, "version": version, "pagination": pagination})
 
         # Display results
         print(f"{'Attempt':<10} {'Version':<10} {'Pagination':<12}")
@@ -183,8 +194,8 @@ class ABTestingDemo:
             print(f"{result['attempt']:<10} {result['version']:<10} {result['pagination']:<12}")
 
         # Check consistency
-        all_same = all(r['version'] == results[0]['version'] for r in results)
-        all_pagination_same = all(r['pagination'] == results[0]['pagination'] for r in results)
+        all_same = all(r["version"] == results[0]["version"] for r in results)
+        all_pagination_same = all(r["pagination"] == results[0]["pagination"] for r in results)
 
         print("\n📊 Consistency Check:")
         print(f"  All versions identical: {'✅ YES' if all_same else '❌ NO'}")
@@ -192,34 +203,28 @@ class ABTestingDemo:
         print("\n✅ Expected: 100% consistency (deterministic bucketing)")
 
         # Restore
-        self.prompt_manager.config['ab_testing']['enabled'] = False
-        self.prompt_manager.config['ab_testing']['experiments'][0]['enabled'] = False
+        self.prompt_manager.config["ab_testing"]["enabled"] = False
+        self.prompt_manager.config["ab_testing"]["experiments"][0]["enabled"] = False
 
     def show_prompt_comparison(self):
         """Show prompt comparison between variants."""
         self.print_header("📄 SCENARIO 4: Prompt Comparison (Variant A vs B)")
 
         # Enable A/B testing
-        self.prompt_manager.config['ab_testing']['enabled'] = True
-        self.prompt_manager.config['ab_testing']['experiments'][0]['enabled'] = True
+        self.prompt_manager.config["ab_testing"]["enabled"] = True
+        self.prompt_manager.config["ab_testing"]["experiments"][0]["enabled"] = True
 
         # Get prompts for two users that will be in different variants
         user_a = "variant_a_user@example.com"  # Will likely be variant A
         user_b = "variant_b_user@example.com"  # Will likely be variant B
 
-        prompt_a = self.prompt_manager.get_sales_prompt(
-            mcp_tools=[],
-            user_id=user_a
-        )
+        prompt_a = self.prompt_manager.get_sales_prompt(mcp_tools=[], user_id=user_a)
 
-        prompt_b = self.prompt_manager.get_sales_prompt(
-            mcp_tools=[],
-            user_id=user_b
-        )
+        prompt_b = self.prompt_manager.get_sales_prompt(mcp_tools=[], user_id=user_b)
 
         # Detect which variant each user got
-        version_a, pagination_a = self.prompt_manager._select_ab_test_version('sales', user_a)
-        version_b, pagination_b = self.prompt_manager._select_ab_test_version('sales', user_b)
+        version_a, pagination_a = self.prompt_manager._select_ab_test_version("sales", user_a)
+        version_b, pagination_b = self.prompt_manager._select_ab_test_version("sales", user_b)
 
         print(f"User A: {user_a}")
         print(f"  Variant: {'A' if version_a == 'v1.0' else 'B'}")
@@ -251,8 +256,8 @@ class ABTestingDemo:
         print("-" * 80)
 
         # Restore
-        self.prompt_manager.config['ab_testing']['enabled'] = False
-        self.prompt_manager.config['ab_testing']['experiments'][0]['enabled'] = False
+        self.prompt_manager.config["ab_testing"]["enabled"] = False
+        self.prompt_manager.config["ab_testing"]["experiments"][0]["enabled"] = False
 
     def show_production_instructions(self):
         """Show instructions for enabling A/B testing in production."""

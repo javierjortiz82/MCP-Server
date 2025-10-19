@@ -52,7 +52,7 @@ class DebugFormatter:
             "user_query": metric.user_query,
         }
         metric_json = json.dumps(metric_data, sort_keys=True)
-        return hashlib.md5(metric_json.encode()).hexdigest()
+        return hashlib.md5(metric_json.encode(), usedforsecurity=False).hexdigest()
 
     def format_debug_info(self, metric: ToolMetric) -> str:
         """Format debug information about tool execution.

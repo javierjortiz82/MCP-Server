@@ -41,7 +41,7 @@ class TestRateLimiter:
         """Test multiple sequential requests."""
         limiter = RateLimiter(rpm_limit=100, rpd_limit=1000, max_concurrent=5)
 
-        for i in range(5):
+        for _i in range(5):
             async with limiter.acquire():
                 pass
 

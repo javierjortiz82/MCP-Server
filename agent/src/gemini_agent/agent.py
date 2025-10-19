@@ -9,11 +9,10 @@ Updated to use Pydantic v2 configuration and structured logging.
 import asyncio
 from typing import Any
 
-from google import genai
-from google.genai import types
-
 from gemini_agent.config import settings
 from gemini_agent.utils.logger import setup_logging
+from google import genai
+from google.genai import types
 
 # Setup logger for Gemini Agent
 logger = setup_logging("gemini_agent")
@@ -60,9 +59,7 @@ class GeminiAgent:
         """Initialize the Gemini client."""
         logger.debug("Initializing Gemini client...")
         self.client = genai.Client(api_key=self.api_key)
-        self.generation_config = self._build_generation_config(
-            **self._generation_params
-        )
+        self.generation_config = self._build_generation_config(**self._generation_params)
         logger.info("Gemini client initialized successfully")
 
     def _build_generation_config(
@@ -87,11 +84,7 @@ class GeminiAgent:
         temp = temperature if temperature is not None else settings.TEMPERATURE
         k = top_k if top_k is not None else settings.TOP_K
         p = top_p if top_p is not None else settings.TOP_P
-        tokens = (
-            max_output_tokens
-            if max_output_tokens is not None
-            else settings.MAX_OUTPUT_TOKENS
-        )
+        tokens = max_output_tokens if max_output_tokens is not None else settings.MAX_OUTPUT_TOKENS
 
         logger.debug(
             "Generation config: temp=%s, top_k=%s, top_p=%s, max_tokens=%s",
@@ -144,16 +137,12 @@ class GeminiAgent:
 
         # Add system prompt if provided
         if system_prompt:
-            contents.append(
-                types.Content(role="user", parts=[types.Part(text=system_prompt)])
-            )
+            contents.append(types.Content(role="user", parts=[types.Part(text=system_prompt)]))
             contents.append(
                 types.Content(
                     role="model",
                     parts=[
-                        types.Part(
-                            text="Entendido. Seguiré estas instrucciones como Odiseo Bot."
-                        )
+                        types.Part(text="Entendido. Seguiré estas instrucciones como Odiseo Bot.")
                     ],
                 )
             )
@@ -196,9 +185,7 @@ class GeminiAgent:
             logger.error("Error generating response: %s", e, exc_info=True)
             raise
 
-    def add_to_history(
-        self, user_content: types.Content, model_content: types.Content
-    ) -> None:
+    def add_to_history(self, user_content: types.Content, model_content: types.Content) -> None:
         """Manually add content to conversation history.
 
         Args:
@@ -230,9 +217,7 @@ class GeminiAgent:
             "temperature": kwargs.get("temperature", settings.TEMPERATURE),
             "top_k": kwargs.get("top_k", settings.TOP_K),
             "top_p": kwargs.get("top_p", settings.TOP_P),
-            "max_output_tokens": kwargs.get(
-                "max_output_tokens", settings.MAX_OUTPUT_TOKENS
-            ),
+            "max_output_tokens": kwargs.get("max_output_tokens", settings.MAX_OUTPUT_TOKENS),
         }
         self.generation_config = self._build_generation_config(**config_dict)
 
@@ -267,9 +252,7 @@ class GeminiAgent:
 
         return function_declarations
 
-    def _convert_json_schema_to_gemini_schema(
-        self, json_schema: dict[str, Any]
-    ) -> types.Schema:
+    def _convert_json_schema_to_gemini_schema(self, json_schema: dict[str, Any]) -> types.Schema:
         """Convert JSON Schema to Gemini Schema format.
 
         Args:
@@ -324,8 +307,8 @@ class GeminiAgent:
 
             gemini_nested_properties = {}
             for nested_prop_name, nested_prop_def in nested_properties.items():
-                gemini_nested_properties[nested_prop_name] = (
-                    self._convert_property_to_schema(nested_prop_def)
+                gemini_nested_properties[nested_prop_name] = self._convert_property_to_schema(
+                    nested_prop_def
                 )
 
             return types.Schema(
@@ -439,9 +422,7 @@ class GeminiAgent:
                 if ("403" in error_str or "PERMISSION_DENIED" in error_str) and (
                     "CachedContent" in error_str
                 ):
-                    logger.warning(
-                        "⚠️ Cache expired or not found. Fallback to standard mode..."
-                    )
+                    logger.warning("⚠️ Cache expired or not found. Fallback to standard mode...")
                     # Invalidate cache and rebuild config
                     self.cached_content = None
                     self.generation_config = self._build_generation_config(

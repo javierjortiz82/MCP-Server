@@ -49,17 +49,19 @@ class ABTestMetricsCollector:
                     pagination = int(match.group(5))
 
                     # Extract timestamp (assuming format: YYYY-MM-DD HH:MM:SS)
-                    timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', line)
+                    timestamp_match = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line)
                     timestamp = timestamp_match.group(1) if timestamp_match else None
 
-                    self.decisions.append({
-                        'timestamp': timestamp,
-                        'experiment': experiment,
-                        'user_id': user_id,
-                        'variant': variant,
-                        'version': version,
-                        'pagination': pagination
-                    })
+                    self.decisions.append(
+                        {
+                            "timestamp": timestamp,
+                            "experiment": experiment,
+                            "user_id": user_id,
+                            "variant": variant,
+                            "version": version,
+                            "pagination": pagination,
+                        }
+                    )
 
         print(f"✅ Parsed {len(self.decisions)} A/B test decisions from {self.log_file}")
 
@@ -69,14 +71,14 @@ class ABTestMetricsCollector:
             return {}
 
         summary = {
-            'total_decisions': len(self.decisions),
-            'unique_users': len(set(d['user_id'] for d in self.decisions)),
-            'variant_a_count': sum(1 for d in self.decisions if d['variant'] == 'A'),
-            'variant_b_count': sum(1 for d in self.decisions if d['variant'] == 'B'),
+            "total_decisions": len(self.decisions),
+            "unique_users": len({d["user_id"] for d in self.decisions}),
+            "variant_a_count": sum(1 for d in self.decisions if d["variant"] == "A"),
+            "variant_b_count": sum(1 for d in self.decisions if d["variant"] == "B"),
         }
 
-        summary['variant_a_pct'] = (summary['variant_a_count'] / summary['total_decisions']) * 100
-        summary['variant_b_pct'] = (summary['variant_b_count'] / summary['total_decisions']) * 100
+        summary["variant_a_pct"] = (summary["variant_a_count"] / summary["total_decisions"]) * 100
+        summary["variant_b_pct"] = (summary["variant_b_count"] / summary["total_decisions"]) * 100
 
         return summary
 
@@ -101,8 +103,8 @@ class ABTestMetricsCollector:
 
         # Expected: ~50/50 split
         expected_split = 50.0
-        variance_a = abs(summary['variant_a_pct'] - expected_split)
-        variance_b = abs(summary['variant_b_pct'] - expected_split)
+        variance_a = abs(summary["variant_a_pct"] - expected_split)
+        variance_b = abs(summary["variant_b_pct"] - expected_split)
 
         print("\n✅ Variance from expected 50/50 split:")
         print(f"  Variant A: {variance_a:.1f}% {'✅ OK' if variance_a < 10 else '⚠️ HIGH'}")
@@ -116,7 +118,7 @@ class ABTestMetricsCollector:
 
         user_variants = defaultdict(list)
         for decision in self.decisions:
-            user_variants[decision['user_id']].append(decision['variant'])
+            user_variants[decision["user_id"]].append(decision["variant"])
 
         # Sort by number of decisions
         sorted_users = sorted(user_variants.items(), key=lambda x: len(x[1]), reverse=True)
@@ -142,12 +144,12 @@ class ABTestMetricsCollector:
             return
 
         # Group by timestamp (date only)
-        timeline = defaultdict(lambda: {'A': 0, 'B': 0})
+        timeline = defaultdict(lambda: {"A": 0, "B": 0})
 
         for decision in self.decisions:
-            if decision['timestamp']:
-                date = decision['timestamp'].split()[0]  # Extract date part
-                timeline[date][decision['variant']] += 1
+            if decision["timestamp"]:
+                date = decision["timestamp"].split()[0]  # Extract date part
+                timeline[date][decision["variant"]] += 1
 
         # Sort by date
         sorted_dates = sorted(timeline.items())
@@ -156,7 +158,7 @@ class ABTestMetricsCollector:
         print("-" * 55)
 
         for date, variants in sorted_dates:
-            total = variants['A'] + variants['B']
+            total = variants["A"] + variants["B"]
             print(f"{date:<15} {variants['A']:<12} {variants['B']:<12} {total:<10}")
 
     def export_to_csv(self, output_file: str):
@@ -167,8 +169,8 @@ class ABTestMetricsCollector:
             print("❌ No data to export")
             return
 
-        with open(output_file, 'w', newline='') as f:
-            fieldnames = ['timestamp', 'experiment', 'user_id', 'variant', 'version', 'pagination']
+        with open(output_file, "w", newline="") as f:
+            fieldnames = ["timestamp", "experiment", "user_id", "variant", "version", "pagination"]
             writer = csv.DictWriter(f, fieldnames=fieldnames)
 
             writer.writeheader()
@@ -207,20 +209,13 @@ def main():
     """Main entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(description='Collect A/B test metrics from logs')
+    parser = argparse.ArgumentParser(description="Collect A/B test metrics from logs")
     parser.add_argument(
-        '--log-file',
-        default='logs/app.log',
-        help='Path to log file (default: logs/app.log)'
+        "--log-file", default="logs/app.log", help="Path to log file (default: logs/app.log)"
     )
+    parser.add_argument("--export", help="Export to CSV file")
     parser.add_argument(
-        '--export',
-        help='Export to CSV file'
-    )
-    parser.add_argument(
-        '--watch',
-        action='store_true',
-        help='Real-time monitoring (not implemented yet)'
+        "--watch", action="store_true", help="Real-time monitoring (not implemented yet)"
     )
 
     args = parser.parse_args()

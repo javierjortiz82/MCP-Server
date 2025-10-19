@@ -19,10 +19,9 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+from config.settings import settings
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
-
-from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +162,7 @@ class PaginationDB:
             with self._get_connection() as conn, conn.cursor() as cur:
                 # Upsert: Insert or update if context_name exists
                 # Note: Always use "custom" as context_type to satisfy CHECK constraint
-                cur.execute(
+                cur.execute(  # nosec B608 - Schema is validated from Settings, parameters are safe
                     f"""
                     INSERT INTO {self._schema}.pagination_contexts (
                         context_name, context_type, session_id,
@@ -228,7 +227,7 @@ class PaginationDB:
                 self._get_connection() as conn,
                 conn.cursor(cursor_factory=RealDictCursor) as cur,
             ):
-                cur.execute(
+                cur.execute(  # nosec B608 - Schema is validated from Settings, parameters are safe
                     f"""
                     SELECT
                         last_offset, last_limit, total_records,
@@ -294,7 +293,7 @@ class PaginationDB:
             context_name = f"{session_id}_{category}"
 
             with self._get_connection() as conn, conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosec B608 - Schema is validated from Settings, parameters are safe
                     f"""
                     DELETE FROM {self._schema}.pagination_contexts
                     WHERE context_name = %s AND session_id = %s
@@ -327,7 +326,7 @@ class PaginationDB:
         try:
             with self._get_connection() as conn, conn.cursor() as cur:
                 # Delete expired contexts directly
-                cur.execute(
+                cur.execute(  # nosec B608 - Schema is validated from Settings, parameters are safe
                     f"""
                     DELETE FROM {self._schema}.pagination_contexts
                     WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP
@@ -357,7 +356,7 @@ class PaginationDB:
 
         try:
             with self._get_connection() as conn, conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosec B608 - Schema is validated from Settings, parameters are safe
                     f"""
                     DELETE FROM {self._schema}.pagination_contexts
                     WHERE session_id = %s

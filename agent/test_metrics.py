@@ -16,6 +16,8 @@ from pathlib import Path
 agent_src = Path(__file__).parent / "src"
 sys.path.insert(0, str(agent_src))
 
+import contextlib
+
 from multi_agent import AgentFactory
 
 
@@ -37,9 +39,9 @@ def print_metrics(metrics: dict):
     print(f"  Avg History Size:    {metrics['avg_history_size']:.1f}")
     print(f"  Current History:     {metrics['current_history_size']}")
 
-    if metrics['errors']:
+    if metrics["errors"]:
         print("\n  Errors:")
-        for error_type, count in metrics['errors'].items():
+        for error_type, count in metrics["errors"].items():
             print(f"    {error_type}: {count}")
 
 
@@ -103,10 +105,8 @@ async def demo_reset_metrics():
 
     # Trigger some errors
     for _ in range(3):
-        try:
+        with contextlib.suppress(RuntimeError):
             await agent.generate_response("test")
-        except RuntimeError:
-            pass
 
     metrics_before = agent.get_metrics()
     print("\n📊 Metrics before reset:")
@@ -146,10 +146,8 @@ async def demo_metrics_api():
     # 2. Trigger requests
     print("\n2️⃣  Triggering multiple requests (will fail - not initialized)...")
     for i in range(5):
-        try:
+        with contextlib.suppress(RuntimeError):
             await agent.generate_response(f"query {i}")
-        except RuntimeError:
-            pass
 
     metrics = agent.get_metrics()
     assert metrics["total_requests"] == 5
@@ -166,10 +164,8 @@ async def demo_metrics_api():
     # 4. Cleanup (should also reset metrics)
     print("\n4️⃣  Testing cleanup (should reset metrics)...")
     for _ in range(2):
-        try:
+        with contextlib.suppress(RuntimeError):
             await agent.generate_response("test")
-        except RuntimeError:
-            pass
 
     await agent.cleanup()
     metrics = agent.get_metrics()
@@ -190,10 +186,8 @@ async def demo_metrics_summary():
     # Simulate some activity
     print("\n🔄 Simulating 10 requests (all will fail - not initialized)...")
     for i in range(10):
-        try:
-            await agent.generate_response(f"Query #{i+1}")
-        except RuntimeError:
-            pass
+        with contextlib.suppress(RuntimeError):
+            await agent.generate_response(f"Query #{i + 1}")
 
     # Display metrics
     print("\n" + "=" * 80)
@@ -209,7 +203,7 @@ async def demo_metrics_summary():
     print("\n💡 Insights:")
     if metrics["failed_requests"] > 0:
         print(f"  ⚠️  {metrics['failed_requests']} requests failed")
-        print(f"  📝 Most common error: {list(metrics['errors'].keys())[0]}")
+        print(f"  📝 Most common error: {next(iter(metrics['errors'].keys()))}")
 
     if metrics["avg_response_time_ms"] > 0:
         print(f"  ⏱️  Average response time: {metrics['avg_response_time_ms']:.2f}ms")

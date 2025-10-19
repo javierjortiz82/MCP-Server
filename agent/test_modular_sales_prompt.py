@@ -26,11 +26,7 @@ def test_sales_prompt_basic():
 
     try:
         manager = PromptManager()
-        prompt = manager.get_sales_prompt(
-            mcp_tools=None,
-            pagination_page_size=4,
-            version="v1.0"
-        )
+        prompt = manager.get_sales_prompt(mcp_tools=None, pagination_page_size=4, version="v1.0")
 
         # Verify key sections present
         checks = [
@@ -67,6 +63,7 @@ def test_sales_prompt_basic():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -81,13 +78,6 @@ def test_sales_prompt_with_tools():
         manager = PromptManager()
 
         # Create mock tools context (simulating PromptBuilder output)
-        mock_tools_context = """
-## Available MCP Tools
-
-**search_products**: Search for products by query
-**fuzzy_search_smart**: Smart fuzzy search with typo tolerance
-**get_product_by_sku**: Get product details by SKU
-"""
 
         # We'll test by manually setting context (simulating what happens internally)
 
@@ -95,7 +85,7 @@ def test_sales_prompt_with_tools():
         prompt = manager.get_sales_prompt(
             mcp_tools=[],  # Empty list triggers tools context generation
             pagination_page_size=6,  # Test different page size
-            version="v1.0"
+            version="v1.0",
         )
 
         # Verify pagination_page_size is dynamic
@@ -116,6 +106,7 @@ def test_sales_prompt_with_tools():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -128,10 +119,7 @@ def test_fallback_mechanism():
 
     try:
         manager = PromptManager()
-        prompt = manager.get_sales_prompt(
-            mcp_tools=None,
-            pagination_page_size=4
-        )
+        prompt = manager.get_sales_prompt(mcp_tools=None, pagination_page_size=4)
 
         # Should use fallback from system_prompt.txt
         checks = [
@@ -151,6 +139,7 @@ def test_fallback_mechanism():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

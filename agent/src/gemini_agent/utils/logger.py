@@ -10,9 +10,7 @@ import logging.handlers
 from gemini_agent.config import settings
 
 
-def setup_logging(
-    name: str = "gemini_agent", level: str | None = None
-) -> logging.Logger:
+def setup_logging(name: str = "gemini_agent", level: str | None = None) -> logging.Logger:
     """Configure logging with file rotation and console output.
 
     Args:

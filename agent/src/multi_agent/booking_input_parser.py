@@ -22,11 +22,8 @@ Version: 1.0
 
 import logging
 import re
-import sys
 from difflib import SequenceMatcher
 from enum import Enum
-from pathlib import Path
-from typing import Tuple
 
 # Try to import settings from mcp_server
 try:
@@ -57,7 +54,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     # Fallback if constants not available
     RESCHEDULE_OPTIONS = {"a", "1", "opcion a", "opcion 1", "opción a", "opción 1"}
-    CANCEL_OPTIONS = {"b", "2", "opcion b", "opcion b", "opción b", "opción b"}
+    CANCEL_OPTIONS = {"b", "2", "opcion b", "opción b"}
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -163,9 +160,32 @@ class BookingInputParser:
 
     # Language detection indicators
     ES_INDICATORS = {
-        "que", "de", "el", "la", "los", "las", "en", "para", "por", "con",
-        "una", "un", "unos", "unas", "mi", "mis", "tu", "tus", "su", "sus",
-        "quisiera", "quiero", "necesito", "puedo", "puede", "tengo",
+        "que",
+        "de",
+        "el",
+        "la",
+        "los",
+        "las",
+        "en",
+        "para",
+        "por",
+        "con",
+        "una",
+        "un",
+        "unos",
+        "unas",
+        "mi",
+        "mis",
+        "tu",
+        "tus",
+        "su",
+        "sus",
+        "quisiera",
+        "quiero",
+        "necesito",
+        "puedo",
+        "puede",
+        "tengo",
     }
 
     # Negative keywords (words that should NOT match common keywords)
@@ -194,19 +214,19 @@ class BookingInputParser:
             'es' for Spanish, 'en' for English (default)
         """
         if not normalized_input:
-            return 'en'  # Default to English
+            return "en"  # Default to English
 
         words = set(normalized_input.split())
         es_count = len(words & cls.ES_INDICATORS)
 
         # If more than 30% of words are Spanish indicators, classify as Spanish
         if len(words) > 0 and es_count / len(words) > 0.3:
-            return 'es'
+            return "es"
 
-        return 'en'
+        return "en"
 
     @classmethod
-    def _get_language_keywords(cls, language: str) -> Tuple[set, set, set, set]:
+    def _get_language_keywords(cls, language: str) -> tuple[set, set, set, set]:
         """
         Get keyword sets for the specified language.
 
@@ -216,7 +236,7 @@ class BookingInputParser:
         Returns:
             Tuple of (reschedule_kw, cancel_kw, confirm_kw, deny_kw)
         """
-        if language == 'es':
+        if language == "es":
             return (
                 cls.RESCHEDULE_KEYWORDS_ES | {"a", "1"},
                 cls.CANCEL_KEYWORDS_ES | {"b", "2"},
@@ -232,7 +252,7 @@ class BookingInputParser:
             )
 
     @classmethod
-    def parse_booking_choice(cls, user_input: str) -> Tuple[BookingChoice, float]:
+    def parse_booking_choice(cls, user_input: str) -> tuple[BookingChoice, float]:
         """
         Parse user input for reschedule/cancel decision.
 
@@ -254,7 +274,9 @@ class BookingInputParser:
 
         # Validate that normalization didn't result in empty string
         if not normalized:
-            raise ValueError(f"parse_booking_choice: Input '{user_input}' resulted in empty normalized string")
+            raise ValueError(
+                f"parse_booking_choice: Input '{user_input}' resulted in empty normalized string"
+            )
 
         # Detect language and get language-specific keywords
         language = cls.detect_language(normalized)
@@ -287,7 +309,7 @@ class BookingInputParser:
         return BookingChoice.UNKNOWN, max(reschedule_score, cancel_score)
 
     @classmethod
-    def parse_confirmation(cls, user_input: str) -> Tuple[BookingChoice, float]:
+    def parse_confirmation(cls, user_input: str) -> tuple[BookingChoice, float]:
         """
         Parse user input for yes/no confirmation.
 
@@ -308,7 +330,9 @@ class BookingInputParser:
 
         # Validate that normalization didn't result in empty string
         if not normalized:
-            raise ValueError(f"parse_confirmation: Input '{user_input}' resulted in empty normalized string")
+            raise ValueError(
+                f"parse_confirmation: Input '{user_input}' resulted in empty normalized string"
+            )
 
         # Detect language and get language-specific keywords
         language = cls.detect_language(normalized)
@@ -363,9 +387,7 @@ class BookingInputParser:
         return text
 
     @classmethod
-    def _calculate_match_score(
-        cls, normalized_input: str, keywords: set
-    ) -> float:
+    def _calculate_match_score(cls, normalized_input: str, keywords: set) -> float:
         """
         Calculate match score between input and keyword set using fuzzy matching.
 
@@ -418,9 +440,7 @@ class BookingInputParser:
                 continue
 
             # Fuzzy match using SequenceMatcher
-            score = SequenceMatcher(
-                None, normalized_input, keyword
-            ).ratio()
+            score = SequenceMatcher(None, normalized_input, keyword).ratio()
 
             # Only accept fuzzy matches above a threshold
             if score > FUZZY_MATCH_THRESHOLD:
@@ -429,7 +449,7 @@ class BookingInputParser:
         return best_score
 
     @classmethod
-    def should_show_error(cls, confidence: float, threshold: float = None) -> bool:
+    def should_show_error(cls, confidence: float, threshold: float | None = None) -> bool:
         """
         Determine if agent should ask for clarification.
 
@@ -446,12 +466,12 @@ class BookingInputParser:
 
 
 # Convenience functions
-def parse_booking_choice(user_input: str) -> Tuple[BookingChoice, float]:
+def parse_booking_choice(user_input: str) -> tuple[BookingChoice, float]:
     """Parse reschedule/cancel choice. Returns (choice, confidence)."""
     return BookingInputParser.parse_booking_choice(user_input)
 
 
-def parse_confirmation(user_input: str) -> Tuple[BookingChoice, float]:
+def parse_confirmation(user_input: str) -> tuple[BookingChoice, float]:
     """Parse yes/no confirmation. Returns (choice, confidence)."""
     return BookingInputParser.parse_confirmation(user_input)
 

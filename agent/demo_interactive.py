@@ -13,7 +13,7 @@ from pathlib import Path
 agent_src = Path(__file__).parent / "src"
 sys.path.insert(0, str(agent_src))
 
-from multi_agent.prompt_manager import PromptManager
+from multi_agent.prompt_manager import PromptManager  # noqa: E402
 
 
 def print_header(text):
@@ -28,11 +28,13 @@ def show_hash_calculation(user_id: str):
     print("\n🔢 Hash Calculation:")
     print(f"   User ID: {user_id}")
 
-    # Calculate MD5 hash
-    hash_value = int(hashlib.md5(user_id.encode()).hexdigest(), 16)
+    # Calculate MD5 hash (usedforsecurity=False since this is for demonstration, not cryptographic)
+    hash_value = int(hashlib.md5(user_id.encode(), usedforsecurity=False).hexdigest(), 16)
     bucket = hash_value % 100
 
-    print(f"   MD5 Hash: {hashlib.md5(user_id.encode()).hexdigest()[:16]}...")
+    print(
+        f"   MD5 Hash: {hashlib.md5(user_id.encode(), usedforsecurity=False).hexdigest()[:16]}..."
+    )
     print(f"   Bucket (hash % 100): {bucket}")
     print("   Traffic split: 50% (buckets 0-49 → A, 50-99 → B)")
 
@@ -49,21 +51,18 @@ def demo_single_user(manager: PromptManager, user_email: str):
     print_header(f"  USER: {user_email}")
 
     # Show hash calculation
-    is_variant_a = show_hash_calculation(user_email)
+    show_hash_calculation(user_email)
 
     # Get version from PromptManager
     print("\n📋 PromptManager Decision:")
 
     # Enable A/B testing temporarily
-    original_enabled = manager.config['ab_testing']['enabled']
-    original_exp = manager.config['ab_testing']['experiments'][0]['enabled']
-    manager.config['ab_testing']['enabled'] = True
-    manager.config['ab_testing']['experiments'][0]['enabled'] = True
+    original_enabled = manager.config["ab_testing"]["enabled"]
+    original_exp = manager.config["ab_testing"]["experiments"][0]["enabled"]
+    manager.config["ab_testing"]["enabled"] = True
+    manager.config["ab_testing"]["experiments"][0]["enabled"] = True
 
-    version, pagination = manager._select_ab_test_version(
-        agent='sales',
-        user_id=user_email
-    )
+    version, pagination = manager._select_ab_test_version(agent="sales", user_id=user_email)
 
     print(f"   Version: {version}")
     print(f"   Pagination: {pagination} products/page")
@@ -95,8 +94,8 @@ def demo_single_user(manager: PromptManager, user_email: str):
         print("   💭 'Show more to see remaining products...'")
 
     # Restore config
-    manager.config['ab_testing']['enabled'] = original_enabled
-    manager.config['ab_testing']['experiments'][0]['enabled'] = original_exp
+    manager.config["ab_testing"]["enabled"] = original_enabled
+    manager.config["ab_testing"]["experiments"][0]["enabled"] = original_exp
 
     return version, pagination
 
@@ -108,18 +107,15 @@ def demo_consistency(manager: PromptManager, user_email: str):
     print("\n🔁 Testing same user 5 times to verify consistency...\n")
 
     # Enable A/B testing
-    manager.config['ab_testing']['enabled'] = True
-    manager.config['ab_testing']['experiments'][0]['enabled'] = True
+    manager.config["ab_testing"]["enabled"] = True
+    manager.config["ab_testing"]["experiments"][0]["enabled"] = True
 
     results = []
     for i in range(5):
-        version, pagination = manager._select_ab_test_version(
-            agent='sales',
-            user_id=user_email
-        )
+        version, pagination = manager._select_ab_test_version(agent="sales", user_id=user_email)
         results.append((version, pagination))
-        variant = 'A' if version == 'v1.0' else 'B'
-        print(f"   Attempt {i+1}: Version {version}, Pagination {pagination}, Variant {variant}")
+        variant = "A" if version == "v1.0" else "B"
+        print(f"   Attempt {i + 1}: Version {version}, Pagination {pagination}, Variant {variant}")
 
     # Check consistency
     all_same = all(r == results[0] for r in results)
@@ -131,8 +127,8 @@ def demo_consistency(manager: PromptManager, user_email: str):
         print("\n   ❌ INCONSISTENT - Something is wrong!")
 
     # Restore config
-    manager.config['ab_testing']['enabled'] = False
-    manager.config['ab_testing']['experiments'][0]['enabled'] = False
+    manager.config["ab_testing"]["enabled"] = False
+    manager.config["ab_testing"]["experiments"][0]["enabled"] = False
 
     return all_same
 
@@ -144,38 +140,35 @@ def demo_multiple_users(manager: PromptManager):
     print("\n📊 Simulating 20 different users...\n")
 
     # Enable A/B testing
-    manager.config['ab_testing']['enabled'] = True
-    manager.config['ab_testing']['experiments'][0]['enabled'] = True
+    manager.config["ab_testing"]["enabled"] = True
+    manager.config["ab_testing"]["experiments"][0]["enabled"] = True
 
     users = [f"user{i}@example.com" for i in range(1, 21)]
-    variants = {'A': 0, 'B': 0}
+    variants = {"A": 0, "B": 0}
 
     print(f"{'User Email':<25} {'Variant':<10} {'Pagination':<12}")
     print("-" * 50)
 
     for user in users:
-        version, pagination = manager._select_ab_test_version(
-            agent='sales',
-            user_id=user
-        )
-        variant = 'A' if version == 'v1.0' else 'B'
+        version, pagination = manager._select_ab_test_version(agent="sales", user_id=user)
+        variant = "A" if version == "v1.0" else "B"
         variants[variant] += 1
         print(f"{user:<25} {variant:<10} {pagination} products")
 
     print("\n📊 Distribution:")
-    print(f"   Variant A: {variants['A']}/20 users ({variants['A']/20*100:.0f}%)")
-    print(f"   Variant B: {variants['B']}/20 users ({variants['B']/20*100:.0f}%)")
+    print(f"   Variant A: {variants['A']}/20 users ({variants['A'] / 20 * 100:.0f}%)")
+    print(f"   Variant B: {variants['B']}/20 users ({variants['B'] / 20 * 100:.0f}%)")
     print("\n   Expected: ~10 users each (50/50 split)")
 
-    variance = abs((variants['A'] / 20 * 100) - 50)
+    variance = abs((variants["A"] / 20 * 100) - 50)
     if variance < 15:
         print(f"   ✅ Good distribution (variance: {variance:.0f}%)")
     else:
         print(f"   ⚠️  High variance: {variance:.0f}% (normal with small sample)")
 
     # Restore config
-    manager.config['ab_testing']['enabled'] = False
-    manager.config['ab_testing']['experiments'][0]['enabled'] = False
+    manager.config["ab_testing"]["enabled"] = False
+    manager.config["ab_testing"]["experiments"][0]["enabled"] = False
 
 
 def main():

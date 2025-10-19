@@ -40,10 +40,7 @@ async def test_factory_basic():
 
         try:
             # Create agent (without auto-initialization to avoid API calls)
-            agent = await AgentFactory.create(
-                agent_type,
-                auto_initialize=False
-            )
+            agent = await AgentFactory.create(agent_type, auto_initialize=False)
 
             print(f"    ✅ {agent_type} agent created: {type(agent).__name__}")
             print(f"    ✅ Agent name: {agent.agent_name}")
@@ -133,7 +130,7 @@ async def test_error_handling():
 
     try:
         # This should raise ValueError
-        agent = await AgentFactory.create("invalid_type", auto_initialize=False)
+        await AgentFactory.create("invalid_type", auto_initialize=False)
         print("  ❌ Should have raised ValueError but didn't")
         print("\n❌ TEST 4 FAILED")
         return False
@@ -192,10 +189,7 @@ async def test_custom_parameters():
     try:
         # Create agent with custom temperature
         agent = await AgentFactory.create(
-            "booking",
-            auto_initialize=False,
-            temperature=0.8,
-            top_k=100
+            "booking", auto_initialize=False, temperature=0.8, top_k=100
         )
 
         print("  ✅ Agent created with custom parameters")

@@ -62,8 +62,12 @@ try:
 except ImportError:
     LANGUAGE_CONTEXT_AVAILABLE = False
 
-    def set_current_language(lang: str) -> None:  # noqa: F811
-        """No-op when language context not available."""
+    def set_current_language(lang: str) -> None:  # noqa: F811,ARG001
+        """No-op when language context not available.
+
+        Note: Parameter 'lang' is intentionally unused - this is a fallback stub
+        when contextvars is not available. The real implementation is above.
+        """
         pass
 
 

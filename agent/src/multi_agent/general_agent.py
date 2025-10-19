@@ -92,14 +92,11 @@ class GeneralAgent(BaseAgent):
             user_id=kwargs.get("user_id"),
             user_lang=kwargs.get("user_lang", "es"),  # Pass language context for template selection
         )
-        self.logger.debug(
-            f"Loaded general prompt from Jinja2 ({len(prompt)} chars)"
-        )
+        self.logger.debug(f"Loaded general prompt from Jinja2 ({len(prompt)} chars)")
         return prompt
 
     def __repr__(self) -> str:
         """String representation of GeneralAgent."""
         return (
-            f"GeneralAgent(model={self.model_name}, "
-            f"history_len={len(self.conversation_history)})"
+            f"GeneralAgent(model={self.model_name}, history_len={len(self.conversation_history)})"
         )

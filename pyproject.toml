@@ -1,0 +1,132 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lab01-mcp"
+version = "1.0.0"
+description = "Lab01-MCP - Multi-Agent System with Bookings and Memory"
+requires-python = ">=3.10"
+
+# ============================================================================
+# RUFF Configuration - Fast Python Linter (replaces flake8, pylint, etc.)
+# ============================================================================
+[tool.ruff]
+# Python version
+target-version = "py310"
+line-length = 100
+
+# Enable all linting rules
+lint.select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # Pyflakes
+    "I",    # isort (import sorting)
+    "N",    # pep8-naming
+    "UP",   # pyupgrade (modernize code)
+    "D",    # pydocstyle (docstrings)
+    "C",    # mccabe (complexity)
+    "B",    # flake8-bugbear (common mistakes)
+    "A",    # flake8-builtins (avoid shadowing builtins)
+    "COM",  # flake8-commas
+    "C4",   # flake8-comprehensions
+    "PIE",  # flake8-pie
+    "PT",   # flake8-pytest-style
+    "RUF",  # Ruff-specific rules
+    "SIM",  # flake8-simplify
+    "T20",  # flake8-print (no print statements in production)
+    "ARG",  # flake8-unused-arguments
+    "TRY",  # tryceratops (exception handling)
+    "FBT",  # flake8-boolean-trap
+]
+
+# Ignore specific rules
+lint.ignore = [
+    "D100",  # Missing module docstring
+    "D104",  # Missing package docstring
+    "E501",  # Line too long (handled by formatter)
+]
+
+# Exclude patterns
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    ".venv",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+]
+
+# ============================================================================
+# ISORT Configuration - Import Sorting & Grouping
+# ============================================================================
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 100
+skip_gitignore = true
+
+# ============================================================================
+# MYPY Configuration - Static Type Checking with Modern Type Hints
+# ============================================================================
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_calls = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict_equality = true
+
+# Modern Python 3.10+ features
+# Use X | Y instead of Union[X, Y] (PEP 604)
+# Use list[X] instead of List[X] (PEP 585)
+# Use dict[K, V] instead of Dict[K, V]
+
+[tool.mypy-tests]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+# ============================================================================
+# VULTURE Configuration - Dead Code Detection
+# ============================================================================
+[tool.vulture]
+min_confidence = 80
+paths = ["client_mcp", "agent", "test"]
+exclude = ["*test*.py"]
+
+# ============================================================================
+# PYTEST Configuration
+# ============================================================================
+[tool.pytest.ini_options]
+testpaths = ["test"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = "-v --cov=client_mcp --cov=agent --cov-report=term-missing"
+
+# ============================================================================
+# COVERAGE Configuration
+# ============================================================================
+[tool.coverage.run]
+source = ["client_mcp", "agent"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

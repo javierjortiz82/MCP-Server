@@ -4,7 +4,6 @@ import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from strategies.fallback import (
     FallbackRule,
     FallbackStrategy,

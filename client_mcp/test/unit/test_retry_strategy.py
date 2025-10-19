@@ -1,7 +1,6 @@
 """Unit tests for RetryStrategy."""
 
 import pytest
-
 from strategies.retry import RetryConfig, RetryStrategy, retry_with_backoff
 
 
