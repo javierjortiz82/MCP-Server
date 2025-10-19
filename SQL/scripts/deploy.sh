@@ -198,14 +198,19 @@ run_deployment() {
     # PostgreSQL doesn't substitute variables inside $$ delimiters (function bodies),
     # so we use sed to replace them before execution
 
-    # 1. Replace :SCHEMA_NAME in email functions
-    info "Preprocessing email functions to replace :SCHEMA_NAME with '$SCHEMA_NAME'..."
-    docker exec mcp-postgres sed -i "s/:SCHEMA_NAME/$SCHEMA_NAME/g" /tmp/sql_deploy/02_functions/02_email.sql
+    # 1. Replace :SCHEMA_NAME in ALL function files (standardized processing)
+    info "Preprocessing all function files to replace :SCHEMA_NAME with '$SCHEMA_NAME'..."
+    docker exec mcp-postgres bash -c "
+        for func_file in /tmp/sql_deploy/02_functions/*.sql; do
+            echo \"  Processing: \$(basename \$func_file)...\"
+            sed -i \"s/:SCHEMA_NAME/$SCHEMA_NAME/g\" \"\$func_file\"
+        done
+    "
     if [ $? -ne 0 ]; then
-        error "Failed to preprocess email functions file"
+        error "Failed to preprocess function files"
         return 1
     fi
-    success "Email functions preprocessed successfully"
+    success "All function files preprocessed successfully"
 
     # 2. Fix unaccent() function calls to use public.unaccent() schema prefix
     # This ensures the unaccent() function from the unaccent extension is found
