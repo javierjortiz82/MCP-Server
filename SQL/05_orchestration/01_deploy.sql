@@ -27,82 +27,82 @@
 -- Phase 1: Initialize Database
 -- ============================================================================
 \echo '[1/9] Installing PostgreSQL extensions...'
-\i '00_init/01_extensions.sql'
+\i '../00_init/01_extensions.sql'
 \echo ''
 
 \echo '[2/9] Creating schema and configuring permissions...'
-\i '00_init/02_schema.sql'
-\i '00_init/03_users_permissions.sql'
+\i '../00_init/02_schema.sql'
+\i '../00_init/03_users_permissions.sql'
 \echo ''
 
 -- ============================================================================
 -- Phase 2: Core Data Tables
 -- ============================================================================
 \echo '[3/9] Creating products table with indexes...'
-\i '01_ddl/01_products.sql'
+\i '../01_ddl/01_products.sql'
 \echo ''
 
 -- ============================================================================
 -- Phase 3: Bookings System
 -- ============================================================================
 \echo '[4/9] Creating bookings schema (appointments, services, hours)...'
-\i '01_ddl/bookings/01_appointments.sql'
-\i '01_ddl/bookings/02_service_types.sql'
-\i '01_ddl/bookings/03_business_hours.sql'
-\i '01_ddl/bookings/04_blocked_times.sql'
-\i '01_ddl/bookings/05_service_hours.sql'
+\i '../01_ddl/bookings/01_appointments.sql'
+\i '../01_ddl/bookings/02_service_types.sql'
+\i '../01_ddl/bookings/03_business_hours.sql'
+\i '../01_ddl/bookings/04_blocked_times.sql'
+\i '../01_ddl/bookings/05_service_hours.sql'
 \echo ''
 
 -- ============================================================================
 -- Phase 4: Email Queue System
 -- ============================================================================
 \echo '[5/9] Creating email queue system...'
-\i '01_ddl/email/01_email_queue.sql'
+\i '../01_ddl/email/01_email_queue.sql'
 \echo ''
 
 -- ============================================================================
 -- Phase 5: Memory System
 -- ============================================================================
 \echo '[6/9] Creating multi-agent memory system...'
-\i '01_ddl/memory/01_conversation.sql'
-\i '01_ddl/memory/02_agent_memory.sql'
-\i '01_ddl/memory/03_user_memory.sql'
+\i '../01_ddl/memory/01_conversation.sql'
+\i '../01_ddl/memory/02_agent_memory.sql'
+\i '../01_ddl/memory/03_user_memory.sql'
 \echo ''
 
 -- ============================================================================
 -- Phase 6: Utility Tables
 -- ============================================================================
 \echo '[7/9] Creating utility tables (pagination)...'
-\i '01_ddl/utils/01_pagination_contexts.sql'
+\i '../01_ddl/utils/01_pagination_contexts.sql'
 \echo ''
 
 -- ============================================================================
 -- Phase 7: Indexes (Consolidated for maintainability)
 -- ============================================================================
 \echo '[8/10] Creating consolidated indexes...'
-\i '03_indexes/01_indexes.sql'
+\i '../03_indexes/01_indexes.sql'
 \echo ''
 
 -- ============================================================================
 -- Phase 8: Functions and Triggers
 -- ============================================================================
 \echo '[9/10] Creating functions and triggers...'
-\i '02_functions/01_bookings.sql'
-\i '02_functions/02_email.sql'
-\i '02_functions/03_memory.sql'
-\i '02_functions/04_lifecycle.sql'
+\i '../02_functions/01_bookings.sql'
+\i '../02_functions/02_email.sql'
+\i '../02_functions/03_memory.sql'
+\i '../02_functions/04_lifecycle.sql'
 \echo ''
 
 -- ============================================================================
 -- Phase 9: Seed Data (DML - Critical for full deployment)
 -- ============================================================================
 \echo '[10/10] Seeding product data...'
-\i '04_seed/01_products_data.sql'
+\i '../04_seed/01_products_data.sql'
 \echo ''
 
 -- Optional: Additional seed data can be uncommented
--- \i '04_seed/service_types.sql'
--- \i '04_seed/business_hours.sql'
+-- \i '../04_seed/service_types.sql'
+-- \i '../04_seed/business_hours.sql'
 \echo ''
 
 -- ============================================================================

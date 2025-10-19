@@ -46,6 +46,7 @@ SCHEMA_NAME=custom       # Custom schema name
 | **Indexes** | 03_indexes/01_indexes.sql | Consolidated indexes (60+) |
 | **Functions** | 02_functions/ (4 files) | Business logic and triggers |
 | **Seed Data** | 04_seed/01_products_data.sql | 90 products |
+| **Orchestration** | 05_orchestration/ (2 files) | Deployment and validation |
 | **External Data** | data/ (4 JSON files) | Reference data |
 | **Deployment** | scripts/deploy.sh | Master orchestrator |
 | **Verification** | scripts/verify.sh | Health checks |
@@ -55,16 +56,16 @@ SCHEMA_NAME=custom       # Custom schema name
 ### Deployment Flow
 
 ```
-deploy.sh
+deploy.sh (scripts/)
   └─ Prerequisites check
-     └─ deploy.sql (10 phases)
+     └─ 05_orchestration/01_deploy.sql (10 phases)
         ├─ Extensions & Schema
         ├─ 14 Tables with DDL
         ├─ Consolidated Indexes
         ├─ Functions & Triggers
         └─ Seed Data (90 products)
-     └─ validate_deployment.sql (comprehensive checks)
-     └─ verify.sh (health checks)
+     └─ 05_orchestration/02_validate_deployment.sql (comprehensive checks)
+     └─ scripts/verify.sh (health checks)
 ```
 
 ### Database Schema
@@ -191,12 +192,12 @@ SQL/
 │   ├── 03_business_hours.json  # Hours (525 B)
 │   └── 04_blocked_times.json   # Blocked times (3 KB)
 │
-├── deploy.sql                  # Master orchestrator (10 phases)
-├── validate_deployment.sql     # Comprehensive validation
+├── 05_orchestration/
+│   ├── 01_deploy.sql           # Master orchestrator (10 phases)
+│   └── 02_validate_deployment.sql # Comprehensive validation
 │
-├── deploy.sh                   # Deployment wrapper (NEW)
-├── verify.sh                   # Verification wrapper (NEW)
-└── README.md                   # This file (NEW)
+├── README.md                   # This file
+└── QUICK_START.txt             # Quick start guide
 ```
 
 ## Key Improvements
@@ -210,10 +211,11 @@ SQL/
 
 ### After
 - **2 shell scripts** (deploy.sh, verify.sh)
+- **Orchestration directory** (05_orchestration/)
 - **Consolidated indexes** in 03_indexes.sql
 - **Single entry point**: `./deploy.sh`
 - **Simplified workflow**
-- **Clear structure**
+- **Clear, modular structure**
 
 ## Deployment Workflow
 
@@ -365,7 +367,7 @@ docker exec mcp-postgres psql -U mcp_user -d mcpdb \
   -v "SCHEMA_NAME=$SCHEMA_NAME" -f "$DEPLOY_SQL"
 ```
 
-#### 2. SQL Level (deploy.sql, validation.sql, DDL files)
+#### 2. SQL Level (05_orchestration/01_deploy.sql, 02_validate_deployment.sql, DDL files)
 ```sql
 -- Variables referenced as :SCHEMA_NAME in SQL
 CREATE SCHEMA IF NOT EXISTS :SCHEMA_NAME;

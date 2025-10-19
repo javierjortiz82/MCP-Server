@@ -38,8 +38,9 @@ NC='\033[0m'
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-DEPLOY_SQL="$SQL_ROOT_DIR/deploy.sql"
-VALIDATE_SQL="$SQL_ROOT_DIR/validate_deployment.sql"
+ORCHESTRATION_DIR="$SQL_ROOT_DIR/05_orchestration"
+DEPLOY_SQL="$ORCHESTRATION_DIR/01_deploy.sql"
+VALIDATE_SQL="$ORCHESTRATION_DIR/02_validate_deployment.sql"
 VERIFY_SCRIPT="$SCRIPT_DIR/verify.sh"
 ENV_FILE="$SQL_ROOT_DIR/.env"
 
