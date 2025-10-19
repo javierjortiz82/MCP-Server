@@ -72,7 +72,6 @@ desktop.ini
 # Logs and databases
 logs/
 *.log
-*.sql
 *.sqlite
 *.sqlite3
 *.db
@@ -104,6 +103,7 @@ backups/
 !tsconfig.json
 !servers.json
 !mcp_server/locales/**/*.json
+!SQL/data/*.json
 
 # Test outputs
 test_results/
