@@ -78,17 +78,10 @@ class PaginationDB:
             self._pool = pool.SimpleConnectionPool(
                 minconn=settings.PAGINATION_DB_POOL_MIN,
                 maxconn=settings.PAGINATION_DB_POOL_MAX,
-                host=settings.PAGINATION_DB_HOST,
-                port=settings.PAGINATION_DB_PORT,
-                database=settings.PAGINATION_DB_NAME,
-                user=settings.PAGINATION_DB_USER,
-                password=settings.PAGINATION_DB_PASSWORD,
+                dsn=settings.DATABASE_URL,
             )
             logger.info(
-                "✅ Pagination database pool initialized: %s:%s/%s (schema: %s)",
-                settings.PAGINATION_DB_HOST,
-                settings.PAGINATION_DB_PORT,
-                settings.PAGINATION_DB_NAME,
+                "✅ Pagination database pool initialized (schema: %s)",
                 self._schema,
             )
         except Exception as e:
