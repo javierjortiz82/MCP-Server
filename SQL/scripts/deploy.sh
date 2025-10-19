@@ -194,6 +194,29 @@ run_deployment() {
     docker exec mcp-postgres mkdir -p /tmp/sql_deploy 2>/dev/null || true
     docker cp "$SQL_ROOT_DIR/." mcp-postgres:/tmp/sql_deploy/
 
+    # FIX: Preprocess SQL files to handle schema variables in function bodies
+    # PostgreSQL doesn't substitute variables inside $$ delimiters (function bodies),
+    # so we use sed to replace them before execution
+
+    # 1. Replace :SCHEMA_NAME in email functions
+    info "Preprocessing email functions to replace :SCHEMA_NAME with '$SCHEMA_NAME'..."
+    docker exec mcp-postgres sed -i "s/:SCHEMA_NAME/$SCHEMA_NAME/g" /tmp/sql_deploy/02_functions/02_email.sql
+    if [ $? -ne 0 ]; then
+        error "Failed to preprocess email functions file"
+        return 1
+    fi
+    success "Email functions preprocessed successfully"
+
+    # 2. Fix unaccent() function calls to use public.unaccent() schema prefix
+    # This ensures the unaccent() function from the unaccent extension is found
+    info "Fixing unaccent() function references to use public schema prefix..."
+    docker exec mcp-postgres sed -i "s/unaccent(/public.unaccent(/g" /tmp/sql_deploy/01_ddl/01_products.sql
+    if [ $? -ne 0 ]; then
+        error "Failed to preprocess products file"
+        return 1
+    fi
+    success "Unaccent references preprocessed successfully"
+
     # Execute deployment from within container where \i directives work
     if docker exec -w /tmp/sql_deploy/05_orchestration mcp-postgres \
         psql -U mcp_user -d mcpdb -v "SCHEMA_NAME=$SCHEMA_NAME" -f 01_deploy.sql; then
