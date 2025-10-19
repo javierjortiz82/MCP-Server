@@ -1,0 +1,19 @@
+# PostgreSQL 15 + pgvector + contrib (unaccent, pg_trgm, etc.)
+# Based on pgvector/pgvector:pg15
+# Adds postgresql-contrib for unaccent, pg_trgm, and other utilities
+
+FROM pgvector/pgvector:pg15
+
+# Install postgresql-contrib (includes unaccent, pg_trgm, and other utilities)
+# This adds ~50MB to the image but is essential for full PostgreSQL functionality
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    postgresql-contrib-15 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Verify extensions are available
+RUN echo "SELECT version();" | psql postgres || true
+
+# Health check command (inherited from base image)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD pg_isready -U postgres

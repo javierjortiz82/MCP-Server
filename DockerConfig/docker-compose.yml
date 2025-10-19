@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg15
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
     container_name: mcp-postgres
     restart: unless-stopped
     environment:
