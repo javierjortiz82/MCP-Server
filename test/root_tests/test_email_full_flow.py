@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""
-Full end-to-end test of email template rendering.
-"""
+"""Full end-to-end test of email template rendering."""
 
 import sys
+
 sys.path.insert(0, "/home/javort/Lab01-MCP")
 
-from datetime import datetime, timezone, timedelta
-from email_service.queue_manager import EmailQueueManager
+from datetime import datetime, timedelta, timezone
+
 from email_service.models import EmailType
+from email_service.queue_manager import EmailQueueManager
 
 # Test parameters
 booking_id = 16
@@ -19,9 +19,6 @@ customer_name = "Javier Ortiz Leon Test"
 queue_mgr = EmailQueueManager()
 
 # Enqueue an email
-print("\n" + "="*80)
-print("ENQUEUEING EMAIL")
-print("="*80)
 
 template_context = {
     "customer_name": customer_name,
@@ -33,9 +30,8 @@ template_context = {
     "google_calendar_link": "https://calendar.google.com/calendar/u/0/r",
 }
 
-print(f"📝 Template Context:")
-for key, val in template_context.items():
-    print(f"   {key}: {val}")
+for _key, _val in template_context.items():
+    pass
 
 email_id = queue_mgr.enqueue_email(
     email_type=EmailType.BOOKING_CREATED,
@@ -48,15 +44,10 @@ email_id = queue_mgr.enqueue_email(
     priority=1,  # High priority
 )
 
-print(f"\n✅ Email enqueued with ID: {email_id}")
 
 # Retrieve it back
-print("\n" + "="*80)
-print("RETRIEVING EMAIL FROM QUEUE")
-print("="*80)
 
 pending = queue_mgr.get_pending_emails(limit=10)
-print(f"Found {len(pending)} pending emails")
 
 test_email = None
 for email in pending:
@@ -65,23 +56,9 @@ for email in pending:
         break
 
 if test_email:
-    print(f"\n✅ Found email {test_email.id}")
-    print(f"   Type: {test_email.type}")
-    print(f"   Template Context: {type(test_email.template_context).__name__}")
     if test_email.template_context:
-        print(f"   Template Context Keys: {list(test_email.template_context.keys())}")
-        print(f"   Can render: YES ✅")
+        pass
     else:
-        print(f"   Template Context: None")
-        print(f"   Can render: NO ❌")
+        pass
 else:
-    print(f"\n❌ Email {email_id} not found in pending queue")
-
-print("\n" + "="*80)
-print("Next: Wait 10 seconds for worker to process email...")
-print("="*80)
-print("\nMonitor logs with: docker logs -f mcp-email-worker")
-print("Expected to see:")
-print("  - 📧 Processing email")
-print("  - 📄 Rendering template (DEBUG)")
-print("  - ✅ Email sent successfully")
+    pass

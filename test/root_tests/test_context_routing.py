@@ -36,7 +36,6 @@ logging.getLogger("agent_router").setLevel(logging.DEBUG)
 
 async def test_booking_flow_with_context():
     """Test that router maintains booking intent when user provides personal data."""
-
     logger.info("=" * 70)
     logger.info("TEST: Context-Aware Routing for Booking Flow")
     logger.info("=" * 70)
@@ -89,9 +88,9 @@ async def test_booking_flow_with_context():
         expected = turn_data["expected_intent"]
         bot_response = turn_data["bot_response"]
 
-        logger.info(f"\n{'='*70}")
+        logger.info(f"\n{'=' * 70}")
         logger.info(f"TURN {turn_num}")
-        logger.info(f"{'='*70}")
+        logger.info(f"{'=' * 70}")
         logger.info(f"User query: '{query}'")
 
         # Build context from previous turn
@@ -105,14 +104,15 @@ async def test_booking_flow_with_context():
             logger.info("Context provided:")
             logger.info(f"  - last_intent: {context.get('last_intent')}")
             logger.info(
-                f"  - last_bot_message: {context.get('last_bot_message')[:50]}..."
+                f"  - last_bot_message: {context.get('last_bot_message')[:50]}...",
             )
         else:
             logger.info("No context (first turn)")
 
         # Classify with context
         intent = await router.classify_intent(
-            query, context=context if context else None
+            query,
+            context=context if context else None,
         )
 
         # Check result
@@ -125,7 +125,7 @@ async def test_booking_flow_with_context():
         if not passed:
             all_passed = False
             logger.error(
-                f"❌ Turn {turn_num} FAILED: Expected {expected.value}, got {intent.value}"
+                f"❌ Turn {turn_num} FAILED: Expected {expected.value}, got {intent.value}",
             )
 
         # Update context for next turn
@@ -133,9 +133,9 @@ async def test_booking_flow_with_context():
         last_bot_message = bot_response
 
     # Final summary
-    logger.info(f"\n{'='*70}")
+    logger.info(f"\n{'=' * 70}")
     logger.info("TEST SUMMARY")
-    logger.info(f"{'='*70}")
+    logger.info(f"{'=' * 70}")
 
     if all_passed:
         logger.info("✅ ALL TESTS PASSED")
@@ -153,7 +153,6 @@ async def test_booking_flow_with_context():
 
 async def test_edge_cases():
     """Test edge cases for context-aware routing."""
-
     logger.info("\n" + "=" * 70)
     logger.info("TEST: Edge Cases for Context-Aware Routing")
     logger.info("=" * 70)
@@ -203,9 +202,9 @@ async def test_edge_cases():
     all_passed = True
 
     for i, case in enumerate(edge_cases, 1):
-        logger.info(f"\n{'='*70}")
+        logger.info(f"\n{'=' * 70}")
         logger.info(f"Edge Case {i}: {case['name']}")
-        logger.info(f"{'='*70}")
+        logger.info(f"{'=' * 70}")
         logger.info(f"Query: '{case['query']}'")
         logger.info(f"Context: {case['context']}")
 
@@ -227,7 +226,6 @@ async def test_edge_cases():
 
 async def main():
     """Run all context-aware routing tests."""
-
     try:
         # Test 1: Main booking flow
         test1_passed = await test_booking_flow_with_context()
@@ -240,7 +238,7 @@ async def main():
         logger.info("FINAL RESULTS")
         logger.info("=" * 70)
         logger.info(
-            f"Booking Flow Test: {'✅ PASSED' if test1_passed else '❌ FAILED'}"
+            f"Booking Flow Test: {'✅ PASSED' if test1_passed else '❌ FAILED'}",
         )
         logger.info(f"Edge Cases Test: {'✅ PASSED' if test2_passed else '❌ FAILED'}")
 
