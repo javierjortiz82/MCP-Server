@@ -49,6 +49,27 @@ def get_product_tool_names() -> list[str]:
     ]
 
 
+def get_pageable_tool_names() -> list[str]:
+    """
+    Return list of product tools that return pageable result lists.
+
+    Pageable tools are those that return collections of items (not single items)
+    and support client-side pagination. This enables dynamic tool discovery for
+    pagination features without hardcoding tool lists in client code.
+
+    These tools return results in pageable formats:
+    - {"items": [...], "count": N} - structured format
+    - Direct list - fallback format
+
+    Returns:
+        List of product tool names that support pagination
+    """
+    return [
+        "fuzzy_search_smart",
+        "search_products",
+    ]
+
+
 def register_tools():
     """Register all MCP tools."""
 

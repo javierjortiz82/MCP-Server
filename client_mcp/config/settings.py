@@ -381,11 +381,6 @@ class Settings(BaseSettings):
         description="Maximum iterations for function calling loop in SalesAgent",
     )
 
-    SEARCH_TOOL_NAMES: str = Field(
-        default="fuzzy_search_smart,search_products,fetch_product_by_sku",
-        description="Comma-separated list of search tool names for pagination tracking",
-    )
-
     # ============================================================================
     # SalesAgent Error Handling & Fallback Messages
     # ============================================================================

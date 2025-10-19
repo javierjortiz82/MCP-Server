@@ -172,6 +172,10 @@ class SalesAgent(BaseAgent):
         # If mcp_client was injected, orchestrator is responsible for closing it
         self._owns_mcp_client = False  # Will be True only if created internally
 
+        # Pagination: autodiscovered tools that support client-side pagination
+        # Fetched from tool-categories://pageable-tools resource (dynamic discovery)
+        self._pageable_tools: set[str] | None = None
+
         # Context caching (performance optimization)
         self.cached_content: types.CachedContent | None = None
 
@@ -225,6 +229,52 @@ class SalesAgent(BaseAgent):
             f"user_id={self.user_id[:8]}...)"
         )
         return prompt
+
+    async def _fetch_pageable_tools(self) -> set[str]:
+        """Fetch pageable tools from MCP resource (autodiscovery).
+
+        Queries the MCP server's tool-categories://pageable-tools resource to
+        dynamically discover which tools return pageable result lists. This
+        eliminates the need for hardcoding tool lists (like SEARCH_TOOL_NAMES).
+
+        Returns:
+            Set of tool names that support client-side pagination.
+            Falls back to default set if MCP unavailable or fetch fails.
+
+        Example:
+            >>> tools = await agent._fetch_pageable_tools()
+            >>> # tools = {"fuzzy_search_smart", "search_products"}
+        """
+        try:
+            if not self.mcp_client:
+                self.logger.debug("ℹ️  No MCP client available, using default pageable tools")
+                return {"fuzzy_search_smart", "search_products"}
+
+            self.logger.debug("📥 Fetching pageable tools from MCP resource...")
+            resource_uri = "tool-categories://pageable-tools"
+            content = await self.mcp_client.read_resource(resource_uri)
+
+            # Parse resource content
+            import json
+            data = json.loads(content)
+            tool_names = set(data.get("tools", []))
+
+            if tool_names:
+                self.logger.info(
+                    f"✅ Autodiscovered {len(tool_names)} pageable tools: {sorted(tool_names)}"
+                )
+                return tool_names
+            else:
+                self.logger.warning("⚠️  Pageable tools list is empty, using defaults")
+                return {"fuzzy_search_smart", "search_products"}
+
+        except Exception as e:
+            self.logger.warning(
+                f"⚠️  Failed to fetch pageable tools from MCP ({e}), "
+                f"using defaults"
+            )
+            # Fallback to reasonable defaults
+            return {"fuzzy_search_smart", "search_products"}
 
     async def initialize(self) -> None:
         """Initialize SalesAgent with injected MCP dependencies.
@@ -305,6 +355,9 @@ class SalesAgent(BaseAgent):
             )
         else:
             self.logger.info("💾 Persistencia de paginación: Solo memoria")
+
+        # Fetch pageable tools (autodiscovery from MCP resource)
+        self._pageable_tools = await self._fetch_pageable_tools()
 
         self.logger.info("✅ SalesAgent initialized successfully")
 
@@ -884,8 +937,8 @@ class SalesAgent(BaseAgent):
             raise RuntimeError("No tool executor or MCP client available")
 
         # ✅ PAGINATION: Track search results for client-side pagination
-        search_tools = settings.SEARCH_TOOL_NAMES.split(",")
-        if tool_name in search_tools:
+        # Use autodiscovered pageable tools instead of hardcoded SEARCH_TOOL_NAMES
+        if self._pageable_tools and tool_name in self._pageable_tools:
             self._track_search_results(tool_name, args, result)
 
         return result
