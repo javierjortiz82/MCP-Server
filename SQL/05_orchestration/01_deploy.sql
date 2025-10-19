@@ -91,6 +91,7 @@
 \i '../02_functions/02_email.sql'
 \i '../02_functions/03_memory.sql'
 \i '../02_functions/04_lifecycle.sql'
+\i '../02_functions/05_memory_sync.sql'
 \echo ''
 
 -- ============================================================================
@@ -131,6 +132,6 @@ SELECT extname, extversion FROM pg_extension WHERE extname IN ('uuid-ossp', 'una
 \echo ''
 \echo 'Deployment complete! Next steps:'
 \echo '  - Run verification: ./scripts/verify.sh'
-\echo '  - Query data: SELECT * FROM ':SCHEMA_NAME'.products LIMIT 1;'
-\echo '  - Check functions: SELECT ':SCHEMA_NAME'.is_slot_available(CURRENT_DATE, ''09:00''::TIME, 60);'
+\echo '  - Query data: SELECT * FROM 'test'.products LIMIT 1;'
+\echo '  - Check functions: SELECT 'test'.is_slot_available(CURRENT_DATE, ''09:00''::TIME, 60);'
 \echo ''

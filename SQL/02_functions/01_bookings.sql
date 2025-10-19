@@ -3,7 +3,7 @@
 -- ============================================================================
 
 -- Function to update updated_at timestamp
-CREATE OR REPLACE FUNCTION :'SCHEMA_NAME'.update_booking_timestamp()
+CREATE OR REPLACE FUNCTION test.update_booking_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = CURRENT_TIMESTAMP;
@@ -12,45 +12,45 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger for appointments
-DROP TRIGGER IF EXISTS trg_update_appointments_timestamp ON :'SCHEMA_NAME'.appointments;
+DROP TRIGGER IF EXISTS trg_update_appointments_timestamp ON test.appointments;
 CREATE TRIGGER trg_update_appointments_timestamp
-    BEFORE UPDATE ON :'SCHEMA_NAME'.appointments
+    BEFORE UPDATE ON test.appointments
     FOR EACH ROW
-    EXECUTE FUNCTION :'SCHEMA_NAME'.update_booking_timestamp();
+    EXECUTE FUNCTION test.update_booking_timestamp();
 
 -- Trigger for service_types
-DROP TRIGGER IF EXISTS trg_update_service_types_timestamp ON :'SCHEMA_NAME'.service_types;
+DROP TRIGGER IF EXISTS trg_update_service_types_timestamp ON test.service_types;
 CREATE TRIGGER trg_update_service_types_timestamp
-    BEFORE UPDATE ON :'SCHEMA_NAME'.service_types
+    BEFORE UPDATE ON test.service_types
     FOR EACH ROW
-    EXECUTE FUNCTION :'SCHEMA_NAME'.update_booking_timestamp();
+    EXECUTE FUNCTION test.update_booking_timestamp();
 
 -- Trigger for business_hours
-DROP TRIGGER IF EXISTS trg_update_business_hours_timestamp ON :'SCHEMA_NAME'.business_hours;
+DROP TRIGGER IF EXISTS trg_update_business_hours_timestamp ON test.business_hours;
 CREATE TRIGGER trg_update_business_hours_timestamp
-    BEFORE UPDATE ON :'SCHEMA_NAME'.business_hours
+    BEFORE UPDATE ON test.business_hours
     FOR EACH ROW
-    EXECUTE FUNCTION :'SCHEMA_NAME'.update_booking_timestamp();
+    EXECUTE FUNCTION test.update_booking_timestamp();
 
 -- Trigger for blocked_times
-DROP TRIGGER IF EXISTS trg_update_blocked_times_timestamp ON :'SCHEMA_NAME'.blocked_times;
+DROP TRIGGER IF EXISTS trg_update_blocked_times_timestamp ON test.blocked_times;
 CREATE TRIGGER trg_update_blocked_times_timestamp
-    BEFORE UPDATE ON :'SCHEMA_NAME'.blocked_times
+    BEFORE UPDATE ON test.blocked_times
     FOR EACH ROW
-    EXECUTE FUNCTION :'SCHEMA_NAME'.update_booking_timestamp();
+    EXECUTE FUNCTION test.update_booking_timestamp();
 
 -- Trigger for service_hours
-DROP TRIGGER IF EXISTS trg_update_service_hours_timestamp ON :'SCHEMA_NAME'.service_hours;
+DROP TRIGGER IF EXISTS trg_update_service_hours_timestamp ON test.service_hours;
 CREATE TRIGGER trg_update_service_hours_timestamp
-    BEFORE UPDATE ON :'SCHEMA_NAME'.service_hours
+    BEFORE UPDATE ON test.service_hours
     FOR EACH ROW
-    EXECUTE FUNCTION :'SCHEMA_NAME'.update_booking_timestamp();
+    EXECUTE FUNCTION test.update_booking_timestamp();
 
 -- ============================================================================
 -- Function: is_slot_available() - Check availability with hybrid scheduling
 -- ============================================================================
 -- HYBRID SCHEDULING: Supports service-specific hours with fallback to business_hours
-CREATE OR REPLACE FUNCTION :'SCHEMA_NAME'.is_slot_available(
+CREATE OR REPLACE FUNCTION test.is_slot_available(
     p_booking_date DATE,
     p_booking_time TIME,
     p_duration_minutes INTEGER,
@@ -77,8 +77,8 @@ BEGIN
     IF p_service_type IS NOT NULL THEN
         SELECT INTO v_open_time, v_close_time, v_hours_exist
             sh.open_time, sh.close_time, true
-        FROM :'SCHEMA_NAME'.service_hours sh
-        JOIN :'SCHEMA_NAME'.service_types st ON sh.service_type_id = st.id
+        FROM test.service_hours sh
+        JOIN test.service_types st ON sh.service_type_id = st.id
         WHERE st.name = p_service_type
         AND sh.day_of_week = v_day_of_week
         AND sh.active = true
@@ -90,7 +90,7 @@ BEGIN
     IF NOT v_hours_exist THEN
         SELECT INTO v_open_time, v_close_time
             open_time, close_time
-        FROM :'SCHEMA_NAME'.business_hours
+        FROM test.business_hours
         WHERE day_of_week = v_day_of_week
         AND active = true;
     END IF;
@@ -107,7 +107,7 @@ BEGIN
 
     -- Check blocked times (full day)
     IF EXISTS (
-        SELECT 1 FROM :'SCHEMA_NAME'.blocked_times
+        SELECT 1 FROM test.blocked_times
         WHERE block_date = p_booking_date
         AND is_full_day = true
     ) THEN
@@ -116,7 +116,7 @@ BEGIN
 
     -- Check blocked times (specific time range)
     IF EXISTS (
-        SELECT 1 FROM :'SCHEMA_NAME'.blocked_times
+        SELECT 1 FROM test.blocked_times
         WHERE block_date = p_booking_date
         AND is_full_day = false
         AND (
@@ -130,7 +130,7 @@ BEGIN
 
     -- Check existing appointments
     IF EXISTS (
-        SELECT 1 FROM :'SCHEMA_NAME'.appointments
+        SELECT 1 FROM test.appointments
         WHERE booking_date = p_booking_date
         AND status IN ('confirmed', 'rescheduled')
         AND (
@@ -151,12 +151,12 @@ $$ LANGUAGE plpgsql STABLE;
 -- ============================================================================
 -- Function: cleanup_old_appointments() - Maintenance function
 -- ============================================================================
-CREATE OR REPLACE FUNCTION :'SCHEMA_NAME'.cleanup_old_appointments(days_to_keep INTEGER DEFAULT 90)
+CREATE OR REPLACE FUNCTION test.cleanup_old_appointments(days_to_keep INTEGER DEFAULT 90)
 RETURNS INTEGER AS $$
 DECLARE
     deleted_count INTEGER;
 BEGIN
-    DELETE FROM :'SCHEMA_NAME'.appointments
+    DELETE FROM test.appointments
     WHERE status IN ('completed', 'cancelled', 'no_show')
     AND (
         (completed_at IS NOT NULL AND completed_at < CURRENT_TIMESTAMP - (days_to_keep || ' days')::INTERVAL) OR
@@ -171,9 +171,9 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT EXECUTE ON FUNCTION :'SCHEMA_NAME'.is_slot_available(DATE, TIME, INTEGER) TO mcp_user;
-GRANT EXECUTE ON FUNCTION :'SCHEMA_NAME'.is_slot_available(DATE, TIME, INTEGER, VARCHAR) TO mcp_user;
-GRANT EXECUTE ON FUNCTION :'SCHEMA_NAME'.cleanup_old_appointments(INTEGER) TO mcp_user;
+GRANT EXECUTE ON FUNCTION test.is_slot_available(DATE, TIME, INTEGER) TO mcp_user;
+GRANT EXECUTE ON FUNCTION test.is_slot_available(DATE, TIME, INTEGER, VARCHAR) TO mcp_user;
+GRANT EXECUTE ON FUNCTION test.cleanup_old_appointments(INTEGER) TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION
