@@ -4,18 +4,37 @@ Complete database setup for Lab01-MCP with simplified deployment process.
 
 ## Quick Start
 
+⚠️ **Prerequisites:** PostgreSQL must be running first!
+
 ```bash
-cd SQL/
+# From Lab01-MCP/ root directory:
+
+# 1. Start PostgreSQL container (if not already running)
+cd DockerConfig
+docker-compose up -d postgres
+# ⏳ Wait for healthcheck to pass (~30s)
+
+# 2. Navigate to SQL and deploy database
+cd ../SQL
 
 # Configure schema name (optional - defaults to 'test')
 vi .env  # Edit SCHEMA_NAME=test to desired value
 
-# Deploy
+# 3. Run deployment (creates everything)
 ./scripts/deploy.sh                    # Full deployment + verification
 ./scripts/verify.sh                    # Health checks
 ./scripts/verify.sh --quick            # Quick check only
 ./scripts/verify.sh --detailed         # Detailed diagnostics
 ```
+
+### What `deploy.sh` Does
+1. ✅ Loads `.env` configuration
+2. ✅ Checks Docker connectivity
+3. ✅ Creates schema, tables, indexes
+4. ✅ Installs extensions (uuid-ossp, unaccent, pg_trgm, vector, pgcrypto)
+5. ✅ Creates all functions and triggers
+6. ✅ Loads seed data with embeddings
+7. ✅ Validates deployment
 
 ### Schema Configuration
 
