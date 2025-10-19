@@ -30,9 +30,7 @@ class TestApplicationError:
 
     def test_error_with_context(self):
         """Test ApplicationError with context."""
-        error = ApplicationError(
-            "Database error", context=ErrorContext.DATABASE, details={"table": "users"}
-        )
+        error = ApplicationError("Database error", context=ErrorContext.DATABASE, details={"table": "users"})
 
         assert str(error) == "Database error"
         assert error.context == ErrorContext.DATABASE
@@ -40,9 +38,7 @@ class TestApplicationError:
 
     def test_to_dict(self):
         """Test ApplicationError to_dict method."""
-        error = ApplicationError(
-            "Service error", context=ErrorContext.SERVICE, details={"code": 500}
-        )
+        error = ApplicationError("Service error", context=ErrorContext.SERVICE, details={"code": 500})
 
         error_dict = error.to_dict()
 

@@ -50,11 +50,7 @@ class FunctionCallHandler:
             logger.warning("Response parts is None - cannot extract function calls")
             return []
 
-        function_calls = [
-            part.function_call
-            for part in parts
-            if hasattr(part, "function_call") and part.function_call
-        ]
+        function_calls = [part.function_call for part in parts if hasattr(part, "function_call") and part.function_call]
 
         return function_calls
 
@@ -71,9 +67,7 @@ class FunctionCallHandler:
             logger.warning("Response parts is None - cannot extract text")
             return None
 
-        text_parts = [
-            part.text for part in parts if hasattr(part, "text") and part.text
-        ]
+        text_parts = [part.text for part in parts if hasattr(part, "text") and part.text]
 
         if not text_parts:
             return None

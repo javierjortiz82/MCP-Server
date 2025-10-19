@@ -185,9 +185,7 @@ class MCPLogger:
         tool_context = f"[{tool_name}] " if tool_name else ""
 
         if isinstance(result, list):
-            self.logger.info(
-                f"✅ [MCP] {tool_context}Resultado: Encontrados {len(result)} elementos"
-            )
+            self.logger.info(f"✅ [MCP] {tool_context}Resultado: Encontrados {len(result)} elementos")
             if len(result) > 0 and isinstance(result[0], dict):
                 for i, item in enumerate(result[:3], 1):
                     item_name = item.get("name", item.get("sku", f"Item {i}"))

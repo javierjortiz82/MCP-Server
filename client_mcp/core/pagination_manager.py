@@ -486,13 +486,9 @@ class PaginationManager:
         # Footer with remaining count
         if remaining > 0:
             if spanish_mode:
-                response_lines.append(
-                    f"\n💡 Quedan {remaining} productos más. Escribe 'más' para verlos."
-                )
+                response_lines.append(f"\n💡 Quedan {remaining} productos más. Escribe 'más' para verlos.")
             else:
-                response_lines.append(
-                    f"\n💡 {remaining} more products available. Type 'more' to see them."
-                )
+                response_lines.append(f"\n💡 {remaining} more products available. Type 'more' to see them.")
         else:
             if spanish_mode:
                 response_lines.append("\n✅ Esos son todos los resultados disponibles.")

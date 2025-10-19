@@ -364,9 +364,7 @@ class TestHealthCheckEdgeCases:
         """Test ClientHealthMonitor is instantiated correctly."""
         # Setup mock
         mock_monitor = MagicMock()
-        mock_monitor.get_full_health = AsyncMock(
-            return_value={"status": "healthy", "checks": []}
-        )
+        mock_monitor.get_full_health = AsyncMock(return_value={"status": "healthy", "checks": []})
         mock_monitor.print_health_status = MagicMock()
         mock_monitor_class.return_value = mock_monitor
 
@@ -381,14 +379,10 @@ class TestHealthCheckEdgeCases:
     @patch("cli.health_check.ClientHealthMonitor")
     @patch("sys.argv", ["health_check.py", "--component", "bot"])
     @patch("sys.stdout", new_callable=StringIO)
-    async def test_specific_component_health_data_structure(
-        self, mock_stdout, mock_monitor_class
-    ):
+    async def test_specific_component_health_data_structure(self, mock_stdout, mock_monitor_class):
         """Test health data structure for specific component check."""
         # Setup mock
-        mock_result = MockHealthResult(
-            status="healthy", timestamp=datetime(2025, 1, 1, 12, 0, 0)
-        )
+        mock_result = MockHealthResult(status="healthy", timestamp=datetime(2025, 1, 1, 12, 0, 0))
         mock_monitor = MagicMock()
         mock_monitor.check_bot_status = AsyncMock(return_value=mock_result)
         mock_monitor.print_health_status = MagicMock()

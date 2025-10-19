@@ -92,18 +92,14 @@ class TestCheckServerHealth:
             mock_client.get.assert_awaited_once_with("http://localhost:8009/health")
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(
-        reason="httpx.RequestError mocking issue - functionality verified in integration tests"
-    )
+    @pytest.mark.skip(reason="httpx.RequestError mocking issue - functionality verified in integration tests")
     async def test_check_server_health_unreachable(self):
         """Test health check when server is unreachable."""
         import httpx
 
         with patch("core.mcp_connector.httpx.AsyncClient") as mock_client_class:
             mock_client = MagicMock()
-            mock_client.get = AsyncMock(
-                side_effect=httpx.RequestError("Connection refused")
-            )
+            mock_client.get = AsyncMock(side_effect=httpx.RequestError("Connection refused"))
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock()
             mock_client_class.return_value = mock_client
@@ -115,9 +111,7 @@ class TestCheckServerHealth:
             assert result["url"] == "http://localhost:8009/health"
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(
-        reason="httpx exception mocking issue - functionality verified in integration tests"
-    )
+    @pytest.mark.skip(reason="httpx exception mocking issue - functionality verified in integration tests")
     async def test_check_server_health_general_error(self):
         """Test health check with unexpected error."""
         with patch("core.mcp_connector.httpx.AsyncClient") as mock_client_class:
@@ -144,17 +138,16 @@ class TestMCPConnectorContextManager:
         mock_session = MagicMock()
         mock_session.initialize = AsyncMock()
 
-        with patch("core.mcp_connector.streamablehttp_client") as mock_streams, patch(
-            "core.mcp_connector.ClientSession"
-        ) as mock_session_class:
+        with (
+            patch("core.mcp_connector.streamablehttp_client") as mock_streams,
+            patch("core.mcp_connector.ClientSession") as mock_session_class,
+        ):
             # Mock streamablehttp_client context manager
             mock_stream_ctx = MagicMock()
             mock_read = MagicMock()
             mock_write = MagicMock()
             mock_get_id = MagicMock()
-            mock_stream_ctx.__aenter__ = AsyncMock(
-                return_value=(mock_read, mock_write, mock_get_id)
-            )
+            mock_stream_ctx.__aenter__ = AsyncMock(return_value=(mock_read, mock_write, mock_get_id))
             mock_stream_ctx.__aexit__ = AsyncMock()
             mock_streams.return_value = mock_stream_ctx
 
@@ -256,9 +249,7 @@ class TestCallTool:
         result = await connector.call_tool("search", {"query": "laptop"})
 
         assert result == {"result": "success", "count": 42}
-        mock_session.call_tool.assert_awaited_once_with(
-            name="search", arguments={"query": "laptop"}
-        )
+        mock_session.call_tool.assert_awaited_once_with(name="search", arguments={"query": "laptop"})
 
     @pytest.mark.asyncio
     async def test_call_tool_success_text_response(self):
@@ -534,9 +525,7 @@ class TestGetPrompt:
         messages = await connector.get_prompt("test_prompt", {"arg": "value"})
 
         assert messages == mock_messages
-        mock_session.get_prompt.assert_awaited_once_with(
-            name="test_prompt", arguments={"arg": "value"}
-        )
+        mock_session.get_prompt.assert_awaited_once_with(name="test_prompt", arguments={"arg": "value"})
 
     @pytest.mark.asyncio
     async def test_get_prompt_no_arguments(self):
@@ -554,9 +543,7 @@ class TestGetPrompt:
         await connector.get_prompt("simple_prompt")
 
         # Should pass empty dict when no arguments provided
-        mock_session.get_prompt.assert_awaited_once_with(
-            name="simple_prompt", arguments={}
-        )
+        mock_session.get_prompt.assert_awaited_once_with(name="simple_prompt", arguments={})
 
     @pytest.mark.asyncio
     async def test_get_prompt_not_initialized(self):

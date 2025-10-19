@@ -114,9 +114,7 @@ class TestRetryStrategy:
 
         # Only retry on ValueError
         with pytest.raises(TypeError, match="Type error"):
-            await strategy.execute_with_retry(
-                fail_with_type_error, retryable_exceptions=(ValueError,)
-            )
+            await strategy.execute_with_retry(fail_with_type_error, retryable_exceptions=(ValueError,))
 
     @pytest.mark.asyncio
     async def test_execute_with_retry_respects_max_attempts(self):
@@ -258,9 +256,7 @@ class TestRetryWithBackoffFunction:
                 raise ValueError("Error")
             return "success"
 
-        result = await retry_with_backoff(
-            retry_then_success, max_attempts=3, initial_delay_ms=10.0
-        )
+        result = await retry_with_backoff(retry_then_success, max_attempts=3, initial_delay_ms=10.0)
 
         assert result == "success"
         assert attempts["count"] == 2

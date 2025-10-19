@@ -46,9 +46,7 @@ class TestToolExecutor:
     async def test_execute_tool_success(self, sample_mcp_tools):
         """Test successful tool execution."""
         mock_connector = AsyncMock()
-        mock_connector.call_tool = AsyncMock(
-            return_value={"items": [{"id": 1, "name": "Product 1"}], "count": 1}
-        )
+        mock_connector.call_tool = AsyncMock(return_value={"items": [{"id": 1, "name": "Product 1"}], "count": 1})
 
         executor = ToolExecutor(mock_connector)
 
@@ -56,9 +54,7 @@ class TestToolExecutor:
         await executor.register_tool_schemas(sample_mcp_tools)
 
         # Execute tool
-        result = await executor.execute_tool(
-            "search_products", {"query": "laptop", "limit": 5}
-        )
+        result = await executor.execute_tool("search_products", {"query": "laptop", "limit": 5})
 
         assert result is not None
         assert result["count"] == 1
@@ -68,9 +64,7 @@ class TestToolExecutor:
     async def test_execute_tool_without_validation(self, sample_mcp_tools):
         """Test tool execution without parameter validation."""
         mock_connector = AsyncMock()
-        mock_connector.call_tool = AsyncMock(
-            return_value={"items": [{"id": 1, "name": "Product"}], "count": 1}
-        )
+        mock_connector.call_tool = AsyncMock(return_value={"items": [{"id": 1, "name": "Product"}], "count": 1})
 
         executor = ToolExecutor(mock_connector)
 
@@ -125,9 +119,7 @@ class TestToolExecutor:
     async def test_execute_tool_with_tracking(self, sample_mcp_tools):
         """Test tool execution includes tracking."""
         mock_connector = AsyncMock()
-        mock_connector.call_tool = AsyncMock(
-            return_value={"items": [{"id": 1}], "count": 1}
-        )
+        mock_connector.call_tool = AsyncMock(return_value={"items": [{"id": 1}], "count": 1})
 
         # Create fresh tracker to avoid counting previous test executions
         from observability.tracker import ToolTracker
@@ -292,9 +284,7 @@ class TestToolExecutor:
         await executor.register_tool_schemas(sample_mcp_tools)
 
         # Validate parameters
-        validated = executor._validate_parameters(
-            "search_products", {"query": "laptop", "limit": 5}
-        )
+        validated = executor._validate_parameters("search_products", {"query": "laptop", "limit": 5})
 
         assert validated["query"] == "laptop"
         assert validated["limit"] == 5
@@ -345,9 +335,7 @@ class TestToolExecutorFallback:
         }
         await executor.register_tool_schemas([fuzzy_tool])
 
-        result = await executor.execute_tool(
-            "fuzzy_search_smart", {"query": "laptop", "limit": 5}
-        )
+        result = await executor.execute_tool("fuzzy_search_smart", {"query": "laptop", "limit": 5})
 
         # Should have called both tools (primary + fallback)
         assert mock_connector.call_tool.call_count == 2
@@ -384,9 +372,7 @@ class TestToolExecutorFallback:
         }
         await executor.register_tool_schemas([fuzzy_tool])
 
-        result = await executor.execute_tool(
-            "search_products", {"query": "laptop", "k": 5}
-        )
+        result = await executor.execute_tool("search_products", {"query": "laptop", "k": 5})
 
         # Should have called both tools
         assert mock_connector.call_tool.call_count == 2
@@ -395,16 +381,12 @@ class TestToolExecutorFallback:
     async def test_no_fallback_with_results(self, sample_mcp_tools):
         """Test no fallback when results are present."""
         mock_connector = AsyncMock()
-        mock_connector.call_tool = AsyncMock(
-            return_value={"items": [{"id": 1}], "count": 1}
-        )
+        mock_connector.call_tool = AsyncMock(return_value={"items": [{"id": 1}], "count": 1})
 
         executor = ToolExecutor(mock_connector)
         await executor.register_tool_schemas(sample_mcp_tools)
 
-        result = await executor.execute_tool(
-            "search_products", {"query": "laptop", "limit": 5}
-        )
+        result = await executor.execute_tool("search_products", {"query": "laptop", "limit": 5})
 
         # Should only call once (no fallback needed)
         assert mock_connector.call_tool.call_count == 1
@@ -435,9 +417,7 @@ class TestToolExecutorFallback:
         }
         await executor.register_tool_schemas(sample_mcp_tools + [fuzzy_tool])
 
-        result = await executor.execute_tool(
-            "fuzzy_search_smart", {"query": "laptop", "limit": 5}
-        )
+        result = await executor.execute_tool("fuzzy_search_smart", {"query": "laptop", "limit": 5})
 
         # Should call exactly twice (primary + fallback, no recursion)
         assert mock_connector.call_tool.call_count == 2
@@ -452,16 +432,12 @@ class TestToolExecutorRetry:
     async def test_retry_disabled_by_default(self, sample_mcp_tools):
         """Test retry is disabled by default in tests."""
         mock_connector = AsyncMock()
-        mock_connector.call_tool = AsyncMock(
-            return_value={"items": [{"id": 1}], "count": 1}
-        )
+        mock_connector.call_tool = AsyncMock(return_value={"items": [{"id": 1}], "count": 1})
 
         executor = ToolExecutor(mock_connector)
         await executor.register_tool_schemas(sample_mcp_tools)
 
-        result = await executor.execute_tool(
-            "search_products", {"query": "laptop", "limit": 5}
-        )
+        result = await executor.execute_tool("search_products", {"query": "laptop", "limit": 5})
 
         # Should call once (retry not configured in test environment)
         assert mock_connector.call_tool.call_count == 1
