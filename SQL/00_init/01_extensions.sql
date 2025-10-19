@@ -4,20 +4,20 @@
 -- Ejecutar primero: Habilita extensiones necesarias para toda la BD
 
 -- UUID functions for session tracking
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA public;
 
 -- Text search with accent support
-CREATE EXTENSION IF NOT EXISTS "unaccent";
+CREATE EXTENSION IF NOT EXISTS "unaccent" SCHEMA public;
 
 -- Trigram text search (fuzzy matching)
-CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm" SCHEMA public;
 
 -- Vector similarity search (AI embeddings)
-CREATE EXTENSION IF NOT EXISTS "vector";
+CREATE EXTENSION IF NOT EXISTS "vector" SCHEMA public;
 
 -- Cryptographic functions (digest, hmac, encrypt/decrypt, etc.)
 -- NOTE: Currently installed but not actively used by application functions
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto" SCHEMA public;
 
 -- Verification
 DO $$
