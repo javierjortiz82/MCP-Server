@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Tracks user conversation sessions with metadata for multi-agent system
 
-CREATE TABLE IF NOT EXISTS test.conversation_sessions (
+CREATE TABLE IF NOT EXISTS :'SCHEMA_NAME'.conversation_sessions (
     -- Primary key
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
@@ -35,41 +35,41 @@ CREATE TABLE IF NOT EXISTS test.conversation_sessions (
 
 -- Indexes for conversation_sessions
 CREATE INDEX IF NOT EXISTS idx_conv_sessions_customer_email
-    ON test.conversation_sessions(customer_email)
+    ON :'SCHEMA_NAME'.conversation_sessions(customer_email)
     WHERE customer_email IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_conv_sessions_session_id
-    ON test.conversation_sessions(session_id);
+    ON :'SCHEMA_NAME'.conversation_sessions(session_id);
 
 CREATE INDEX IF NOT EXISTS idx_conv_sessions_last_activity
-    ON test.conversation_sessions(last_activity_at DESC);
+    ON :'SCHEMA_NAME'.conversation_sessions(last_activity_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_conv_sessions_current_agent
-    ON test.conversation_sessions(current_agent)
+    ON :'SCHEMA_NAME'.conversation_sessions(current_agent)
     WHERE current_agent IS NOT NULL;
 
 -- Index for session lifecycle (archived flag)
 CREATE INDEX IF NOT EXISTS idx_sessions_archived
-    ON test.conversation_sessions(archived)
+    ON :'SCHEMA_NAME'.conversation_sessions(archived)
     WHERE archived = FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_sessions_last_activity_archived
-    ON test.conversation_sessions(last_activity_at, archived);
+    ON :'SCHEMA_NAME'.conversation_sessions(last_activity_at, archived);
 
 -- Index for anonymous session cleanup
 CREATE INDEX IF NOT EXISTS idx_sessions_email_null
-    ON test.conversation_sessions(customer_email)
+    ON :'SCHEMA_NAME'.conversation_sessions(customer_email)
     WHERE customer_email IS NULL;
 
 -- ============================================================================
 -- CONVERSATION_MESSAGES TABLE - Individual messages with full context
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS test.conversation_messages (
+CREATE TABLE IF NOT EXISTS :'SCHEMA_NAME'.conversation_messages (
     -- Primary key
     id SERIAL PRIMARY KEY,
 
     -- Session reference
-    session_id UUID NOT NULL REFERENCES test.conversation_sessions(id) ON DELETE CASCADE,
+    session_id UUID NOT NULL REFERENCES :'SCHEMA_NAME'.conversation_sessions(id) ON DELETE CASCADE,
 
     -- Message metadata
     role VARCHAR(20) NOT NULL,  -- 'user' | 'model'
@@ -99,25 +99,25 @@ CREATE TABLE IF NOT EXISTS test.conversation_messages (
 
 -- Indexes for conversation_messages
 CREATE INDEX IF NOT EXISTS idx_conv_messages_session_id
-    ON test.conversation_messages(session_id, created_at DESC);
+    ON :'SCHEMA_NAME'.conversation_messages(session_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_conv_messages_intent
-    ON test.conversation_messages(intent)
+    ON :'SCHEMA_NAME'.conversation_messages(intent)
     WHERE intent IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_conv_messages_agent
-    ON test.conversation_messages(agent_name)
+    ON :'SCHEMA_NAME'.conversation_messages(agent_name)
     WHERE agent_name IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_conv_messages_role
-    ON test.conversation_messages(role);
+    ON :'SCHEMA_NAME'.conversation_messages(role);
 
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT SELECT, INSERT, UPDATE, DELETE ON test.conversation_sessions TO mcp_user;
-GRANT SELECT, INSERT, UPDATE, DELETE ON test.conversation_messages TO mcp_user;
-GRANT USAGE, SELECT ON SEQUENCE test.conversation_messages_id_seq TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON :'SCHEMA_NAME'.conversation_sessions TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON :'SCHEMA_NAME'.conversation_messages TO mcp_user;
+GRANT USAGE, SELECT ON SEQUENCE :'SCHEMA_NAME'.conversation_messages_id_seq TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION

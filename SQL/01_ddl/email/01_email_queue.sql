@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Sistema de cola de emails con reintentos y priorización
 
-CREATE TABLE IF NOT EXISTS test.email_queue (
+CREATE TABLE IF NOT EXISTS :'SCHEMA_NAME'.email_queue (
     -- Primary key
     id SERIAL PRIMARY KEY,
 
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS test.email_queue (
     -- Foreign key to appointments (optional - allows orphan emails)
     CONSTRAINT fk_email_booking
         FOREIGN KEY (booking_id)
-        REFERENCES test.appointments(id)
+        REFERENCES :'SCHEMA_NAME'.appointments(id)
         ON DELETE SET NULL  -- Don't delete email if booking is deleted
 );
 
@@ -73,37 +73,37 @@ CREATE TABLE IF NOT EXISTS test.email_queue (
 
 -- Primary worker query: get pending/scheduled emails ready to send
 CREATE INDEX IF NOT EXISTS idx_email_queue_worker_poll
-    ON test.email_queue(status, scheduled_for, priority)
+    ON :'SCHEMA_NAME'.email_queue(status, scheduled_for, priority)
     WHERE status IN ('pending', 'scheduled');
 
 -- Retry query: find failed emails that need retry
 CREATE INDEX IF NOT EXISTS idx_email_queue_retry
-    ON test.email_queue(status, next_retry_at)
+    ON :'SCHEMA_NAME'.email_queue(status, next_retry_at)
     WHERE status = 'processing' AND next_retry_at IS NOT NULL;
 
 -- Lookup by recipient (customer email history)
 CREATE INDEX IF NOT EXISTS idx_email_queue_recipient
-    ON test.email_queue(recipient_email, created_at DESC);
+    ON :'SCHEMA_NAME'.email_queue(recipient_email, created_at DESC);
 
 -- Lookup by booking ID
 CREATE INDEX IF NOT EXISTS idx_email_queue_booking
-    ON test.email_queue(booking_id)
+    ON :'SCHEMA_NAME'.email_queue(booking_id)
     WHERE booking_id IS NOT NULL;
 
 -- Lookup by type and status (analytics)
 CREATE INDEX IF NOT EXISTS idx_email_queue_type_status
-    ON test.email_queue(type, status);
+    ON :'SCHEMA_NAME'.email_queue(type, status);
 
 -- Sent emails (for reporting)
 CREATE INDEX IF NOT EXISTS idx_email_queue_sent
-    ON test.email_queue(sent_at DESC)
+    ON :'SCHEMA_NAME'.email_queue(sent_at DESC)
     WHERE status = 'sent';
 
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT SELECT, INSERT, UPDATE, DELETE ON test.email_queue TO mcp_user;
-GRANT USAGE, SELECT ON SEQUENCE test.email_queue_id_seq TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON :'SCHEMA_NAME'.email_queue TO mcp_user;
+GRANT USAGE, SELECT ON SEQUENCE :'SCHEMA_NAME'.email_queue_id_seq TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION

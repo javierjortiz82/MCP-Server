@@ -5,7 +5,7 @@
 -- Incluye soporte para búsqueda fuzzy (trigram) y búsqueda semántica (vector)
 
 -- Text normalization function (unaccent + lowercase)
-CREATE OR REPLACE FUNCTION test.normalize_text(p_text TEXT)
+CREATE OR REPLACE FUNCTION :'SCHEMA_NAME'.normalize_text(p_text TEXT)
 RETURNS TEXT AS $$
 BEGIN
     RETURN LOWER(unaccent(p_text));
@@ -13,7 +13,7 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 -- Main products table
-CREATE TABLE IF NOT EXISTS test.products (
+CREATE TABLE IF NOT EXISTS :'SCHEMA_NAME'.products (
     -- Primary key
     id SERIAL PRIMARY KEY,
 
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS test.products (
 );
 
 -- Trigger for updated_at
-CREATE OR REPLACE FUNCTION test.update_product_timestamp()
+CREATE OR REPLACE FUNCTION :'SCHEMA_NAME'.update_product_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = CURRENT_TIMESTAMP;
@@ -51,11 +51,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_update_products_timestamp ON test.products;
+DROP TRIGGER IF EXISTS trg_update_products_timestamp ON :'SCHEMA_NAME'.products;
 CREATE TRIGGER trg_update_products_timestamp
-    BEFORE UPDATE ON test.products
+    BEFORE UPDATE ON :'SCHEMA_NAME'.products
     FOR EACH ROW
-    EXECUTE FUNCTION test.update_product_timestamp();
+    EXECUTE FUNCTION :'SCHEMA_NAME'.update_product_timestamp();
 
 -- ============================================================================
 -- INDEXES - Optimized for search operations
@@ -63,49 +63,49 @@ CREATE TRIGGER trg_update_products_timestamp
 
 -- SKU lookup (exact match)
 CREATE INDEX IF NOT EXISTS idx_products_sku
-    ON test.products(sku);
+    ON :'SCHEMA_NAME'.products(sku);
 
 -- Full-text search
 CREATE INDEX IF NOT EXISTS idx_products_search
-    ON test.products USING gin(to_tsvector('english', COALESCE(name, '') || ' ' || COALESCE(description, '')));
+    ON :'SCHEMA_NAME'.products USING gin(to_tsvector('english', COALESCE(name, '') || ' ' || COALESCE(description, '')));
 
 -- Tags search
 CREATE INDEX IF NOT EXISTS idx_products_tags
-    ON test.products USING gin(tags);
+    ON :'SCHEMA_NAME'.products USING gin(tags);
 
 -- Trigram indexes for fuzzy matching (normalized)
 CREATE INDEX IF NOT EXISTS idx_products_name_normalized_trgm
-    ON test.products USING gin(test.normalize_text(name) gin_trgm_ops);
+    ON :'SCHEMA_NAME'.products USING gin(:'SCHEMA_NAME'.normalize_text(name) gin_trgm_ops);
 
 CREATE INDEX IF NOT EXISTS idx_products_name_trgm_compat
-    ON test.products USING gin(name gin_trgm_ops);
+    ON :'SCHEMA_NAME'.products USING gin(name gin_trgm_ops);
 
 CREATE INDEX IF NOT EXISTS idx_products_name_word_trgm
-    ON test.products USING gist(name gist_trgm_ops);
+    ON :'SCHEMA_NAME'.products USING gist(name gist_trgm_ops);
 
 CREATE INDEX IF NOT EXISTS idx_products_desc_normalized_trgm
-    ON test.products USING gin(test.normalize_text(description) gin_trgm_ops);
+    ON :'SCHEMA_NAME'.products USING gin(:'SCHEMA_NAME'.normalize_text(description) gin_trgm_ops);
 
 CREATE INDEX IF NOT EXISTS idx_products_desc_trgm_compat
-    ON test.products USING gin(description gin_trgm_ops);
+    ON :'SCHEMA_NAME'.products USING gin(description gin_trgm_ops);
 
 CREATE INDEX IF NOT EXISTS idx_products_desc_word_trgm
-    ON test.products USING gist(description gist_trgm_ops);
+    ON :'SCHEMA_NAME'.products USING gist(description gist_trgm_ops);
 
 -- Brand + Category combined search
 CREATE INDEX IF NOT EXISTS idx_products_brand_cat_normalized_trgm
-    ON test.products USING gin(test.normalize_text(brand || ' ' || category) gin_trgm_ops);
+    ON :'SCHEMA_NAME'.products USING gin(:'SCHEMA_NAME'.normalize_text(brand || ' ' || category) gin_trgm_ops);
 
 -- Vector similarity (cosine distance)
 CREATE INDEX IF NOT EXISTS idx_products_embedding_ivf
-    ON test.products USING ivfflat(embedding) WITH (lists = 100);
+    ON :'SCHEMA_NAME'.products USING ivfflat(embedding) WITH (lists = 100);
 
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT SELECT, INSERT, UPDATE, DELETE ON test.products TO mcp_user;
-GRANT USAGE, SELECT ON SEQUENCE test.products_id_seq TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.normalize_text(TEXT) TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON :'SCHEMA_NAME'.products TO mcp_user;
+GRANT USAGE, SELECT ON SEQUENCE :'SCHEMA_NAME'.products_id_seq TO mcp_user;
+GRANT EXECUTE ON FUNCTION :'SCHEMA_NAME'.normalize_text(TEXT) TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION

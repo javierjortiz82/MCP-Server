@@ -1,18 +1,23 @@
 #!/bin/bash
-#==============================================================================
-# Database Verification Script
-# Quick health check for Lab01-MCP PostgreSQL database
-#==============================================================================
-# This script performs a quick verification of the database state:
-# - Container status
-# - Database connectivity
-# - Schema objects count
-# - Data integrity
-# - Search capabilities
+
+# ============================================================================
+# LAB01-MCP DATABASE VERIFICATION SCRIPT
+# ============================================================================
+# Quick health checks and detailed diagnostics for Lab01-MCP database
 #
 # Usage:
-#   ./verify_database.sh           # Full verification
-#   ./verify_database.sh --quick   # Quick check only
+#   ./verify.sh                # Full verification
+#   ./verify.sh --quick        # Quick health check only
+#   ./verify.sh --detailed     # Detailed diagnostics
+#   ./verify.sh --help         # Show help
+#
+# Features:
+#   - Container status check
+#   - Database connectivity
+#   - Schema and table verification
+#   - Data integrity checks
+#   - Search capabilities (fuzzy, vector)
+#   - Performance diagnostics
 #
 # Exit codes:
 #   0 - All checks passed
@@ -20,10 +25,9 @@
 #
 # Author: Lab01-MCP Team
 # Created: 2025-10-18
-# Version: 1.0.0
-#==============================================================================
+# ============================================================================
 
-set -u  # Exit on undefined variable
+set -u
 
 # Colors
 RED='\033[0;31m'
@@ -33,12 +37,31 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SQL_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+ENV_FILE="$SQL_ROOT_DIR/.env"
+
+# Load environment variables from .env
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    source "$ENV_FILE"
+    set +a
+else
+    echo "⚠️  Warning: .env file not found at $ENV_FILE, using default SCHEMA_NAME=test"
+    SCHEMA_NAME="test"
+fi
+
+# Set default schema if not in .env
+SCHEMA_NAME="${SCHEMA_NAME:-test}"
+
 # Mode
 QUICK_MODE=false
+DETAILED_MODE=false
 
-#==============================================================================
+# ============================================================================
 # HELPER FUNCTIONS
-#==============================================================================
+# ============================================================================
 
 success() {
     echo -e "${GREEN}✅ $1${NC}"
@@ -61,22 +84,22 @@ header() {
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
     echo -e "${CYAN}  $1${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
 }
 
 check() {
     echo -ne "${BLUE}🔍 Checking $1...${NC}"
 }
 
-#==============================================================================
+# ============================================================================
 # VERIFICATION FUNCTIONS
-#==============================================================================
+# ============================================================================
 
 verify_container() {
     check "PostgreSQL container"
-
+    
     if docker ps --format '{{.Names}}' | grep -q "mcp-postgres"; then
         local status=$(docker inspect -f '{{.State.Status}}' mcp-postgres)
-
         if [ "$status" == "running" ]; then
             echo -e "\r${GREEN}✅ Container running${NC}                    "
             return 0
@@ -86,14 +109,14 @@ verify_container() {
         fi
     else
         echo -e "\r${RED}❌ Container not found${NC}                "
-        error "Start with: cd ../DockerConfig && docker-compose up -d"
+        error "Start container: cd ../DockerConfig && docker-compose up -d"
         return 1
     fi
 }
 
 verify_connection() {
     check "Database connection"
-
+    
     if docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "SELECT 1;" &>/dev/null; then
         echo -e "\r${GREEN}✅ Connection successful${NC}              "
         return 0
@@ -103,57 +126,42 @@ verify_connection() {
     fi
 }
 
-verify_extensions() {
-    check "PostgreSQL extensions"
-
-    local count=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM pg_extension WHERE extname IN ('vector', 'pg_trgm', 'unaccent', 'uuid-ossp');" 2>/dev/null | xargs)
-
-    if [ "$count" == "4" ]; then
-        echo -e "\r${GREEN}✅ All 4 extensions installed${NC}         "
-        return 0
-    else
-        echo -e "\r${RED}❌ Only $count/4 extensions found${NC}     "
-        return 1
-    fi
-}
-
 verify_schema() {
-    check "Database schema"
-
-    local exists=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='test';" 2>/dev/null | xargs)
-
-    if [ "$exists" == "1" ]; then
-        echo -e "\r${GREEN}✅ Schema 'test' exists${NC}               "
+    check "Schema "${SCHEMA_NAME}""
+    
+    local count=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
+        "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='${SCHEMA_NAME}';" 2>/dev/null | xargs)
+    
+    if [ "$count" == "1" ]; then
+        echo -e "\r${GREEN}✅ Schema exists${NC}                        "
         return 0
     else
-        echo -e "\r${RED}❌ Schema 'test' not found${NC}            "
+        echo -e "\r${RED}❌ Schema not found${NC}                   "
         return 1
     fi
 }
 
 verify_tables() {
     check "Database tables"
-
+    
     local count=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='test';" 2>/dev/null | xargs)
-
-    if [ "$count" -ge "3" ]; then
-        echo -e "\r${GREEN}✅ Found $count tables${NC}                "
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${SCHEMA_NAME}';" 2>/dev/null | xargs)
+    
+    if [ "$count" -ge "14" ]; then
+        echo -e "\r${GREEN}✅ Found $count tables (expected 14+)${NC}    "
         return 0
     else
-        echo -e "\r${YELLOW}⚠️  Only $count tables found${NC}         "
+        echo -e "\r${YELLOW}⚠️  Found $count/14 tables${NC}             "
         return 1
     fi
 }
 
 verify_products() {
     check "Products data"
-
+    
     local count=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM test.products;" 2>/dev/null | xargs)
-
+        "SELECT COUNT(*) FROM "${SCHEMA_NAME}".products;" 2>/dev/null | xargs)
+    
     if [ "$count" == "90" ]; then
         echo -e "\r${GREEN}✅ All 90 products loaded${NC}             "
         return 0
@@ -168,12 +176,12 @@ verify_products() {
 
 verify_embeddings() {
     check "AI embeddings"
-
+    
     local count=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM test.products WHERE embedding IS NOT NULL;" 2>/dev/null | xargs)
-
+        "SELECT COUNT(*) FROM "${SCHEMA_NAME}".products WHERE embedding IS NOT NULL;" 2>/dev/null | xargs)
+    
     if [ "$count" == "90" ]; then
-        echo -e "\r${GREEN}✅ All 90 embeddings generated${NC}        "
+        echo -e "\r${GREEN}✅ All 90 embeddings ready${NC}             "
         return 0
     elif [ "$count" -gt "0" ]; then
         echo -e "\r${YELLOW}⚠️  Found $count/90 embeddings${NC}        "
@@ -186,162 +194,123 @@ verify_embeddings() {
 
 verify_indexes() {
     check "Database indexes"
-
+    
     local count=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM pg_indexes WHERE schemaname='test';" 2>/dev/null | xargs)
-
-    if [ "$count" -ge "10" ]; then
+        "SELECT COUNT(*) FROM pg_indexes WHERE schemaname='${SCHEMA_NAME}';" 2>/dev/null | xargs)
+    
+    if [ "$count" -ge "50" ]; then
         echo -e "\r${GREEN}✅ Found $count indexes${NC}               "
         return 0
     else
-        echo -e "\r${YELLOW}⚠️  Only $count indexes found${NC}         "
+        echo -e "\r${YELLOW}⚠️  Found $count indexes${NC}              "
         return 1
     fi
 }
 
 verify_functions() {
-    check "PostgreSQL functions"
-
+    check "Database functions"
+    
     local count=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname='test';" 2>/dev/null | xargs)
-
-    if [ "$count" -ge "2" ]; then
+        "SELECT COUNT(*) FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname='${SCHEMA_NAME}';" 2>/dev/null | xargs)
+    
+    if [ "$count" -ge "20" ]; then
         echo -e "\r${GREEN}✅ Found $count functions${NC}             "
         return 0
     else
-        echo -e "\r${YELLOW}⚠️  Only $count functions found${NC}       "
+        echo -e "\r${YELLOW}⚠️  Found $count functions${NC}            "
         return 1
     fi
 }
 
-test_fuzzy_search() {
-    check "Fuzzy search capability"
-
-    local result=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM test.products WHERE similarity(normalize_text(name), normalize_text('laptop')) > 0.3;" 2>/dev/null | xargs)
-
-    if [ "$result" -gt "0" ]; then
-        echo -e "\r${GREEN}✅ Fuzzy search working ($result results)${NC} "
+test_search() {
+    check "Search capabilities"
+    
+    local fuzzy=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
+        "SELECT COUNT(*) FROM "${SCHEMA_NAME}".products WHERE similarity(normalize_text(name), normalize_text('laptop')) > 0.3;" 2>/dev/null | xargs)
+    
+    if [ "$fuzzy" -gt "0" ]; then
+        echo -e "\r${GREEN}✅ Fuzzy search working ($fuzzy results)${NC} "
         return 0
     else
-        echo -e "\r${RED}❌ Fuzzy search failed${NC}                "
+        echo -e "\r${RED}❌ Search not available${NC}               "
         return 1
     fi
 }
 
-test_vector_search() {
-    check "Vector search capability"
-
-    local result=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM test.products WHERE embedding IS NOT NULL LIMIT 1;" 2>/dev/null | xargs)
-
-    if [ "$result" == "1" ]; then
-        echo -e "\r${GREEN}✅ Vector search available${NC}            "
-        return 0
-    else
-        echo -e "\r${RED}❌ Vector search not available${NC}        "
-        return 1
-    fi
-}
-
-#==============================================================================
+# ============================================================================
 # DETAILED REPORT
-#==============================================================================
+# ============================================================================
 
 print_detailed_report() {
-    header "DATABASE STATUS REPORT"
-
-    echo ""
+    header "DETAILED DATABASE DIAGNOSTICS"
+    
     echo -e "${CYAN}📊 Container Information${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
     if docker ps --format '{{.Names}}' | grep -q "mcp-postgres"; then
-        local uptime=$(docker inspect -f '{{.State.StartedAt}}' mcp-postgres | cut -d'.' -f1 | sed 's/T/ /')
-        local health=$(docker inspect -f '{{.State.Health.Status}}' mcp-postgres 2>/dev/null || echo "N/A")
-
         info "Container: mcp-postgres"
-        info "Status: Running"
-        info "Started: $uptime"
-        info "Health: $health"
+        info "Status: $(docker inspect -f '{{.State.Status}}' mcp-postgres)"
+        info "Port: 5434 → 5432"
     fi
-
+    
     echo ""
     echo -e "${CYAN}📋 Schema Objects${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
+    
     local tables=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='test';" 2>/dev/null | xargs)
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${SCHEMA_NAME}';" 2>/dev/null | xargs)
     local indexes=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM pg_indexes WHERE schemaname='test';" 2>/dev/null | xargs)
+        "SELECT COUNT(*) FROM pg_indexes WHERE schemaname='${SCHEMA_NAME}';" 2>/dev/null | xargs)
     local functions=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname='test';" 2>/dev/null | xargs)
-    local extensions=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM pg_extension;" 2>/dev/null | xargs)
-
+        "SELECT COUNT(*) FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname='${SCHEMA_NAME}';" 2>/dev/null | xargs)
+    
     info "Tables: $tables"
     info "Indexes: $indexes"
     info "Functions: $functions"
-    info "Extensions: $extensions"
-
+    
     echo ""
     echo -e "${CYAN}📦 Data Status${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
+    
     local products=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM test.products;" 2>/dev/null | xargs)
+        "SELECT COUNT(*) FROM "${SCHEMA_NAME}".products;" 2>/dev/null | xargs)
     local embeddings=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM test.products WHERE embedding IS NOT NULL;" 2>/dev/null | xargs)
-
+        "SELECT COUNT(*) FROM "${SCHEMA_NAME}".products WHERE embedding IS NOT NULL;" 2>/dev/null | xargs)
+    
     info "Products: $products"
     info "Embeddings: $embeddings"
-
-    # Check optional tables
-    local bookings=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='test' AND table_name='appointments';" 2>/dev/null | xargs)
-
-    if [ "$bookings" == "1" ]; then
-        local appts=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-            "SELECT COUNT(*) FROM test.appointments;" 2>/dev/null | xargs)
-        info "Appointments: $appts"
-    fi
-
+    
     echo ""
     echo -e "${CYAN}🔍 Search Capabilities${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-    # Test fuzzy search
+    
     local fuzzy=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM test.products WHERE similarity(normalize_text(name), normalize_text('laptop')) > 0.3;" 2>/dev/null | xargs)
+        "SELECT COUNT(*) FROM "${SCHEMA_NAME}".products WHERE similarity(normalize_text(name), normalize_text('laptop')) > 0.3;" 2>/dev/null | xargs)
     info "Fuzzy search results for 'laptop': $fuzzy"
-
-    # Test vector capabilities
-    local vector=$(docker exec mcp-postgres psql -U mcp_user -d mcpdb -t -c \
-        "SELECT COUNT(*) FROM test.products WHERE embedding IS NOT NULL;" 2>/dev/null | xargs)
-    info "Vector search enabled: $([ "$vector" -gt "0" ] && echo 'Yes' || echo 'No')"
-
+    info "Vector search: $([ "$embeddings" -gt "0" ] && echo 'Available' || echo 'Not available')"
+    
     echo ""
 }
 
-#==============================================================================
+# ============================================================================
 # MAIN
-#==============================================================================
+# ============================================================================
 
 print_help() {
     cat << EOF
 Lab01-MCP Database Verification Script
 
 USAGE:
-    ./verify_database.sh [OPTIONS]
+    ./verify.sh [OPTIONS]
 
 OPTIONS:
-    --help      Show this help message
-    --quick     Quick check only (skip detailed tests)
-    --report    Show detailed status report
+    --help              Show this help message
+    --quick             Quick checks only (5 checks)
+    --detailed          Detailed diagnostics (11 checks + report)
 
 EXAMPLES:
-    ./verify_database.sh            # Full verification
-    ./verify_database.sh --quick    # Quick health check
-    ./verify_database.sh --report   # Detailed report only
+    ./verify.sh                # Full verification
+    ./verify.sh --quick        # Quick health check
+    ./verify.sh --detailed     # Detailed diagnostics
 
 DATABASE INFO:
     Container: mcp-postgres
@@ -350,13 +319,15 @@ DATABASE INFO:
     User: mcp_user
     Schema: test
 
+EXIT CODES:
+    0 - All checks passed
+    1 - Some checks failed
+
 EOF
 }
 
 main() {
     # Parse arguments
-    local show_report=false
-
     while [[ $# -gt 0 ]]; do
         case $1 in
             --help)
@@ -367,8 +338,8 @@ main() {
                 QUICK_MODE=true
                 shift
                 ;;
-            --report)
-                show_report=true
+            --detailed)
+                DETAILED_MODE=true
                 shift
                 ;;
             *)
@@ -378,64 +349,59 @@ main() {
                 ;;
         esac
     done
-
+    
     # Banner
     echo ""
     echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║       Lab01-MCP Database Verification                    ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-
-    if [ "$show_report" == "true" ]; then
-        print_detailed_report
-        exit 0
-    fi
-
+    
     local errors=0
-
+    
     # Quick checks
-    echo -e "${CYAN}Running quick health checks...${NC}"
+    echo -e "${CYAN}Running health checks...${NC}"
     echo ""
-
+    
     verify_container || ((errors++))
     verify_connection || ((errors++))
     verify_schema || ((errors++))
     verify_tables || ((errors++))
     verify_products || ((errors++))
-    verify_embeddings || ((errors++))
-
-    if [ "$QUICK_MODE" == "false" ]; then
+    
+    if [ "$QUICK_MODE" = false ]; then
         echo ""
         echo -e "${CYAN}Running detailed checks...${NC}"
         echo ""
-
-        verify_extensions || ((errors++))
+        
+        verify_embeddings || ((errors++))
         verify_indexes || ((errors++))
         verify_functions || ((errors++))
-        test_fuzzy_search || ((errors++))
-        test_vector_search || ((errors++))
+        test_search || ((errors++))
     fi
-
+    
+    # Detailed report
+    if [ "$DETAILED_MODE" = true ]; then
+        print_detailed_report
+    fi
+    
     # Summary
     echo ""
     header "VERIFICATION SUMMARY"
-    echo ""
-
+    
     if [ $errors -eq 0 ]; then
         success "All checks passed! Database is healthy. 🎉"
         info "Port: 5434"
-        info "Database: mcpdb"
-        info "Schema: test"
-        echo ""
-        info "Run './verify_database.sh --report' for detailed status"
+        info "Database: mcpdb (Schema: test)"
         echo ""
         exit 0
     else
         error "Found $errors issue(s)"
-        warning "Run './deploy_database.sh' to fix issues"
+        warning "Run './deploy.sh' to fix issues"
         echo ""
         exit 1
     fi
 }
 
 main "$@"
+

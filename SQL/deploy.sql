@@ -77,9 +77,16 @@
 \echo ''
 
 -- ============================================================================
--- Phase 7: Functions and Triggers
+-- Phase 7: Indexes (Consolidated for maintainability)
 -- ============================================================================
-\echo '[8/9] Creating functions and triggers...'
+\echo '[8/10] Creating consolidated indexes...'
+\i '03_indexes/01_indexes.sql'
+\echo ''
+
+-- ============================================================================
+-- Phase 8: Functions and Triggers
+-- ============================================================================
+\echo '[9/10] Creating functions and triggers...'
 \i '02_functions/01_bookings.sql'
 \i '02_functions/02_email.sql'
 \i '02_functions/03_memory.sql'
@@ -87,9 +94,9 @@
 \echo ''
 
 -- ============================================================================
--- Phase 8: Seed Data (DML - Critical for full deployment)
+-- Phase 9: Seed Data (DML - Critical for full deployment)
 -- ============================================================================
-\echo '[9/9] Seeding product data...'
+\echo '[10/10] Seeding product data...'
 \i '04_seed/01_products_data.sql'
 \echo ''
 
@@ -114,7 +121,7 @@ SELECT
     COUNT(*) as table_count,
     string_agg(tablename, ', ' ORDER BY tablename) as tables
 FROM pg_tables
-WHERE schemaname = 'test'
+WHERE schemaname = :'SCHEMA_NAME'
 GROUP BY schemaname;
 
 \echo ''
@@ -122,8 +129,8 @@ GROUP BY schemaname;
 SELECT extname, extversion FROM pg_extension WHERE extname IN ('uuid-ossp', 'unaccent', 'pg_trgm', 'vector');
 
 \echo ''
-\echo 'Ready for deployment! Test with:'
-\echo '  - Query existing tables: SELECT * FROM test.products LIMIT 1;'
-\echo '  - Test booking availability: SELECT test.is_slot_available(CURRENT_DATE, ''09:00''::TIME, 60);'
-\echo '  - Check sessions: SELECT COUNT(*) FROM test.conversation_sessions;'
+\echo 'Deployment complete! Next steps:'
+\echo '  - Run verification: ./scripts/verify.sh'
+\echo '  - Query data: SELECT * FROM ':SCHEMA_NAME'.products LIMIT 1;'
+\echo '  - Check functions: SELECT ':SCHEMA_NAME'.is_slot_available(CURRENT_DATE, ''09:00''::TIME, 60);'
 \echo ''
