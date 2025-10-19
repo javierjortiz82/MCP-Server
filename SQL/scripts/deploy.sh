@@ -198,6 +198,66 @@ run_deployment() {
 }
 
 # ============================================================================
+# DATA LOADING PHASE (Python-based)
+# ============================================================================
+
+run_data_loading() {
+    step "Loading data via Python (with embeddings)..."
+    echo "  Executing: populate.py --db --embeddings"
+    echo ""
+
+    # Check if populate.py exists
+    POPULATE_SCRIPT="$SQL_ROOT_DIR/src/populate.py"
+    if [ ! -f "$POPULATE_SCRIPT" ]; then
+        error "populate.py not found at $POPULATE_SCRIPT"
+        return 1
+    fi
+
+    # Check if .env exists in SQL directory
+    if [ ! -f "$ENV_FILE" ]; then
+        error ".env file not found at $ENV_FILE"
+        return 1
+    fi
+
+    # Check Python availability
+    if ! command -v python3 &> /dev/null; then
+        error "Python3 not found on host system"
+        return 1
+    fi
+
+    # Check required Python packages
+    info "Checking Python dependencies..."
+    REQUIRED_PACKAGES="psycopg2 python-dotenv tenacity google-generativeai pgvector"
+    MISSING_PACKAGES=""
+
+    for pkg in $REQUIRED_PACKAGES; do
+        if ! python3 -c "import ${pkg//-/_}" 2>/dev/null; then
+            MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+        fi
+    done
+
+    if [ -n "$MISSING_PACKAGES" ]; then
+        warning "Installing missing Python packages:$MISSING_PACKAGES"
+        pip3 install -q $MISSING_PACKAGES || {
+            error "Failed to install Python packages"
+            return 1
+        }
+    fi
+    success "Python dependencies verified"
+
+    # Run populate.py from host (connects to database via port 5434)
+    info "Running populate.py with --db --embeddings..."
+    cd "$SQL_ROOT_DIR/src"
+    if python3 populate.py --db --embeddings; then
+        success "Data loaded successfully (including embeddings)"
+        return 0
+    else
+        error "Data loading failed"
+        return 1
+    fi
+}
+
+# ============================================================================
 # VALIDATION PHASE
 # ============================================================================
 
@@ -285,22 +345,29 @@ main() {
     fi
     
     # Full deployment
-    print_header "PHASE 1: DATABASE DEPLOYMENT"
+    print_header "PHASE 1: DATABASE DEPLOYMENT (DDL)"
     if ! run_deployment; then
         error "Deployment failed. Aborting."
         exit 1
     fi
-    
+
     echo ""
-    print_header "PHASE 2: DEPLOYMENT VALIDATION"
+    print_header "PHASE 2: DATA LOADING (DML + EMBEDDINGS)"
+    if ! run_data_loading; then
+        error "Data loading failed. Aborting."
+        exit 1
+    fi
+
+    echo ""
+    print_header "PHASE 3: DEPLOYMENT VALIDATION"
     if ! run_validation; then
         warning "Validation found issues (see above)"
     fi
-    
+
     # Verification
     if [ "$VERIFY_AFTER" = true ]; then
         echo ""
-        print_header "PHASE 3: HEALTH CHECKS"
+        print_header "PHASE 4: HEALTH CHECKS"
         if ! run_verification; then
             warning "Some health checks failed"
         fi
@@ -310,11 +377,15 @@ main() {
     echo ""
     print_header "DEPLOYMENT SUMMARY"
     success "Database deployment completed"
-    info "Schema: test"
-    info "Tables: 14"
-    info "Indexes: 60+"
-    info "Functions: 30+"
-    info "Products loaded: 90"
+    info "Schema: $SCHEMA_NAME"
+    info "Tables: 14 (DDL)"
+    info "Indexes: 80+ (optimized)"
+    info "Functions: 31 (bookings, email, memory)"
+    info "Data loaded:"
+    info "  • Products: 90 (with embeddings)"
+    info "  • Service types: 5"
+    info "  • Business hours: 6"
+    info "  • Blocked times: 25"
     echo ""
     info "To verify deployment: ./verify.sh"
     info "To check database health: ./verify.sh --quick"

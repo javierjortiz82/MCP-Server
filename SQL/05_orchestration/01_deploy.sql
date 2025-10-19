@@ -95,16 +95,19 @@
 \echo ''
 
 -- ============================================================================
--- Phase 9: Seed Data (DML - Critical for full deployment)
+-- Phase 9: Seed Data (DML - Complete data loading)
 -- ============================================================================
-\echo '[10/10] Seeding product data...'
-\i '../04_seed/01_products_data.sql'
+-- NOTE: Data loading is now handled by Python (populate.py --db --embeddings)
+--       This ensures embeddings are generated on-the-fly during insertion
+--       The following SQL files are kept for reference but not executed
+-- ============================================================================
+\echo '[10/10] Data loading phase...'
+\echo 'NOTE: Seed data will be loaded via populate.py (bash script handles this)'
 \echo ''
-
--- Optional: Additional seed data can be uncommented
--- \i '../04_seed/service_types.sql'
--- \i '../04_seed/business_hours.sql'
-\echo ''
+-- \i '../04_seed/01_products_data.sql'
+-- \i '../04_seed/02_service_types_data.sql'
+-- \i '../04_seed/03_business_hours_data.sql'
+-- \i '../04_seed/04_blocked_times_data.sql'
 
 -- ============================================================================
 -- Final Summary
