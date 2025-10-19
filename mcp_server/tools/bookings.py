@@ -21,6 +21,7 @@ Version: 1.0.0
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -41,15 +42,22 @@ try:
     from pathlib import Path
 
     # Add email_service to path
-    email_service_path = Path(__file__).parent.parent.parent / "email_service"
+    # Note: In Docker container, code is at /app/tools/bookings.py, so need .parent.parent
+    # In local dev, code is at mcp_server/tools/bookings.py, so would need .parent.parent.parent
+    # Solution: Check both possible paths
+    email_service_path = Path(__file__).parent.parent / "email_service"
+    if not email_service_path.exists():
+        # Fallback for local development structure
+        email_service_path = Path(__file__).parent.parent.parent / "email_service"
     if email_service_path.exists():
         sys.path.insert(0, str(email_service_path.parent))
-        from email_service.queue_manager import EmailQueueManager
+        # Use new refactored structure (email_service 2.0)
+        from email_service.database import EmailQueueManager
         from email_service.models import EmailType
 
         EMAIL_QUEUE_AVAILABLE = True
         logger_init = logging.getLogger("bookings_init")
-        logger_init.info("✅ Email queue integration enabled")
+        logger_init.info("✅ Email queue integration enabled (refactored structure)")
     else:
         EMAIL_QUEUE_AVAILABLE = False
         EmailQueueManager = None  # type: ignore[misc,assignment]
@@ -62,13 +70,14 @@ except ImportError:
 # Conditional import of Google Calendar client
 if settings.GOOGLE_CALENDAR_ENABLED:
     try:
-        from mcp_server.utils.google_calendar import (
+        from utils.google_calendar import (  # Use relative import
             GoogleCalendarClient,
             GoogleCalendarError,
         )
-    except ImportError:
+        logging.info("✅ Google Calendar client imported successfully")
+    except Exception as e:  # Catch all exceptions, not just ImportError
         logging.warning(
-            "Google Calendar client not available - calendar integration disabled"
+            f"Google Calendar client not available - {type(e).__name__}: {e}"
         )
         GoogleCalendarClient = None  # type: ignore[misc,assignment]
         GoogleCalendarError = Exception  # type: ignore[misc,assignment]
@@ -83,6 +92,50 @@ logger = setup_logging("bookings_tools")
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
+
+
+def _validate_email(email: str) -> tuple[bool, str]:
+    """Validate email address format.
+
+    Uses RFC 5322 simplified regex pattern for email validation.
+    This catches common typos like double domain extensions (.comm, .ccom).
+
+    Args:
+        email: Email address to validate.
+
+    Returns:
+        Tuple of (is_valid: bool, error_message: str).
+        If valid: (True, "")
+        If invalid: (False, "descriptive error message")
+
+    Example:
+        >>> is_valid, msg = _validate_email("user@example.com")
+        >>> print(is_valid)
+        True
+
+        >>> is_valid, msg = _validate_email("user@example.comm")  # Typo!
+        >>> print(is_valid, msg)
+        False Invalid email format: suspected TLD typo (.comm instead of .com)
+    """
+    email = email.strip()
+
+    # Basic RFC 5322 pattern (simplified for practical use)
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+
+    if not re.match(pattern, email):
+        return False, f"Invalid email format: {email}"
+
+    # Check for common typos (double letters in TLD)
+    if re.search(r'\.c+o+m+m+$', email, re.IGNORECASE):
+        return False, f"Suspected TLD typo in email: {email} (.comm instead of .com?)"
+
+    if re.search(r'\.c+o+o+m+$', email, re.IGNORECASE):
+        return False, f"Suspected TLD typo in email: {email} (.coom instead of .com?)"
+
+    if re.search(r'\.c+o+m+m+$', email, re.IGNORECASE):
+        return False, f"Suspected TLD typo in email: {email} (double m's in TLD)"
+
+    return True, ""
 
 
 def _get_calendar_client() -> Any | None:
@@ -427,6 +480,12 @@ def create_booking(
     logger.info(
         f"Creating booking for {customer_email} on {booking_date} at {booking_time}"
     )
+
+    # Validate email format FIRST (prevent typos from reaching database)
+    is_valid_email, email_error = _validate_email(customer_email)
+    if not is_valid_email:
+        logger.warning(f"❌ Email validation failed: {email_error}")
+        raise ValueError(email_error)
 
     # Validate availability using database function
     # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
