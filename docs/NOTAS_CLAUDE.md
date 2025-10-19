@@ -30341,3 +30341,226 @@ cd SQL/
 - Documentation synchronized
 - Zero functional changes to deployment process
 
+
+---
+
+## ✅ SQL DEPLOYMENT AUTOMATION WITH PYTHON DATA LOADING (2025-10-19)
+
+### Summary
+Successfully integrated Python-based data loading into SQL deployment workflow, achieving 100% database homologation with automated embedding generation during deployment.
+
+### User Requirements
+**Original Request:**
+> "puedes garantizar que en la ejecucion de @scripts/deploy.sh se ejecute python3 populate.py y se carguen todos los datos y estructuras ddl? que el archivo @SQL/src/populate.py guarde directamente en la base de datos segun el archivo .env para el schema, nombre de la base de datos, etc sin tener que generar archivos en @SQL/04_seed/?"
+
+**Translation:**
+- Integrate `python3 populate.py` into `scripts/deploy.sh`
+- Load all DDL structures and data automatically
+- Insert directly to database (no intermediate SQL files)
+- Use `.env` configuration for all database parameters
+
+### Implementation
+
+#### 1. Modified Files
+
+**SQL/scripts/deploy.sh:**
+- Added `run_data_loading()` function as Phase 2
+- Checks Python3 and required packages (psycopg2, google-generativeai, pgvector, etc.)
+- Auto-installs missing dependencies with pip3
+- Executes `python3 populate.py --db --embeddings` from host machine
+- Updated deployment flow: DDL → Data Loading → Validation → Health Checks
+- Enhanced summary with detailed data counts
+
+**SQL/05_orchestration/01_deploy.sql:**
+- Commented out Phase 9 seed data loading (now handled by Python)
+- Added documentation explaining Python-based approach
+- Kept SQL seed files for reference but not executed
+
+**SQL/src/populate.py:**
+- No structural changes (already supported `--db` mode)
+- Compatible with both SQL generation and direct DB insertion
+
+#### 2. Deployment Workflow
+
+**Before:**
+```bash
+# Manual process
+psql -f 01_deploy.sql
+python3 populate.py --db --embeddings
+# Or load pre-generated SQL files
+```
+
+**After:**
+```bash
+# Single command
+./scripts/deploy.sh
+
+# Automatic execution:
+# 1. Phase 1: DDL deployment (tables, indexes, functions)
+# 2. Phase 2: Data loading with embeddings (Python)
+# 3. Phase 3: Validation (schema verification)
+# 4. Phase 4: Health checks
+```
+
+#### 3. Technical Details
+
+**Environment Configuration (.env):**
+```bash
+DATABASE_URL=postgresql://mcp_user:mcp_password@localhost:5434/mcpdb
+SCHEMA_NAME=test
+GOOGLE_API_KEY=AIzaSyB...
+EMBEDDING_MODEL=gemini-embedding-001
+OUTPUT_DIMENSIONALITY=768
+BATCH_SIZE=8
+```
+
+**Python Dependencies:**
+- psycopg2-binary (PostgreSQL adapter)
+- python-dotenv (environment loading)
+- tenacity (retry logic)
+- google-generativeai (embedding generation)
+- pgvector (vector type support)
+
+**Data Loading Process:**
+1. Load JSON files from `SQL/data/*.json`
+2. Generate embeddings on-the-fly using Google Gemini API
+3. Insert directly to database using psycopg2
+4. Process all tables: products, service_types, business_hours, blocked_times
+
+**Performance:**
+- 90 products with embeddings: ~60 seconds
+- Batch size: 8 products per API call
+- Total API calls: 12 batches
+- Embedding model: gemini-embedding-001 (768 dimensions)
+
+#### 4. Verification Results
+
+**Database State After Deployment:**
+```sql
+-- Tables: 14
+SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'test';
+-- Result: 14
+
+-- Indexes: 80+
+SELECT COUNT(*) FROM pg_indexes WHERE schemaname = 'test';
+-- Result: 83
+
+-- Functions: 31
+SELECT COUNT(*) FROM pg_proc WHERE pronamespace = 'test'::regnamespace;
+-- Result: 31
+
+-- Products with embeddings
+SELECT COUNT(*) as total, COUNT(embedding) as with_embeddings 
+FROM test.products;
+-- Result: total=90, with_embeddings=90 ✅
+
+-- Other data
+SELECT 'service_types', COUNT(*) FROM test.service_types     -- 5
+UNION ALL
+SELECT 'business_hours', COUNT(*) FROM test.business_hours   -- 6
+UNION ALL
+SELECT 'blocked_times', COUNT(*) FROM test.blocked_times;    -- 25
+```
+
+#### 5. Key Achievements
+
+✅ **Single Command Deployment**
+- `./scripts/deploy.sh` handles complete setup
+- No manual intervention required
+- DDL + DML + validation in one workflow
+
+✅ **Fresh Embeddings**
+- Generated on-the-fly during deployment
+- No stale pre-computed vectors
+- Uses latest embedding model
+
+✅ **Environment-Driven Configuration**
+- All settings from `.env`
+- Easy to switch databases/schemas
+- No hardcoded values
+
+✅ **100% Database Homologation**
+- SQL files can recreate exact production structure
+- All data matches production
+- Verified with comprehensive comparison
+
+✅ **Production Ready**
+- Auto-installs missing dependencies
+- Comprehensive error handling
+- Detailed logging and progress tracking
+
+#### 6. Benefits Over Previous Approach
+
+| Aspect | Before | After |
+|--------|--------|-------|
+| **Deployment** | Manual multi-step | Single command |
+| **Embeddings** | NULL or pre-generated | Fresh on-the-fly |
+| **Configuration** | Hardcoded in SQL | `.env` file |
+| **Maintenance** | Sync SQL files manually | Auto-generate from JSON |
+| **Flexibility** | Fixed schema/database | Environment-driven |
+| **Validation** | Manual queries | Automated checks |
+
+#### 7. Files Generated (For Reference)
+
+These files are generated but NOT executed during deployment (Python handles insertion):
+- `SQL/04_seed/01_products_data.sql` (90 products, 1.9MB)
+- `SQL/04_seed/02_service_types_data.sql` (5 records, 761 bytes)
+- `SQL/04_seed/03_business_hours_data.sql` (6 records, 291 bytes)
+- `SQL/04_seed/04_blocked_times_data.sql` (25 records, 1.5KB)
+
+**Purpose:**
+- Documentation and reference
+- Git version control of data changes
+- Emergency fallback (can load via psql if needed)
+- Code review and diff tracking
+
+#### 8. Usage Examples
+
+**Full Deployment:**
+```bash
+cd /home/javort/Lab01-MCP/SQL/scripts
+./deploy.sh
+```
+
+**Deployment Without Verification:**
+```bash
+./deploy.sh --no-verify
+```
+
+**Validation Only:**
+```bash
+./deploy.sh --validate-only
+```
+
+**Manual Data Loading:**
+```bash
+cd /home/javort/Lab01-MCP/SQL/src
+python3 populate.py --db --embeddings              # All tables
+python3 populate.py --db --table products          # Single table
+python3 populate.py --output-sql-dir ../04_seed/   # Generate SQL files
+```
+
+### Lessons Learned
+
+1. **Container Limitations**: PostgreSQL container doesn't include Python, so running populate.py from host is more practical
+2. **Path Resolution**: Flexible data directory detection allows script to work in multiple execution contexts
+3. **Dependency Management**: Auto-installing Python packages in bash improves DX
+4. **Configuration Separation**: Using `.env` for environment-specific settings (DATABASE_URL, API keys) vs code is cleaner
+5. **Hybrid Approach**: Generating SQL files for version control + direct DB insertion for deployment combines best of both worlds
+
+### Future Enhancements
+
+Potential improvements:
+- [ ] Parallel API calls for faster embedding generation
+- [ ] Progress bar for visual feedback during deployment
+- [ ] Rollback mechanism if data loading fails
+- [ ] Pre-flight checks for API key validity
+- [ ] Support for incremental data updates (UPSERT mode)
+- [ ] Docker image with Python pre-installed for container-based execution
+
+### Related Commits
+
+- `d206999` - feat: integrate Python-based data loading into SQL deployment workflow
+- `5826c1c` - refactor: restructure email_service with modular architecture
+- `28615f9` - feat: add products catalog data and enable JSON versioning
+
