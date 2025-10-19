@@ -278,33 +278,37 @@ Lab01 - AI Sales Platform
             """
 
     def _format_date(self, date_str: str) -> str:
-        """Jinja2 filter to format dates.
+        """Jinja2 filter to format dates (pass-through).
 
-        Currently passes through the date string. Can be enhanced with
-        date parsing and localized formatting.
+        Currently returns date string as-is. Dates should be formatted at
+        database or template level using Jinja2 date filters or Python datetime.
 
         Args:
             date_str: Date string to format.
 
         Returns:
-            Formatted date string.
+            Date string unchanged.
+
+        Future enhancement:
+            Could implement with datetime.strptime() + locale support if needed.
         """
-        # TODO: Implement proper date formatting with i18n
         return date_str
 
     def _format_time(self, time_str: str) -> str:
-        """Jinja2 filter to format times.
+        """Jinja2 filter to format times (pass-through).
 
-        Currently passes through the time string. Can be enhanced with
-        time parsing and localized formatting.
+        Currently returns time string as-is. Times should be formatted at
+        database or template level using Jinja2 time filters or Python datetime.
 
         Args:
             time_str: Time string to format.
 
         Returns:
-            Formatted time string.
+            Time string unchanged.
+
+        Future enhancement:
+            Could implement with datetime.strptime() + locale support if needed.
         """
-        # TODO: Implement proper time formatting with i18n
         return time_str
 
     def template_exists(self, email_type: EmailType, format_type: str = "html") -> bool:
