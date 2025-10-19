@@ -69,8 +69,13 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
-    # Database Schema Configuration
+    # Database Configuration
     # ============================================================================
+    DATABASE_URL: str = Field(
+        default="postgresql://mcp_user:mcp_password@localhost:5434/mcpdb",
+        description="PostgreSQL connection URL (shared across all modules: client_mcp, mcp_server, email_service)",
+    )
+
     SCHEMA_NAME: str = Field(
         default="public",
         description="PostgreSQL schema name (shared across all modules)",
@@ -345,45 +350,18 @@ class Settings(BaseSettings):
         description="Enable PostgreSQL persistence for pagination contexts",
     )
 
-    PAGINATION_DB_HOST: str = Field(
-        default="localhost",
-        description="PostgreSQL host for pagination persistence",
-    )
-
-    PAGINATION_DB_PORT: int = Field(
-        default=5434,
-        gt=0,
-        lt=65536,
-        description="PostgreSQL port for pagination persistence",
-    )
-
-    PAGINATION_DB_NAME: str = Field(
-        default="mcpdb",
-        description="PostgreSQL database name for pagination persistence",
-    )
-
-    PAGINATION_DB_USER: str = Field(
-        default="mcp_user",
-        description="PostgreSQL user for pagination persistence",
-    )
-
-    PAGINATION_DB_PASSWORD: str | None = Field(
-        default=None,
-        description="PostgreSQL password for pagination persistence",
-    )
-
     PAGINATION_DB_POOL_MIN: int = Field(
         default=1,
         ge=1,
         le=10,
-        description="Minimum database connections in pool",
+        description="Minimum database connections in pool (pagination-specific)",
     )
 
     PAGINATION_DB_POOL_MAX: int = Field(
         default=5,
         ge=1,
         le=20,
-        description="Maximum database connections in pool",
+        description="Maximum database connections in pool (pagination-specific)",
     )
 
     PAGINATION_TTL_HOURS: int = Field(
