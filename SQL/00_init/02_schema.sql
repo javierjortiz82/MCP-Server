@@ -1,20 +1,20 @@
 -- ============================================================================
 -- SCHEMA CREATION - Main application schema
 -- ============================================================================
--- Ejecutar segundo: Crea el esquema principal y configura search_path
+-- Schema name from environment variable: SCHEMA_NAME (default: test)
 
-CREATE SCHEMA IF NOT EXISTS test;
+CREATE SCHEMA IF NOT EXISTS :SCHEMA_NAME;
 
 -- Set default search path
-ALTER DATABASE mcpdb SET search_path TO test, public;
+ALTER DATABASE mcpdb SET search_path TO :SCHEMA_NAME, public;
 
 -- Comment for documentation
-COMMENT ON SCHEMA test IS 'Schema principal para aplicaciones MCP - Contiene todas las tablas de productos, bookings, email y memory';
+COMMENT ON SCHEMA :SCHEMA_NAME IS 'Main schema for MCP applications - Contains all tables for products, bookings, email, and memory systems';
 
 -- Verification
 DO $$
 BEGIN
     RAISE NOTICE '✅ Schema created:';
-    RAISE NOTICE '   Schema name: test';
-    RAISE NOTICE '   Search path configured: test, public';
+    RAISE NOTICE '   Schema name: %', :'SCHEMA_NAME';
+    RAISE NOTICE '   Search path configured: %, public', :'SCHEMA_NAME';
 END $$;

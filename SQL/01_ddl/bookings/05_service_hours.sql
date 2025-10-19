@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Horarios específicos por servicio (override opcional de business_hours)
 
-CREATE TABLE IF NOT EXISTS test.service_hours (
+CREATE TABLE IF NOT EXISTS :'SCHEMA_NAME'.service_hours (
     -- Primary key
     id SERIAL PRIMARY KEY,
 
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS test.service_hours (
     service_type_id INTEGER NOT NULL,
     CONSTRAINT fk_service_hours_service_type
         FOREIGN KEY (service_type_id)
-        REFERENCES test.service_types(id)
+        REFERENCES :'SCHEMA_NAME'.service_types(id)
         ON DELETE CASCADE,
 
     -- Scheduling information
@@ -47,29 +47,29 @@ CREATE TABLE IF NOT EXISTS test.service_hours (
 
 -- Primary query: Get hours for specific service on specific day
 CREATE INDEX IF NOT EXISTS idx_service_hours_lookup
-    ON test.service_hours(service_type_id, day_of_week, active)
+    ON :'SCHEMA_NAME'.service_hours(service_type_id, day_of_week, active)
     WHERE active = true;
 
 -- Query: Find all services with custom hours for a day
 CREATE INDEX IF NOT EXISTS idx_service_hours_by_day
-    ON test.service_hours(day_of_week, active)
+    ON :'SCHEMA_NAME'.service_hours(day_of_week, active)
     WHERE active = true;
 
 -- Query: Find services with multiple ranges (shifts)
 CREATE INDEX IF NOT EXISTS idx_service_hours_multi_range
-    ON test.service_hours(service_type_id, priority)
+    ON :'SCHEMA_NAME'.service_hours(service_type_id, priority)
     WHERE active = true;
 
 -- Lookup by service for admin dashboard
 CREATE INDEX IF NOT EXISTS idx_service_hours_service
-    ON test.service_hours(service_type_id, active)
+    ON :'SCHEMA_NAME'.service_hours(service_type_id, active)
     WHERE active = true;
 
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT SELECT, INSERT, UPDATE, DELETE ON test.service_hours TO mcp_user;
-GRANT USAGE, SELECT ON SEQUENCE test.service_hours_id_seq TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON :'SCHEMA_NAME'.service_hours TO mcp_user;
+GRANT USAGE, SELECT ON SEQUENCE :'SCHEMA_NAME'.service_hours_id_seq TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION

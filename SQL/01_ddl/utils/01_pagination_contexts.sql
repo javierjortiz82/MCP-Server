@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Stores pagination cursors and context for resumable queries
 
-CREATE TABLE IF NOT EXISTS test.pagination_contexts (
+CREATE TABLE IF NOT EXISTS :'SCHEMA_NAME'.pagination_contexts (
     -- Primary key
     id SERIAL PRIMARY KEY,
 
@@ -40,25 +40,25 @@ CREATE TABLE IF NOT EXISTS test.pagination_contexts (
 
 -- Indexes for pagination_contexts
 CREATE INDEX IF NOT EXISTS idx_pagination_contexts_name
-    ON test.pagination_contexts(context_name);
+    ON :'SCHEMA_NAME'.pagination_contexts(context_name);
 
 CREATE INDEX IF NOT EXISTS idx_pagination_contexts_session
-    ON test.pagination_contexts(session_id)
+    ON :'SCHEMA_NAME'.pagination_contexts(session_id)
     WHERE session_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_pagination_contexts_customer
-    ON test.pagination_contexts(customer_email)
+    ON :'SCHEMA_NAME'.pagination_contexts(customer_email)
     WHERE customer_email IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_pagination_contexts_expires
-    ON test.pagination_contexts(expires_at)
+    ON :'SCHEMA_NAME'.pagination_contexts(expires_at)
     WHERE expires_at IS NOT NULL;
 
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT SELECT, INSERT, UPDATE, DELETE ON test.pagination_contexts TO mcp_user;
-GRANT USAGE, SELECT ON SEQUENCE test.pagination_contexts_id_seq TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON :'SCHEMA_NAME'.pagination_contexts TO mcp_user;
+GRANT USAGE, SELECT ON SEQUENCE :'SCHEMA_NAME'.pagination_contexts_id_seq TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION

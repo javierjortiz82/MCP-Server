@@ -23,7 +23,7 @@ SELECT
     COUNT(*) as total_tables,
     string_agg(tablename, ', ' ORDER BY tablename) as table_list
 FROM pg_tables
-WHERE schemaname = 'test'
+WHERE schemaname = :'SCHEMA_NAME'
 ORDER BY schemaname;
 
 \echo ''
@@ -33,7 +33,7 @@ SELECT
     COUNT(*) as column_count
 FROM pg_tables t
 JOIN information_schema.columns c ON c.table_name = t.tablename
-WHERE t.schemaname = 'test'
+WHERE t.schemaname = :'SCHEMA_NAME'
 GROUP BY t.schemaname, tablename
 ORDER BY tablename;
 
@@ -45,7 +45,7 @@ SELECT
     constraint_type,
     COUNT(*) as count
 FROM information_schema.table_constraints
-WHERE table_schema = 'test'
+WHERE table_schema = :'SCHEMA_NAME'
 GROUP BY constraint_name, table_name, constraint_type
 ORDER BY table_name;
 
@@ -62,7 +62,7 @@ ORDER BY table_name;
 SELECT
     COUNT(*) as total_indexes
 FROM pg_indexes
-WHERE schemaname = 'test';
+WHERE schemaname = :'SCHEMA_NAME';
 
 \echo ''
 \echo '✅ 2.2 - Indexes by Table'
@@ -71,7 +71,7 @@ SELECT
     COUNT(*) as index_count,
     string_agg(indexname, ', ' ORDER BY indexname) as indexes
 FROM pg_indexes
-WHERE schemaname = 'test'
+WHERE schemaname = :'SCHEMA_NAME'
 GROUP BY tablename
 ORDER BY tablename;
 
@@ -89,7 +89,7 @@ SELECT
     COUNT(*) as custom_functions
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = 'test'
+WHERE n.nspname = :'SCHEMA_NAME'
 AND proname NOT IN (
     'armor', 'dearmor', 'crypt', 'decrypt', 'encrypt', 'digest', 'hmac',
     'gen_random_bytes', 'gen_salt', 'pgp_armor_headers', 'pgp_key_id',
@@ -104,7 +104,7 @@ SELECT
     pronargs as arg_count
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = 'test'
+WHERE n.nspname = :'SCHEMA_NAME'
 AND proname NOT IN (
     'armor', 'dearmor', 'crypt', 'decrypt', 'encrypt', 'digest', 'hmac',
     'gen_random_bytes', 'gen_salt', 'pgp_armor_headers', 'pgp_key_id',
@@ -128,14 +128,14 @@ SELECT
     COUNT(DISTINCT category) as categories,
     COUNT(DISTINCT brand) as brands,
     COUNT(DISTINCT sku) as unique_skus
-FROM test.products;
+FROM :'SCHEMA_NAME'.products;
 
 \echo ''
 \echo '✅ 4.2 - Products by Category'
 SELECT
     category,
     COUNT(*) as count
-FROM test.products
+FROM :'SCHEMA_NAME'.products
 GROUP BY category
 ORDER BY count DESC, category;
 
@@ -146,14 +146,14 @@ SELECT
     MAX(price) as max_price,
     ROUND(AVG(price)::NUMERIC, 2) as avg_price,
     COUNT(DISTINCT price) as unique_prices
-FROM test.products;
+FROM :'SCHEMA_NAME'.products;
 
 \echo ''
 \echo '✅ 4.4 - SKU Format Validation'
 SELECT
     SUBSTRING(sku, 1, 3) as prefix,
     COUNT(*) as count
-FROM test.products
+FROM :'SCHEMA_NAME'.products
 GROUP BY SUBSTRING(sku, 1, 3)
 ORDER BY count DESC;
 
@@ -167,7 +167,7 @@ SELECT
     COUNT(*) FILTER (WHERE brand IS NOT NULL) as with_brand,
     COUNT(*) FILTER (WHERE price > 0) as with_valid_price,
     COUNT(*) FILTER (WHERE tags IS NOT NULL AND array_length(tags, 1) > 0) as with_tags
-FROM test.products;
+FROM :'SCHEMA_NAME'.products;
 
 \echo ''
 
@@ -200,7 +200,7 @@ SELECT
     event_object_table as table_name,
     COUNT(*) as trigger_count
 FROM information_schema.triggers
-WHERE trigger_schema = 'test'
+WHERE trigger_schema = :'SCHEMA_NAME'
 GROUP BY event_object_table
 ORDER BY table_name;
 
@@ -212,7 +212,7 @@ SELECT
     event_manipulation,
     action_orientation
 FROM information_schema.triggers
-WHERE trigger_schema = 'test'
+WHERE trigger_schema = :'SCHEMA_NAME'
 ORDER BY event_object_table, trigger_name;
 
 \echo ''
@@ -227,16 +227,16 @@ ORDER BY event_object_table, trigger_name;
 
 \echo '✅ DDL Structure:'
 SELECT
-    '  Tables: ' || (SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'test')::text || ' (expected 14)' as metric
+    '  Tables: ' || (SELECT COUNT(*) FROM pg_tables WHERE schemaname = :'SCHEMA_NAME')::text || ' (expected 14)' as metric
 UNION ALL
 SELECT
-    '  Indexes: ' || (SELECT COUNT(*) FROM pg_indexes WHERE schemaname = 'test')::text || ' (expected 29+)'
+    '  Indexes: ' || (SELECT COUNT(*) FROM pg_indexes WHERE schemaname = :'SCHEMA_NAME')::text || ' (expected 29+)'
 UNION ALL
 SELECT
     '  Functions: ' || (
         SELECT COUNT(*) FROM pg_proc p
         JOIN pg_namespace n ON n.oid = p.pronamespace
-        WHERE n.nspname = 'test'
+        WHERE n.nspname = :'SCHEMA_NAME'
         AND proname NOT IN ('armor', 'dearmor', 'crypt', 'decrypt', 'encrypt', 'digest', 'hmac',
             'gen_random_bytes', 'gen_salt', 'pgp_armor_headers', 'pgp_key_id',
             'pgp_pub_decrypt', 'pgp_pub_decrypt_bytea', 'pgp_pub_encrypt', 'pgp_pub_encrypt_bytea',
@@ -250,15 +250,15 @@ SELECT
 \echo '✅ DML Data:'
 SELECT
     '  Products: ' || COUNT(*)::text || ' (expected 90)' as metric
-FROM test.products
+FROM :'SCHEMA_NAME'.products
 UNION ALL
 SELECT
     '  Categories: ' || COUNT(DISTINCT category)::text || ' (expected 23)'
-FROM test.products
+FROM :'SCHEMA_NAME'.products
 UNION ALL
 SELECT
     '  Brands: ' || COUNT(DISTINCT brand)::text || ' (expected 57+)'
-FROM test.products;
+FROM :'SCHEMA_NAME'.products;
 
 \echo ''
 \echo '════════════════════════════════════════════════════════════════════════════════'
