@@ -188,8 +188,19 @@ run_deployment() {
     echo "  Executing: $DEPLOY_SQL"
     echo ""
 
-    if docker exec mcp-postgres psql -U mcp_user -d mcpdb -v "SCHEMA_NAME=$SCHEMA_NAME" -f "$DEPLOY_SQL"; then
+    # Note: Files remain on host, but we need to copy them to container
+    # because psql's \i directive requires local file access
+    info "Syncing SQL files to container..."
+    docker exec mcp-postgres mkdir -p /tmp/sql_deploy 2>/dev/null || true
+    docker cp "$SQL_ROOT_DIR/." mcp-postgres:/tmp/sql_deploy/
+
+    # Execute deployment from within container where \i directives work
+    if docker exec -w /tmp/sql_deploy/05_orchestration mcp-postgres \
+        psql -U mcp_user -d mcpdb -v "SCHEMA_NAME=$SCHEMA_NAME" -f 01_deploy.sql; then
         success "Deployment completed successfully"
+
+        # Cleanup temporary files in container
+        docker exec mcp-postgres rm -rf /tmp/sql_deploy 2>/dev/null || true
         return 0
     else
         error "Deployment failed"
@@ -238,10 +249,15 @@ run_data_loading() {
 
     if [ -n "$MISSING_PACKAGES" ]; then
         warning "Installing missing Python packages:$MISSING_PACKAGES"
-        pip3 install -q $MISSING_PACKAGES || {
-            error "Failed to install Python packages"
-            return 1
-        }
+        # Try to install, use --break-system-packages if needed
+        if ! pip3 install -q $MISSING_PACKAGES 2>/dev/null; then
+            info "Retrying with --break-system-packages flag..."
+            if ! pip3 install -q --break-system-packages $MISSING_PACKAGES; then
+                error "Failed to install Python packages"
+                error "Please install manually: pip3 install $MISSING_PACKAGES"
+                return 1
+            fi
+        fi
     fi
     success "Python dependencies verified"
 
