@@ -51,7 +51,7 @@ services:
     environment:
       # Database connection (using internal Docker network)
       DATABASE_URL: postgresql://mcp_user:mcp_password@postgres:5432/mcpdb
-      SCHEMA_NAME: test
+      SCHEMA_NAME: ${SCHEMA_NAME:-test}
 
       # Google API (REQUIRED - set in .env file)
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
@@ -116,7 +116,7 @@ services:
     environment:
       # Database connection
       DATABASE_URL: postgresql://mcp_user:mcp_password@postgres:5432/mcpdb
-      SCHEMA_NAME: test
+      SCHEMA_NAME: ${SCHEMA_NAME:-test}
 
       # SMTP configuration (REQUIRED - set in .env file)
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
