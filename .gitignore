@@ -97,6 +97,13 @@ pids/
 metrics/
 borrar/
 backups/
+
+# Credentials and secrets (never commit)
+credentials/
+*/credentials/
+*.key
+*.pem
+service-account.json
 *.json
 !package.json
 !tsconfig.json
