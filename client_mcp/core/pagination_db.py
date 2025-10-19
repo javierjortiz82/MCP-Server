@@ -66,10 +66,10 @@ class PaginationDB:
         Creates a connection pool with min/max connections based on configuration.
         Logs errors and disables persistence if initialization fails.
         """
-        # Validate password when persistence is enabled
-        if not settings.PAGINATION_DB_PASSWORD:
-            logger.error("❌ PAGINATION_DB_PASSWORD must be set when persistence is enabled")
-            logger.warning("⚠️  Pagination persistence disabled - password not configured")
+        # Validate DATABASE_URL when persistence is enabled
+        if not settings.DATABASE_URL:
+            logger.error("❌ DATABASE_URL must be set when persistence is enabled")
+            logger.warning("⚠️  Pagination persistence disabled - DATABASE_URL not configured")
             self._enabled = False
             self._pool = None
             return
