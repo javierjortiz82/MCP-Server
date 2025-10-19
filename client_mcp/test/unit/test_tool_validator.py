@@ -269,9 +269,7 @@ class TestToolValidator:
     def test_map_json_type_to_python_array(self):
         """Test JSON type mapping for array."""
         validator = ToolValidator()
-        python_type = validator._map_json_type_to_python(
-            {"type": "array", "items": {"type": "string"}}
-        )
+        python_type = validator._map_json_type_to_python({"type": "array", "items": {"type": "string"}})
         # Check it's a list type (actual type checking is complex in Python)
         assert "list" in str(python_type).lower()
 

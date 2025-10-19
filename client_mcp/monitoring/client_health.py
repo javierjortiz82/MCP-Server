@@ -174,11 +174,7 @@ class ClientHealthMonitor:
 
             # Check MCP tools availability
             if hasattr(self.bot_instance, "mcp_tools"):
-                tool_count = (
-                    len(self.bot_instance.mcp_tools)
-                    if self.bot_instance.mcp_tools
-                    else 0
-                )
+                tool_count = len(self.bot_instance.mcp_tools) if self.bot_instance.mcp_tools else 0
                 if tool_count > 0:
                     status = HealthStatus.HEALTHY
                     message = f"Connected with {tool_count} tools available"
@@ -377,12 +373,8 @@ class ClientHealthMonitor:
             "summary": {
                 "total_checks": len(results),
                 "healthy": sum(1 for c in results if c.status == HealthStatus.HEALTHY),
-                "degraded": sum(
-                    1 for c in results if c.status == HealthStatus.DEGRADED
-                ),
-                "unhealthy": sum(
-                    1 for c in results if c.status == HealthStatus.UNHEALTHY
-                ),
+                "degraded": sum(1 for c in results if c.status == HealthStatus.DEGRADED),
+                "unhealthy": sum(1 for c in results if c.status == HealthStatus.UNHEALTHY),
                 "unknown": sum(1 for c in results if c.status == HealthStatus.UNKNOWN),
             },
         }

@@ -85,9 +85,7 @@ class TestFallbackStrategy:
         strategy = FallbackStrategy()
         mapping = {"old_param": "new_param"}
 
-        strategy.add_rule(
-            primary_tool="tool_a", fallback_tool="tool_b", param_mapping=mapping
-        )
+        strategy.add_rule(primary_tool="tool_a", fallback_tool="tool_b", param_mapping=mapping)
 
         rule = strategy._rules["tool_a"][0]
         assert rule.param_mapping == mapping
@@ -99,9 +97,7 @@ class TestFallbackStrategy:
         def condition(exc: Exception) -> bool:
             return "error" in str(exc)
 
-        strategy.add_rule(
-            primary_tool="tool_a", fallback_tool="tool_b", condition=condition
-        )
+        strategy.add_rule(primary_tool="tool_a", fallback_tool="tool_b", condition=condition)
 
         rule = strategy._rules["tool_a"][0]
         assert rule.condition is not None
@@ -132,9 +128,7 @@ class TestFallbackStrategy:
         )
 
         assert result == {"result": "success"}
-        mock_executor.execute_tool.assert_awaited_once_with(
-            "tool_a", {"param": "value"}, _use_fallback=False
-        )
+        mock_executor.execute_tool.assert_awaited_once_with("tool_a", {"param": "value"}, _use_fallback=False)
 
     @pytest.mark.asyncio
     async def test_execute_with_fallback_primary_fails_fallback_succeeds(self):
@@ -196,9 +190,7 @@ class TestFallbackStrategy:
         mock_executor.execute_tool = AsyncMock(side_effect=ValueError("Tool failed"))
 
         with pytest.raises(ValueError, match="Tool failed"):
-            await strategy.execute_with_fallback(
-                primary_tool="tool_a", params={}, executor=mock_executor
-            )
+            await strategy.execute_with_fallback(primary_tool="tool_a", params={}, executor=mock_executor)
 
     @pytest.mark.asyncio
     async def test_execute_with_fallback_max_depth_reached(self):
@@ -212,9 +204,7 @@ class TestFallbackStrategy:
         # All tools fail
         mock_executor.execute_tool = AsyncMock(side_effect=ValueError("Failed"))
 
-        with pytest.raises(
-            RuntimeError, match="Maximum fallback depth \\(2\\) reached"
-        ):
+        with pytest.raises(RuntimeError, match="Maximum fallback depth \\(2\\) reached"):
             await strategy.execute_with_fallback(
                 primary_tool="tool_a",
                 params={},
@@ -246,9 +236,7 @@ class TestFallbackStrategy:
             ]
         )
 
-        result = await strategy.execute_with_fallback(
-            primary_tool="api_call", params={}, executor=mock_executor
-        )
+        result = await strategy.execute_with_fallback(primary_tool="api_call", params={}, executor=mock_executor)
 
         assert result == {"result": "from_cache"}
         assert mock_executor.execute_tool.await_count == 2
@@ -269,14 +257,10 @@ class TestFallbackStrategy:
 
         mock_executor = MagicMock()
         # Non-timeout error - condition not met
-        mock_executor.execute_tool = AsyncMock(
-            side_effect=ValueError("Invalid parameter")
-        )
+        mock_executor.execute_tool = AsyncMock(side_effect=ValueError("Invalid parameter"))
 
         with pytest.raises(ValueError, match="Invalid parameter"):
-            await strategy.execute_with_fallback(
-                primary_tool="api_call", params={}, executor=mock_executor
-            )
+            await strategy.execute_with_fallback(primary_tool="api_call", params={}, executor=mock_executor)
 
     def test_find_applicable_rule_no_condition(self):
         """Test finding applicable rule without condition."""
@@ -295,13 +279,9 @@ class TestFallbackStrategy:
         def is_timeout(exc: Exception) -> bool:
             return "timeout" in str(exc).lower()
 
-        strategy.add_rule(
-            primary_tool="tool_a", fallback_tool="tool_b", condition=is_timeout
-        )
+        strategy.add_rule(primary_tool="tool_a", fallback_tool="tool_b", condition=is_timeout)
 
-        rule = strategy._find_applicable_rule(
-            "tool_a", ValueError("Connection timeout")
-        )
+        rule = strategy._find_applicable_rule("tool_a", ValueError("Connection timeout"))
 
         assert rule is not None
         assert rule.fallback_tool == "tool_b"
@@ -313,9 +293,7 @@ class TestFallbackStrategy:
         def is_timeout(exc: Exception) -> bool:
             return "timeout" in str(exc).lower()
 
-        strategy.add_rule(
-            primary_tool="tool_a", fallback_tool="tool_b", condition=is_timeout
-        )
+        strategy.add_rule(primary_tool="tool_a", fallback_tool="tool_b", condition=is_timeout)
 
         rule = strategy._find_applicable_rule("tool_a", ValueError("Invalid parameter"))
 

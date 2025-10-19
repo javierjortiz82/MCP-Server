@@ -43,9 +43,7 @@ class ConversationManager:
             >>> len(manager.conversation_history)
             1
         """
-        self.conversation_history.append(
-            types.Content(role="user", parts=[types.Part(text=text)])
-        )
+        self.conversation_history.append(types.Content(role="user", parts=[types.Part(text=text)]))
         logger.debug(f"Added user message: {text[:50]}...")
 
     def add_model_message(self, text: str) -> None:
@@ -60,9 +58,7 @@ class ConversationManager:
             >>> manager.conversation_history[0].role
             'model'
         """
-        self.conversation_history.append(
-            types.Content(role="model", parts=[types.Part(text=text)])
-        )
+        self.conversation_history.append(types.Content(role="model", parts=[types.Part(text=text)]))
         logger.debug(f"Added model message: {text[:50]}...")
 
     def add_function_call(self, parts: list[types.Part]) -> None:
@@ -118,9 +114,7 @@ class ConversationManager:
             logger.warning("Parts is None - cannot extract text")
             return None
 
-        text_parts = [
-            part.text for part in parts if hasattr(part, "text") and part.text
-        ]
+        text_parts = [part.text for part in parts if hasattr(part, "text") and part.text]
 
         if not text_parts:
             return None
@@ -149,11 +143,7 @@ class ConversationManager:
             logger.warning("Parts is None - cannot extract function calls")
             return []
 
-        function_calls = [
-            part.function_call
-            for part in parts
-            if hasattr(part, "function_call") and part.function_call
-        ]
+        function_calls = [part.function_call for part in parts if hasattr(part, "function_call") and part.function_call]
 
         if function_calls:
             logger.debug(f"Extracted {len(function_calls)} function calls")
@@ -211,9 +201,7 @@ class ConversationManager:
                         return part.text
         return None
 
-    def get_function_responses_for_query(
-        self, user_query: str, max_lookback: int = 10
-    ) -> list[dict[str, Any]]:
+    def get_function_responses_for_query(self, user_query: str, max_lookback: int = 10) -> list[dict[str, Any]]:
         """Get function responses related to a user query.
 
         Searches recent conversation history for function responses
@@ -244,9 +232,7 @@ class ConversationManager:
                             function_responses.append(response_data)
 
         if function_responses:
-            logger.debug(
-                f"Found {len(function_responses)} function responses for query: {user_query[:30]}..."
-            )
+            logger.debug(f"Found {len(function_responses)} function responses for query: {user_query[:30]}...")
 
         return function_responses
 

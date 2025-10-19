@@ -66,9 +66,7 @@ class MCPConnector:
         health_url = f"{base_url}/health"
 
         try:
-            async with httpx.AsyncClient(
-                timeout=settings.MCP_HEALTH_CHECK_TIMEOUT
-            ) as client:
+            async with httpx.AsyncClient(timeout=settings.MCP_HEALTH_CHECK_TIMEOUT) as client:
                 response = await client.get(health_url)
                 return response.json()
         except httpx.RequestError as e:

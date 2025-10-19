@@ -69,6 +69,14 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # Database Schema Configuration
+    # ============================================================================
+    SCHEMA_NAME: str = Field(
+        default="public",
+        description="PostgreSQL schema name (shared across all modules)",
+    )
+
+    # ============================================================================
     # MCP Server Configuration
     # ============================================================================
     MCP_HOST: str = Field(
@@ -335,11 +343,6 @@ class Settings(BaseSettings):
     PAGINATION_PERSISTENCE_ENABLED: bool = Field(
         default=False,
         description="Enable PostgreSQL persistence for pagination contexts",
-    )
-
-    PAGINATION_SCHEMA_NAME: str = Field(
-        default="public",
-        description="PostgreSQL schema for pagination contexts (must match database schema)",
     )
 
     PAGINATION_DB_HOST: str = Field(

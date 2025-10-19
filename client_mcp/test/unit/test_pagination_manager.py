@@ -182,9 +182,7 @@ class TestSaveSearch:
         manager = PaginationManager()
         products = [{"id": 1}, {"id": 2}]
 
-        manager.save_search(
-            category="test", tool="search_products", query="test", results=products
-        )
+        manager.save_search(category="test", tool="search_products", query="test", results=products)
 
         context = manager._contexts["test"]
         assert context.page_size == 4  # Default value
@@ -498,9 +496,7 @@ class TestExtractCategoryFromQuery:
         """Test extracts first 4 meaningful words."""
         manager = PaginationManager()
 
-        category = manager.extract_category_from_query(
-            "gaming laptops high performance"
-        )
+        category = manager.extract_category_from_query("gaming laptops high performance")
         assert category == "gaming laptops high performance"
 
     def test_extract_category_filters_stopwords(self):
@@ -554,9 +550,7 @@ class TestExtractCategoryFromQuery:
         manager = PaginationManager()
 
         # Query with 6 meaningful words should extract only first 4
-        category = manager.extract_category_from_query(
-            "laptop gaming barato estudiante oferta especial navidad"
-        )
+        category = manager.extract_category_from_query("laptop gaming barato estudiante oferta especial navidad")
         assert category == "laptop gaming barato estudiante"
 
     def test_extract_category_mixed_stopwords(self):
@@ -564,9 +558,7 @@ class TestExtractCategoryFromQuery:
         manager = PaginationManager()
 
         # "de" and "para" are stopwords, should be filtered
-        category = manager.extract_category_from_query(
-            "computadora de escritorio para gaming profesional"
-        )
+        category = manager.extract_category_from_query("computadora de escritorio para gaming profesional")
         assert category == "computadora escritorio gaming profesional"
 
 
@@ -585,9 +577,7 @@ class TestPaginationFlow:
             {"id": 4, "name": "Product 4"},
             {"id": 5, "name": "Product 5"},
         ]
-        manager.save_search(
-            "test", "search_products", "test products", products, page_size=2
-        )
+        manager.save_search("test", "search_products", "test products", products, page_size=2)
 
         # Check initial state
         assert manager.get_total_count("test") == 5
@@ -619,9 +609,7 @@ class TestPaginationFlow:
         laptops = [{"id": 1}, {"id": 2}, {"id": 3}]
         phones = [{"id": 10}, {"id": 11}]
 
-        manager.save_search(
-            "laptops", "search_products", "laptops", laptops, page_size=2
-        )
+        manager.save_search("laptops", "search_products", "laptops", laptops, page_size=2)
         manager.save_search("phones", "search_products", "phones", phones, page_size=2)
 
         # Check both contexts exist independently

@@ -138,20 +138,14 @@ class ToolExecutor:
 
         # Log tool execution for duplicate call detection
         logger.debug(
-            f"🔧 [CALL-{call_id}] Tool: {tool_name} | "
-            f"Query: {effective_query or 'N/A'} | "
-            f"Params: {parameters}"
+            f"🔧 [CALL-{call_id}] Tool: {tool_name} | Query: {effective_query or 'N/A'} | Params: {parameters}"
         )
 
         # Validate parameters if enabled
-        validated_params = (
-            self._validate_parameters(tool_name, parameters) if validate else parameters
-        )
+        validated_params = self._validate_parameters(tool_name, parameters) if validate else parameters
 
         # Execute with tracking (use effective_query for context)
-        with self.tracker.track_with_result(
-            tool_name, validated_params, effective_query
-        ) as track_ctx:
+        with self.tracker.track_with_result(tool_name, validated_params, effective_query) as track_ctx:
             # Call MCP tool with retry if enabled
             if self.retry_strategy:
                 result = await self.retry_strategy.execute_with_retry(
@@ -171,11 +165,7 @@ class ToolExecutor:
             if isinstance(result, list) and len(result) == 0:
                 is_empty = True
             elif isinstance(result, dict) and (
-                (
-                    "items" in result
-                    and isinstance(result["items"], list)
-                    and len(result["items"]) == 0
-                )
+                ("items" in result and isinstance(result["items"], list) and len(result["items"]) == 0)
                 or ("count" in result and result["count"] == 0)
             ):
                 # Handle MCP protocol format: {"items": [...], "count": N}
@@ -202,9 +192,7 @@ class ToolExecutor:
 
                 # Execute fallback if configured
                 if fallback_tool and fallback_params:
-                    logger.info(
-                        f"🔄 Fallback: {tool_name} (0 results) → {fallback_tool}"
-                    )
+                    logger.info(f"🔄 Fallback: {tool_name} (0 results) → {fallback_tool}")
                     # Recursive call with _use_fallback=False to prevent infinite loops
                     result = await self.execute_tool(
                         fallback_tool,
@@ -216,9 +204,7 @@ class ToolExecutor:
 
             return result
 
-    def _validate_parameters(
-        self, tool_name: str, parameters: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _validate_parameters(self, tool_name: str, parameters: dict[str, Any]) -> dict[str, Any]:
         """Validate tool parameters using cached schema.
 
         Args:
@@ -240,9 +226,7 @@ class ToolExecutor:
                 # Register schema in validator
                 self.validator.register_tool_schema(tool_name, cached_tool.input_schema)
             else:
-                raise ValueError(
-                    f"Tool '{tool_name}' not found in cache. Ensure tools are discovered first."
-                )
+                raise ValueError(f"Tool '{tool_name}' not found in cache. Ensure tools are discovered first.")
 
         # Validate parameters
         return self.validator.validate_parameters(tool_name, parameters)
@@ -271,9 +255,7 @@ class ToolExecutor:
             return 1
         return 1
 
-    async def register_tool_schemas(
-        self, tools_definitions: list[dict[str, Any]]
-    ) -> None:
+    async def register_tool_schemas(self, tools_definitions: list[dict[str, Any]]) -> None:
         """Register tool schemas for validation from discovered tools.
 
         Args:
@@ -390,9 +372,7 @@ class ToolExecutor:
             RuntimeError: If fallback strategy is not enabled
         """
         if not self.fallback_strategy:
-            raise RuntimeError(
-                "Fallback strategy not enabled. Set ENABLE_FALLBACK=true"
-            )
+            raise RuntimeError("Fallback strategy not enabled. Set ENABLE_FALLBACK=true")
 
         self.fallback_strategy.add_rule(
             primary_tool=primary_tool,

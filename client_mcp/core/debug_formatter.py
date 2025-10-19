@@ -96,9 +96,7 @@ class DebugFormatter:
 • Tiempo de ejecución: {metric.execution_time_ms:.2f}ms
 • Estado: {status}"""
 
-    def format_fallback_debug_info(
-        self, primary: ToolMetric, fallback: ToolMetric
-    ) -> str:
+    def format_fallback_debug_info(self, primary: ToolMetric, fallback: ToolMetric) -> str:
         """Format combined debug info for fallback scenario.
 
         Args:
@@ -120,9 +118,7 @@ class DebugFormatter:
         total_time_ms = primary.execution_time_ms + fallback.execution_time_ms
 
         # Format tool chain
-        tool_chain = (
-            f"`{primary.tool_name}` ➜ `{fallback.tool_name}` (fallback automático)"
-        )
+        tool_chain = f"`{primary.tool_name}` ➜ `{fallback.tool_name}` (fallback automático)"
 
         # Format results
         results_msg = f"0 → {fallback.result_size} (fallback exitoso)"

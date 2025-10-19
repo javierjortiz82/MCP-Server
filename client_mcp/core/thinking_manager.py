@@ -54,9 +54,7 @@ class ThinkingManager:
         self.logger = get_logger("ThinkingManager")
 
         if self.enable_thinking:
-            budget_str = (
-                "auto" if thinking_budget == -1 else f"{thinking_budget} tokens"
-            )
+            budget_str = "auto" if thinking_budget == -1 else f"{thinking_budget} tokens"
             self.logger.info(f"🧠 Thinking mode enabled (budget: {budget_str})")
             if self.include_thoughts:
                 self.logger.info("💭 Thought summaries will be included in responses")
@@ -101,12 +99,7 @@ class ThinkingManager:
 
             for part in candidate.content.parts:
                 # Check if part contains a thought with text
-                if (
-                    hasattr(part, "thought")
-                    and part.thought
-                    and hasattr(part, "text")
-                    and part.text
-                ):
+                if hasattr(part, "thought") and part.thought and hasattr(part, "text") and part.text:
                     thoughts.append(part.text)
 
         return thoughts
@@ -163,8 +156,6 @@ class ThinkingManager:
             "thinking_budget": self.thinking_budget,
             "include_thoughts": self.include_thoughts,
             "budget_type": (
-                "auto"
-                if self.thinking_budget == -1
-                else "fixed" if self.thinking_budget > 0 else "disabled"
+                "auto" if self.thinking_budget == -1 else "fixed" if self.thinking_budget > 0 else "disabled"
             ),
         }

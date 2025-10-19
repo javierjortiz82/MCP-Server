@@ -56,17 +56,8 @@ class PaginationDB:
         if not self._enabled:
             return
 
-        # Validate schema is configured before connecting
-        if not hasattr(settings, "PAGINATION_SCHEMA_NAME"):
-            logger.error(
-                "❌ PAGINATION_SCHEMA_NAME environment variable must be set "
-                "when PAGINATION_PERSISTENCE_ENABLED=True"
-            )
-            self._enabled = False
-            self._pool = None
-            return
-
-        self._schema: str = settings.PAGINATION_SCHEMA_NAME
+        # Use shared SCHEMA_NAME configuration
+        self._schema: str = settings.SCHEMA_NAME
         self._initialize_pool()
 
     def _initialize_pool(self) -> None:

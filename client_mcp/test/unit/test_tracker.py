@@ -57,9 +57,8 @@ class TestToolTracker:
         """Test tracking tool execution that raises exception."""
         tracker = ToolTracker(collector=self.collector)
 
-        with pytest.raises(ValueError):
-            with tracker.track_tool_call("failing_tool", {"param": "value"}):
-                raise ValueError("Tool failed")
+        with pytest.raises(ValueError), tracker.track_tool_call("failing_tool", {"param": "value"}):
+            raise ValueError("Tool failed")
 
         # Metric should still be recorded
         stats = tracker.get_stats("failing_tool")
@@ -71,9 +70,7 @@ class TestToolTracker:
         """Test tracking with explicit user query."""
         tracker = ToolTracker(collector=self.collector)
 
-        with tracker.track_tool_call(
-            "search", {"query": "laptop"}, user_query="find me a laptop"
-        ):
+        with tracker.track_tool_call("search", {"query": "laptop"}, user_query="find me a laptop"):
             pass
 
         # Query should be recorded in metric
@@ -121,9 +118,8 @@ class TestToolTracker:
         """Test track_with_result when exception occurs."""
         tracker = ToolTracker(collector=self.collector)
 
-        with pytest.raises(RuntimeError):
-            with tracker.track_with_result("failing_tool", {}) as ctx:
-                raise RuntimeError("Failed")
+        with pytest.raises(RuntimeError), tracker.track_with_result("failing_tool", {}) as ctx:
+            raise RuntimeError("Failed")
 
         last_metric = tracker.collector.get_last_metric()
         assert last_metric.success is False
@@ -237,9 +233,8 @@ class TestToolTracker:
         with tracker.track_tool_call("tool1", {}):
             pass
 
-        with pytest.raises(ValueError):
-            with tracker.track_tool_call("tool1", {}):
-                raise ValueError("Error")
+        with pytest.raises(ValueError), tracker.track_tool_call("tool1", {}):
+            raise ValueError("Error")
 
         error_rates = tracker.get_error_rate_by_tool()
 
@@ -306,9 +301,8 @@ class TestToolTracker:
         """Test that error messages are captured."""
         tracker = ToolTracker(collector=self.collector)
 
-        with pytest.raises(RuntimeError):
-            with tracker.track_tool_call("error_tool", {}):
-                raise RuntimeError("Specific error message")
+        with pytest.raises(RuntimeError), tracker.track_tool_call("error_tool", {}):
+            raise RuntimeError("Specific error message")
 
         last_metric = tracker.collector.get_last_metric()
         assert last_metric.error_message == "Specific error message"
@@ -390,14 +384,12 @@ class TestToolTrackerIntegration:
         tracker = ToolTracker(collector=self.collector)
 
         # First attempt fails
-        with pytest.raises(ValueError):
-            with tracker.track_tool_call("unreliable_tool", {"retry": 1}):
-                raise ValueError("Network error")
+        with pytest.raises(ValueError), tracker.track_tool_call("unreliable_tool", {"retry": 1}):
+            raise ValueError("Network error")
 
         # Second attempt fails
-        with pytest.raises(ValueError):
-            with tracker.track_tool_call("unreliable_tool", {"retry": 2}):
-                raise ValueError("Network error")
+        with pytest.raises(ValueError), tracker.track_tool_call("unreliable_tool", {"retry": 2}):
+            raise ValueError("Network error")
 
         # Third attempt succeeds
         with tracker.track_tool_call("unreliable_tool", {"retry": 3}):
