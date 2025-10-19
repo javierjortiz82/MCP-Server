@@ -167,3 +167,10 @@ $RECYCLE.BIN/
 .directory
 .Trash-*
 .nfs*
+
+# Project-specific: Backup and archive directories
+# These should be managed externally or in CI/CD
+backups/
+/backups/
+*.backup
+*.bak

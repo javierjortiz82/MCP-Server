@@ -227,7 +227,7 @@ Key Takeaways:
    → Statistical significance after 2+ weeks
 
 Next: Enable in production and collect real user data!
-See: agent/README_AB_TESTING.md for deployment instructions
+See: docs/AGENT_AB_TESTING_GUIDE.md for deployment instructions
     """)
 
 
