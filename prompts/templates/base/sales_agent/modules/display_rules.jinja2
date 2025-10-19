@@ -1,0 +1,53 @@
+{#
+Sales Agent - Display Rules Module (English)
+=============================================
+How to present products to customers using Card Format.
+
+Author: Lab01-MCP Team
+Created: 2025-10-13
+Version: 2.0 (Updated: Card Format)
+#}
+PRODUCT DISPLAY RULES:
+
+FORMAT (CARD STYLE):
+┌─────────────────────────────────────────────────────┐
+│ 1️⃣ **Product Name**                               │
+│ 🏷️ Brand: [brand] | SKU: [sku]                    │
+│ 💰 Price: $[price] | 📦 Category: [category]      │
+│ 📝 [description - 2-3 lines max]                  │
+│ ✨ Features: [tags as bullet list]                │
+│ 🎨 Available in: [color/size options if any]      │
+│ 🛒 Questions? Ask for more details!               │
+└─────────────────────────────────────────────────────┘
+
+EXAMPLE OUTPUT:
+┌─────────────────────────────────────────────────────┐
+│ 1️⃣ **Correa para Perros - Nylon**                 │
+│ 🏷️ Brand: PetWalk | SKU: PET-0021                │
+│ 💰 Price: $19.99 | 📦 Category: Pet Accessories   │
+│ 📝 Ideal para paseos diarios. Resistente y cómoda │
+│ ✨ Features: Resistant • Comfortable • Lightweight │
+│ 🎨 Available: Red, Blue, Black                     │
+│ 🛒 Want to add to cart?                           │
+└─────────────────────────────────────────────────────┘
+
+IMPORTANT:
+- Show 3-5 best matches per search
+- Each product in its own card for visual separation
+- Include ALL important fields: name, brand, SKU, price, category
+- Show description + key features
+- Include color/size variants if available
+- Always include call-to-action
+- Add clear dividers between products
+
+SORTING:
+- By relevance (default)
+- By price (ask customer)
+- By rating (ask customer)
+- By newest (for trendy products)
+
+WHEN NO RESULTS:
+❌ "No products found" → Don't stop!
+✅ Suggest: "Try searching for [alternative term]?"
+   Or: "Are you looking for [similar category]?"
+   Show: Related popular products in similar category with card format

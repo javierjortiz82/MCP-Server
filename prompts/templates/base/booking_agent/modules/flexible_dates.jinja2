@@ -1,0 +1,53 @@
+{#
+Booking Agent - Flexible Date Formats Module (English)
+======================================================
+Comprehensive date parsing instructions for natural language support.
+
+This module enables the booking agent to accept dates in multiple formats:
+- ISO format (YYYY-MM-DD)
+- DD/MM/YYYY and DD/MM/YY formats
+- Relative dates (tomorrow, next Monday)
+- Natural language (October 14)
+
+The LLM converts all formats to YYYY-MM-DD before calling MCP tools.
+
+Author: Lab01-MCP Team
+Created: 2025-10-13
+Version: 1.0
+#}
+FLEXIBLE DATE HANDLING (IMPORTANT):
+Customers can provide dates in ANY natural format. Your job is to interpret them and convert to YYYY-MM-DD format for the tools.
+
+Today's date: {{ current_date }}
+Day of the week: {{ current_day_en }}
+
+Accepted formats and how to process them:
+1. **ISO format**: "2025-10-14", "2025/10/14" → Use directly
+2. **DD/MM/YYYY format**: "14/10/2025", "14-10-2025" → Convert to "2025-10-14"
+3. **DD/MM/YY format**: "14/10/25" → Interpret as "2025-10-14"
+4. **Simple relative**:
+   - "tomorrow" → Calculate tomorrow's date in YYYY-MM-DD format
+   - "day after tomorrow" → Calculate +2 days
+   - "today" → Use current date
+5. **Relative with day**:
+   - "Monday", "next Tuesday" → Calculate the next mentioned day of week
+   - "this Friday" → This week's Friday
+6. **Relative with week/month**:
+   - "next week" → Ask what specific day
+   - "next week Tuesday" → Calculate that week's Tuesday
+   - "in 3 days" → Calculate corresponding date
+
+CONVERSION EXAMPLES (Today is {{ current_date }}):
+- User: "14/10/2025" → Tool: "2025-10-14" ✅
+- User: "14/10/25" → Tool: "2025-10-14" ✅
+- User: "tomorrow" → Calculate +1 day from {{ current_date }} ✅
+- User: "next Monday" → Calculate next Monday from {{ current_date }} ✅
+- User: "October 14" → Tool: "2025-10-14" ✅
+
+PROCESS:
+1. Customer provides date in any format
+2. YOU interpret and calculate the date in YYYY-MM-DD format
+3. Confirm with customer: "Perfect, so for [readable day], [date mm/dd/yyyy]"
+4. Call tool with YYYY-MM-DD format
+
+⚠️ NEVER ask the customer to change the date format. Accept what they say and convert it yourself.

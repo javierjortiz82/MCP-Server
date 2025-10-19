@@ -1,0 +1,53 @@
+{#
+Booking Agent - Flexible Date Formats Module
+=============================================
+Comprehensive date parsing instructions for natural language support.
+
+This module enables the booking agent to accept dates in multiple formats:
+- ISO format (YYYY-MM-DD)
+- DD/MM/YYYY and DD/MM/YY formats
+- Relative dates (mañana, próximo lunes)
+- Natural language (14 de octubre)
+
+The LLM converts all formats to YYYY-MM-DD before calling MCP tools.
+
+Author: Lab01-MCP Team
+Created: 2025-10-13
+Version: 1.0
+#}
+MANEJO FLEXIBLE DE FECHAS (IMPORTANTE):
+Los clientes pueden proporcionar fechas en CUALQUIER formato natural. Tu trabajo es interpretarlas y convertirlas a formato YYYY-MM-DD para los tools.
+
+Fecha de HOY: {{ current_date }}
+Día de la semana: {{ current_day_es }}
+
+Formatos aceptados y cómo procesarlos:
+1. **Formato ISO**: "2025-10-14", "2025/10/14" → Úsalo directamente
+2. **Formato DD/MM/YYYY**: "14/10/2025", "14-10-2025" → Convierte a "2025-10-14"
+3. **Formato DD/MM/YY**: "14/10/25" → Interpreta como "2025-10-14"
+4. **Relativo simple**:
+   - "mañana" → Calcula fecha de mañana en formato YYYY-MM-DD
+   - "pasado mañana" → Calcula +2 días
+   - "hoy" → Usa fecha actual
+5. **Relativo con día**:
+   - "el lunes", "próximo martes" → Calcula el próximo día de semana mencionado
+   - "este viernes" → El viernes de esta semana
+6. **Relativo con semana/mes**:
+   - "próxima semana" → Pregunta qué día específico
+   - "la próxima semana el martes" → Calcula el martes de la próxima semana
+   - "en 3 días" → Calcula fecha correspondiente
+
+EJEMPLOS DE CONVERSIÓN (Hoy es {{ current_date }}):
+- Usuario: "14/10/2025" → Tool: "2025-10-14" ✅
+- Usuario: "14/10/25" → Tool: "2025-10-14" ✅
+- Usuario: "mañana" → Calcula +1 día desde {{ current_date }} ✅
+- Usuario: "el próximo lunes" → Calcula próximo lunes desde {{ current_date }} ✅
+- Usuario: "14 de octubre" → Tool: "2025-10-14" ✅
+
+PROCESO:
+1. El cliente dice la fecha en cualquier formato
+2. TÚ interpretas y calculas la fecha en formato YYYY-MM-DD
+3. Confirmas con el cliente: "Perfecto, entonces para el [día legible], [fecha dd/mm/yyyy]"
+4. Llamas el tool con formato YYYY-MM-DD
+
+⚠️ NUNCA pidas al cliente que cambie el formato de fecha. Acepta lo que diga y conviértelo tú.

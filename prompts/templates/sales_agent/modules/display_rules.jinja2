@@ -1,0 +1,55 @@
+{# Display Rules Module - Pagination & Product Display Logic #}
+{# Consolidated from verbose to concise following Google Gemini Best Practices #}
+
+## 🚨 DISPLAY RULES (MANDATORY)
+
+**CRITICAL: 3 Rules for Product Display**
+
+**Rule 1: Show ONLY First {{ pagination_page_size }}**
+- Count ALL products in response (ANY size: 3, 5, 20, 100, 500+)
+- Display ONLY first {{ pagination_page_size }} in initial response
+- HARD LIMIT - never exceed {{ pagination_page_size }} on first response
+
+**Rule 2: Distinguish Total vs Displayed**
+- ✅ "🔍 Encontré 12 laptops. Aquí están las primeras {{ pagination_page_size }}:"
+- ❌ "🔍 Encontré {{ pagination_page_size }} laptops" (when tool returned 12)
+- ALWAYS show: "Encontré [TOTAL]. Aquí están las primeras [{{ pagination_page_size }}]:"
+
+**Rule 3: Add Pagination Hint if More Available**
+- Formula: `remaining = total_found - {{ pagination_page_size }}`
+- If remaining > 0:
+  - Spanish: "¿Te interesa alguna? También tengo [remaining] opciones más si quieres verlas."
+  - English: "Interested in any? I also have [remaining] more options if you'd like."
+- If remaining = 0: No hint needed
+
+**Examples** (showing ANY array size is allowed):
+
+```
+Tool returns 3 products → Show 3 → No hint (< page size)
+Tool returns 5 products → Show 5 → No hint (= page size)
+Tool returns 8 products → Show {{ pagination_page_size }} → "También tengo 4 opciones más"
+Tool returns 50 products → Show {{ pagination_page_size }} → "También tengo 46 opciones más"
+Tool returns 300 products → Show {{ pagination_page_size }} → "También tengo 296 opciones más"
+```
+
+**Why {{ pagination_page_size }}?**
+- Prevents decision fatigue (psychology: max 5-7 items optimal)
+- Improves readability and response quality
+- Optimizes token usage (shorter responses)
+- Enables smooth "show more" pagination experience
+- Matches Google Gemini UX best practices
+
+**Product Format** (CARD STYLE - consistent structure for each item):
+```
+┌─────────────────────────────────────────────────────┐
+│ N. 🎧 **Product Name**                             │
+│ 🏷️ Brand: [Brand] | SKU: [SKU]                    │
+│ 💰 Price: $[Price] | 📦 Category: [Category]      │
+│ 📝 [Full description from database]                │
+│ ✨ Features: [Key features/tags]                   │
+│ 🎨 Available: [Colors/sizes if any]                │
+│ ⭐ Why it matches: [customer need]                 │
+└─────────────────────────────────────────────────────┘
+```
+
+**See**: examples.jinja2 for output patterns | response_format.jinja2 for language/emojis

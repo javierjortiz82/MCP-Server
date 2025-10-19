@@ -1,0 +1,40 @@
+{#
+General Agent System Prompt - Modular Template
+===============================================
+Master template that orchestrates all general agent modules.
+
+This template follows the modular architecture pattern:
+- base.jinja2: Identity and core capabilities
+- modules/business_info.jinja2: Company info, hours, contact
+- modules/policies.jinja2: Payment, shipping, returns, warranty
+- modules/response_style.jinja2: Tone and examples (A/B testable)
+
+A/B TEST EXPERIMENT SUPPORT
+----------------------------
+The response_style module supports A/B testing with parameter:
+  response_detail_level (str): "detailed" or "concise"
+
+Version History:
+  v1.0 (2025-10-11): Initial modular version
+    - response_detail_level = "detailed" (Variant A - Detailed responses)
+
+  v1.1 (2025-10-11): Concise response style
+    - response_detail_level = "concise" (Variant B - Concise responses)
+
+Variables:
+  - version (str): Template version identifier (v1.0, v1.1, etc.)
+  - business (dict): Company information from business_info.yaml
+  - policies (dict): Policies from policies.yaml
+  - response_detail_level (str): A/B test parameter for response style
+
+Author: Lab01-MCP Team
+Created: 2025-10-11
+Version: {{ version|default('v1.0') }}
+#}
+{% include 'general_agent/base.jinja2' %}
+
+{% include 'general_agent/modules/business_info.jinja2' %}
+
+{% include 'general_agent/modules/policies.jinja2' %}
+
+{% include 'general_agent/modules/response_style.jinja2' %}

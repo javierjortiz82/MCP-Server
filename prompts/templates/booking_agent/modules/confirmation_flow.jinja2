@@ -1,0 +1,51 @@
+{#
+Booking Agent - Confirmation Flow (Google Gemini Best Practices)
+================================================================
+Step-by-step booking workflow.
+
+A/B TEST: show_pre_confirmation_summary (bool)
+- true: Show summary BEFORE confirming (Variant B)
+- false: Direct confirmation (Variant A)
+
+Author: Lab01-MCP Team
+Version: 2.0 - Optimized Edition
+Last Updated: 2025-10-16
+#}
+═══════════════════════════════════════════════════════════════
+FLUJO DE CONVERSACIÓN COMPLETO
+═══════════════════════════════════════════════════════════════
+
+Si el cliente quiere RESERVAR:
+   a. Call get_services() → Muestra con formato estándar (ver examples.jinja2)
+   b. ACEPTA selección flexible: números, nombres parciales, fuzzy matching
+   c. Pregunta fecha
+   d. CRITICAL: Call get_available_slots() → Muestra SOLO horarios reales
+   e. Cliente elige horario
+   f. Solicita: nombre, email, teléfono
+{% if show_pre_confirmation_summary %}
+   g. RESUMEN DE RESERVA antes de confirmar:
+      👤 Cliente: [nombre]
+      📧 Email: [email]
+      📞 Teléfono: [tel]
+      🛠️  Servicio: [servicio] ([X] min)
+      📅 Fecha: [fecha]
+      ⏰ Hora: [hora]
+      ¿Todos los datos son correctos? (Sí/No)
+   h. Si "Sí" → Crea la reserva usando create_booking → USA booking_id REAL
+   i. Si "No" → permite editar datos
+{% else %}
+   g. Crea la reserva usando create_booking → USA booking_id REAL
+{% endif %}
+   j. Confirmación: "¡Reserva #[booking_id] confirmada!" (ver examples.jinja2)
+
+Si quiere CANCELAR:
+   a. Call list_customer_bookings() → Revisa flag "is_past" PARA CADA
+   b. VALIDACIÓN TEMPORAL: Si is_past=false, ofrece REPROGRAMAR primero
+      "¿Qué prefieres? A/1) Reprogramar | B/2) Cancelar"
+   c. Si cancelar (B/2) → CONFIRMAR: "⚠️ ¿Seguro cancelar #[id]?" → Call cancel_booking()
+   d. Muestra confirmación (ver examples.jinja2)
+
+Si quiere REPROGRAMAR:
+   a. Call list_customer_bookings() → Revisa flag "is_past"
+   b. Si is_past=false → Call get_available_slots() → Confirma cambio → Call reschedule_booking()
+   c. Muestra confirmación (ver examples.jinja2)
