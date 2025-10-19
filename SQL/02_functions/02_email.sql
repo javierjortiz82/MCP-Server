@@ -3,16 +3,16 @@
 -- ============================================================================
 
 -- Trigger for updated_at timestamps
-DROP TRIGGER IF EXISTS trg_update_email_queue_timestamp ON test.email_queue;
+DROP TRIGGER IF EXISTS trg_update_email_queue_timestamp ON :SCHEMA_NAME.email_queue;
 CREATE TRIGGER trg_update_email_queue_timestamp
-    BEFORE UPDATE ON test.email_queue
+    BEFORE UPDATE ON :SCHEMA_NAME.email_queue
     FOR EACH ROW
-    EXECUTE FUNCTION test.update_booking_timestamp();
+    EXECUTE FUNCTION :SCHEMA_NAME.update_booking_timestamp();
 
 -- ============================================================================
 -- Function: enqueue_email() - Add new email to queue
 -- ============================================================================
-CREATE OR REPLACE FUNCTION test.enqueue_email(
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.enqueue_email(
     p_type VARCHAR,
     p_recipient_email VARCHAR,
     p_recipient_name VARCHAR,
@@ -27,7 +27,7 @@ CREATE OR REPLACE FUNCTION test.enqueue_email(
 DECLARE
     v_email_id INTEGER;
 BEGIN
-    INSERT INTO test.email_queue (
+    INSERT INTO :SCHEMA_NAME.email_queue (
         type, recipient_email, recipient_name, subject, body_html, body_text,
         booking_id, template_context, scheduled_for, priority, status
     ) VALUES (
@@ -43,7 +43,7 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- Function: get_pending_emails() - Worker polling function
 -- ============================================================================
-CREATE OR REPLACE FUNCTION test.get_pending_emails(
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.get_pending_emails(
     p_limit INTEGER DEFAULT 50
 ) RETURNS TABLE (
     id INTEGER,
@@ -67,7 +67,7 @@ BEGIN
         eq.subject, eq.body_html, eq.body_text,
         eq.retry_count, eq.max_retries, eq.booking_id,
         eq.template_context, eq.status, eq.scheduled_for
-    FROM test.email_queue eq
+    FROM :SCHEMA_NAME.email_queue eq
     WHERE eq.status IN ('pending', 'scheduled')
       AND eq.scheduled_for <= CURRENT_TIMESTAMP
       AND eq.retry_count < eq.max_retries
@@ -80,14 +80,14 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- Function: update_email_status() - Update email processing status
 -- ============================================================================
-CREATE OR REPLACE FUNCTION test.update_email_status(
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.update_email_status(
     p_email_id INTEGER,
     p_status VARCHAR,
     p_error TEXT DEFAULT NULL,
     p_sent_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
 ) RETURNS VOID AS $$
 BEGIN
-    UPDATE test.email_queue
+    UPDATE :SCHEMA_NAME.email_queue
     SET status = p_status,
         last_error = COALESCE(p_error, last_error),
         sent_at = COALESCE(p_sent_at, sent_at),
@@ -99,7 +99,7 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- Function: retry_email() - Retry failed email with exponential backoff
 -- ============================================================================
-CREATE OR REPLACE FUNCTION test.retry_email(
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.retry_email(
     p_email_id INTEGER,
     p_error TEXT,
     p_backoff_seconds INTEGER DEFAULT 300  -- 5 minutes default
@@ -108,7 +108,7 @@ DECLARE
     v_retry_count INTEGER;
 BEGIN
     -- Increment retry count
-    UPDATE test.email_queue
+    UPDATE :SCHEMA_NAME.email_queue
     SET retry_count = retry_count + 1,
         last_error = p_error,
         status = 'pending',  -- Back to pending for retry
@@ -118,8 +118,8 @@ BEGIN
     RETURNING retry_count INTO v_retry_count;
 
     -- If max retries exceeded, mark as failed
-    IF v_retry_count >= (SELECT max_retries FROM test.email_queue WHERE id = p_email_id) THEN
-        UPDATE test.email_queue
+    IF v_retry_count >= (SELECT max_retries FROM :SCHEMA_NAME.email_queue WHERE id = p_email_id) THEN
+        UPDATE :SCHEMA_NAME.email_queue
         SET status = 'failed'
         WHERE id = p_email_id;
     END IF;
@@ -129,13 +129,13 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- Function: cleanup_old_emails() - Maintenance function
 -- ============================================================================
-CREATE OR REPLACE FUNCTION test.cleanup_old_emails(
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.cleanup_old_emails(
     p_days_to_keep INTEGER DEFAULT 90
 ) RETURNS INTEGER AS $$
 DECLARE
     deleted_count INTEGER;
 BEGIN
-    DELETE FROM test.email_queue
+    DELETE FROM :SCHEMA_NAME.email_queue
     WHERE status IN ('sent', 'failed')
       AND sent_at < CURRENT_TIMESTAMP - (p_days_to_keep || ' days')::INTERVAL;
 
@@ -147,11 +147,11 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT EXECUTE ON FUNCTION test.enqueue_email(VARCHAR, VARCHAR, VARCHAR, VARCHAR, TEXT, TEXT, INTEGER, JSONB, TIMESTAMP WITH TIME ZONE, INTEGER) TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.get_pending_emails(INTEGER) TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.update_email_status(INTEGER, VARCHAR, TEXT, TIMESTAMP WITH TIME ZONE) TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.retry_email(INTEGER, TEXT, INTEGER) TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.cleanup_old_emails(INTEGER) TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.enqueue_email(VARCHAR, VARCHAR, VARCHAR, VARCHAR, TEXT, TEXT, INTEGER, JSONB, TIMESTAMP WITH TIME ZONE, INTEGER) TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.get_pending_emails(INTEGER) TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.update_email_status(INTEGER, VARCHAR, TEXT, TIMESTAMP WITH TIME ZONE) TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.retry_email(INTEGER, TEXT, INTEGER) TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.cleanup_old_emails(INTEGER) TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION

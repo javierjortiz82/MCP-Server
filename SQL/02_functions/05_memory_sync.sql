@@ -20,7 +20,7 @@
 -- Only syncs blocks with priority >= 7 and scope = 'shared'
 -- Handles duplicates intelligently (merge priorities, track sources)
 
-CREATE OR REPLACE FUNCTION test.sync_session_to_user_memory(p_session_id UUID)
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.sync_session_to_user_memory(p_session_id UUID)
 RETURNS TABLE(synced_blocks INTEGER, updated_blocks INTEGER, skipped_blocks INTEGER)
 LANGUAGE plpgsql
 AS $function$
@@ -34,7 +34,7 @@ DECLARE
 BEGIN
     -- Get customer_email from session
     SELECT customer_email INTO v_customer_email
-    FROM test.conversation_sessions
+    FROM :SCHEMA_NAME.conversation_sessions
     WHERE id = p_session_id;
 
     -- If no email, skip sync
@@ -44,12 +44,12 @@ BEGIN
     END IF;
 
     -- Ensure user profile exists
-    PERFORM test.get_or_create_user_profile(v_customer_email);
+    PERFORM :SCHEMA_NAME.get_or_create_user_profile(v_customer_email);
 
     -- Iterate through eligible memory blocks (priority >= 7, scope = 'shared')
     FOR v_block IN
         SELECT mb.id, mb.block_label, mb.block_value, mb.priority, mb.agent_scope, mb.ttl_days
-        FROM test.agent_memory_blocks mb
+        FROM :SCHEMA_NAME.agent_memory_blocks mb
         WHERE mb.session_id = p_session_id
         AND mb.priority >= 7
         AND mb.agent_scope = 'shared'
@@ -57,7 +57,7 @@ BEGIN
     LOOP
         -- Check if similar block already exists (same label + similar value)
         SELECT * INTO v_existing_block
-        FROM test.user_memory_blocks
+        FROM :SCHEMA_NAME.user_memory_blocks
         WHERE customer_email = v_customer_email
         AND block_label = v_block.block_label
         AND block_value = v_block.block_value
@@ -65,7 +65,7 @@ BEGIN
 
         IF FOUND THEN
             -- Update existing block: max priority, add source session
-            UPDATE test.user_memory_blocks
+            UPDATE :SCHEMA_NAME.user_memory_blocks
             SET
                 priority = GREATEST(priority, v_block.priority),
                 source_session_ids = source_session_ids || jsonb_build_array(p_session_id::TEXT),
@@ -75,7 +75,7 @@ BEGIN
             v_updated := v_updated + 1;
         ELSE
             -- Insert new user memory block
-            INSERT INTO test.user_memory_blocks (
+            INSERT INTO :SCHEMA_NAME.user_memory_blocks (
                 customer_email,
                 block_label,
                 block_value,
@@ -98,7 +98,7 @@ BEGIN
     END LOOP;
 
     -- Update user profile stats
-    UPDATE test.user_memory_profiles
+    UPDATE :SCHEMA_NAME.user_memory_profiles
     SET
         last_seen_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
@@ -115,7 +115,7 @@ $function$;
 -- Triggered by scheduler (e.g., cron job every 30 minutes)
 -- Processes max 100 sessions per call for performance
 
-CREATE OR REPLACE FUNCTION test.auto_sync_inactive_sessions(p_inactivity_minutes INTEGER DEFAULT 30)
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.auto_sync_inactive_sessions(p_inactivity_minutes INTEGER DEFAULT 30)
 RETURNS TABLE(session_id UUID, customer_email VARCHAR, synced_blocks INTEGER, updated_blocks INTEGER)
 LANGUAGE plpgsql
 AS $function$
@@ -129,13 +129,13 @@ BEGIN
     -- 3. Have high-priority blocks not yet synced
     FOR v_session IN
         SELECT DISTINCT cs.id, cs.session_id, cs.customer_email
-        FROM test.conversation_sessions cs
+        FROM :SCHEMA_NAME.conversation_sessions cs
         WHERE cs.customer_email IS NOT NULL
           AND cs.last_activity_at < CURRENT_TIMESTAMP - (p_inactivity_minutes || ' minutes')::INTERVAL
           AND EXISTS (
               -- Has high-priority blocks
               SELECT 1
-              FROM test.agent_memory_blocks amb
+              FROM :SCHEMA_NAME.agent_memory_blocks amb
               WHERE amb.session_id = cs.id
                 AND amb.priority >= 7
                 AND amb.agent_scope = 'shared'
@@ -146,7 +146,7 @@ BEGIN
         -- Sync this session
         BEGIN
             SELECT * INTO v_sync_result
-            FROM test.sync_session_to_user_memory(v_session.id);
+            FROM :SCHEMA_NAME.sync_session_to_user_memory(v_session.id);
 
             -- Only return sessions that actually synced blocks
             IF v_sync_result.synced_blocks > 0 OR v_sync_result.updated_blocks > 0 THEN
@@ -173,7 +173,7 @@ $function$;
 -- Automatically syncs session memory when a user returns after >30 min absence
 -- Attached to conversation_sessions.last_activity_at updates
 
-CREATE OR REPLACE FUNCTION test.trigger_auto_sync_on_activity_update()
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.trigger_auto_sync_on_activity_update()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $function$
@@ -195,7 +195,7 @@ BEGIN
         -- Sync any pending high-priority blocks from previous activity
         BEGIN
             SELECT * INTO v_sync_result
-            FROM test.sync_session_to_user_memory(OLD.id);
+            FROM :SCHEMA_NAME.sync_session_to_user_memory(OLD.id);
 
             IF v_sync_result.synced_blocks > 0 OR v_sync_result.updated_blocks > 0 THEN
                 RAISE NOTICE 'Auto-synced session % on activity resume: % new, % updated',
@@ -215,11 +215,11 @@ END;
 $function$;
 
 -- Attach trigger to conversation_sessions
-DROP TRIGGER IF EXISTS trg_auto_sync_on_activity_update ON test.conversation_sessions;
+DROP TRIGGER IF EXISTS trg_auto_sync_on_activity_update ON :SCHEMA_NAME.conversation_sessions;
 CREATE TRIGGER trg_auto_sync_on_activity_update
-    BEFORE UPDATE OF last_activity_at ON test.conversation_sessions
+    BEFORE UPDATE OF last_activity_at ON :SCHEMA_NAME.conversation_sessions
     FOR EACH ROW
-    EXECUTE FUNCTION test.trigger_auto_sync_on_activity_update();
+    EXECUTE FUNCTION :SCHEMA_NAME.trigger_auto_sync_on_activity_update();
 
 -- ============================================================================
 -- 4. UPDATE USER PROFILE ON SESSION
@@ -227,7 +227,7 @@ CREATE TRIGGER trg_auto_sync_on_activity_update
 -- Creates/updates user profile when a new session is created
 -- Tracks first_seen, last_seen, total_sessions, preferred_agent
 
-CREATE OR REPLACE FUNCTION test.update_user_profile_on_session()
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.update_user_profile_on_session()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $function$
@@ -241,7 +241,7 @@ BEGIN
     -- Only process if customer_email exists
     IF v_customer_email IS NOT NULL THEN
         -- Upsert user profile
-        INSERT INTO test.user_memory_profiles (
+        INSERT INTO :SCHEMA_NAME.user_memory_profiles (
             customer_email,
             first_seen_at,
             last_seen_at,
@@ -254,12 +254,12 @@ BEGIN
         )
         ON CONFLICT (customer_email) DO UPDATE SET
             last_seen_at = NEW.started_at,
-            total_sessions = test.user_memory_profiles.total_sessions + 1,
+            total_sessions = :SCHEMA_NAME.user_memory_profiles.total_sessions + 1,
             updated_at = CURRENT_TIMESTAMP;
 
         -- Update preferred_agent if specified
         IF v_current_agent IS NOT NULL THEN
-            UPDATE test.user_memory_profiles
+            UPDATE :SCHEMA_NAME.user_memory_profiles
             SET preferred_agent = v_current_agent
             WHERE customer_email = v_customer_email
             AND (preferred_agent IS NULL OR preferred_agent != v_current_agent);
@@ -271,11 +271,11 @@ END;
 $function$;
 
 -- Attach trigger to conversation_sessions
-DROP TRIGGER IF EXISTS trg_update_user_profile_on_session ON test.conversation_sessions;
+DROP TRIGGER IF EXISTS trg_update_user_profile_on_session ON :SCHEMA_NAME.conversation_sessions;
 CREATE TRIGGER trg_update_user_profile_on_session
-    AFTER INSERT ON test.conversation_sessions
+    AFTER INSERT ON :SCHEMA_NAME.conversation_sessions
     FOR EACH ROW
-    EXECUTE FUNCTION test.update_user_profile_on_session();
+    EXECUTE FUNCTION :SCHEMA_NAME.update_user_profile_on_session();
 
 -- ============================================================================
 -- 5. GET SESSION STATISTICS
@@ -283,7 +283,7 @@ CREATE TRIGGER trg_update_user_profile_on_session
 -- Returns comprehensive statistics for a session
 -- Used for analytics, debugging, and session management
 
-CREATE OR REPLACE FUNCTION test.get_session_statistics(p_session_id UUID)
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.get_session_statistics(p_session_id UUID)
 RETURNS TABLE(
     total_messages INTEGER,
     user_messages INTEGER,
@@ -301,11 +301,11 @@ BEGIN
         COUNT(*)::INTEGER AS total_messages,
         COUNT(*) FILTER (WHERE role = 'user')::INTEGER AS user_messages,
         COUNT(*) FILTER (WHERE role = 'model')::INTEGER AS model_messages,
-        (SELECT COUNT(*)::INTEGER FROM test.agent_memory_blocks WHERE session_id = p_session_id) AS memory_blocks,
-        (SELECT COUNT(*)::INTEGER FROM test.agent_context_transfers WHERE session_id = p_session_id) AS context_transfers,
+        (SELECT COUNT(*)::INTEGER FROM :SCHEMA_NAME.agent_memory_blocks WHERE session_id = p_session_id) AS memory_blocks,
+        (SELECT COUNT(*)::INTEGER FROM :SCHEMA_NAME.agent_context_transfers WHERE session_id = p_session_id) AS context_transfers,
         EXTRACT(EPOCH FROM (s.last_activity_at - s.started_at))::INTEGER / 60 AS session_duration_minutes
-    FROM test.conversation_messages m
-    JOIN test.conversation_sessions s ON s.id = p_session_id
+    FROM :SCHEMA_NAME.conversation_messages m
+    JOIN :SCHEMA_NAME.conversation_sessions s ON s.id = p_session_id
     WHERE m.session_id = p_session_id
     GROUP BY s.last_activity_at, s.started_at;
 END;
@@ -317,7 +317,7 @@ $function$;
 -- Returns the similarity threshold for fuzzy matching
 -- Centralized configuration point
 
-CREATE OR REPLACE FUNCTION test.get_similarity_threshold()
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.get_similarity_threshold()
 RETURNS REAL
 LANGUAGE plpgsql
 IMMUTABLE
@@ -333,14 +333,14 @@ $function$;
 -- Removes expired pagination contexts (TTL-based cleanup)
 -- Should be called periodically (e.g., daily cron job)
 
-CREATE OR REPLACE FUNCTION test.cleanup_expired_pagination_contexts()
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.cleanup_expired_pagination_contexts()
 RETURNS INTEGER
 LANGUAGE plpgsql
 AS $function$
 DECLARE
     deleted_count INTEGER;
 BEGIN
-    DELETE FROM test.pagination_contexts
+    DELETE FROM :SCHEMA_NAME.pagination_contexts
     WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP;
 
     GET DIAGNOSTICS deleted_count = ROW_COUNT;
@@ -353,7 +353,7 @@ $function$;
 -- ============================================================================
 -- Trigger function to auto-update updated_at on pagination_contexts
 
-CREATE OR REPLACE FUNCTION test.update_pagination_timestamp()
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.update_pagination_timestamp()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $function$
@@ -364,23 +364,23 @@ END;
 $function$;
 
 -- Attach trigger to pagination_contexts
-DROP TRIGGER IF EXISTS trg_update_pagination_timestamp ON test.pagination_contexts;
+DROP TRIGGER IF EXISTS trg_update_pagination_timestamp ON :SCHEMA_NAME.pagination_contexts;
 CREATE TRIGGER trg_update_pagination_timestamp
-    BEFORE UPDATE ON test.pagination_contexts
+    BEFORE UPDATE ON :SCHEMA_NAME.pagination_contexts
     FOR EACH ROW
-    EXECUTE FUNCTION test.update_pagination_timestamp();
+    EXECUTE FUNCTION :SCHEMA_NAME.update_pagination_timestamp();
 
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT EXECUTE ON FUNCTION test.sync_session_to_user_memory(UUID) TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.auto_sync_inactive_sessions(INTEGER) TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.trigger_auto_sync_on_activity_update() TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.update_user_profile_on_session() TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.get_session_statistics(UUID) TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.get_similarity_threshold() TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.cleanup_expired_pagination_contexts() TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.update_pagination_timestamp() TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.sync_session_to_user_memory(UUID) TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.auto_sync_inactive_sessions(INTEGER) TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.trigger_auto_sync_on_activity_update() TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.update_user_profile_on_session() TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.get_session_statistics(UUID) TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.get_similarity_threshold() TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.cleanup_expired_pagination_contexts() TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.update_pagination_timestamp() TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION

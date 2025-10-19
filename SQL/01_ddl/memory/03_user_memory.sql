@@ -4,7 +4,7 @@
 -- Adds user-level memory that persists across multiple sessions
 -- Enables personalization and context retention when users return days/weeks later
 
-CREATE TABLE IF NOT EXISTS test.user_memory_profiles (
+CREATE TABLE IF NOT EXISTS :SCHEMA_NAME.user_memory_profiles (
     -- Primary key
     customer_email VARCHAR(255) PRIMARY KEY,
 
@@ -32,22 +32,22 @@ CREATE TABLE IF NOT EXISTS test.user_memory_profiles (
 
 -- Indexes for user_memory_profiles
 CREATE INDEX IF NOT EXISTS idx_user_profiles_last_seen
-    ON test.user_memory_profiles(last_seen_at DESC);
+    ON :SCHEMA_NAME.user_memory_profiles(last_seen_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_user_profiles_preferred_agent
-    ON test.user_memory_profiles(preferred_agent)
+    ON :SCHEMA_NAME.user_memory_profiles(preferred_agent)
     WHERE preferred_agent IS NOT NULL;
 
 -- ============================================================================
 -- USER MEMORY BLOCKS TABLE - Cross-session memory aggregation
 -- ============================================================================
 -- Similar to agent_memory_blocks but at user level
-CREATE TABLE IF NOT EXISTS test.user_memory_blocks (
+CREATE TABLE IF NOT EXISTS :SCHEMA_NAME.user_memory_blocks (
     -- Primary key
     id SERIAL PRIMARY KEY,
 
     -- User reference
-    customer_email VARCHAR(255) NOT NULL REFERENCES test.user_memory_profiles(customer_email) ON DELETE CASCADE,
+    customer_email VARCHAR(255) NOT NULL REFERENCES :SCHEMA_NAME.user_memory_profiles(customer_email) ON DELETE CASCADE,
 
     -- Memory block structure (same as agent_memory_blocks)
     block_label VARCHAR(100) NOT NULL,  -- 'user_preferences', 'product_interest', etc
@@ -77,27 +77,27 @@ CREATE TABLE IF NOT EXISTS test.user_memory_blocks (
 
 -- Indexes for user_memory_blocks
 CREATE INDEX IF NOT EXISTS idx_user_memory_blocks_email
-    ON test.user_memory_blocks(customer_email);
+    ON :SCHEMA_NAME.user_memory_blocks(customer_email);
 
 CREATE INDEX IF NOT EXISTS idx_user_memory_blocks_priority
-    ON test.user_memory_blocks(priority DESC, extracted_at DESC);
+    ON :SCHEMA_NAME.user_memory_blocks(priority DESC, extracted_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_user_memory_blocks_expires
-    ON test.user_memory_blocks(expires_at)
+    ON :SCHEMA_NAME.user_memory_blocks(expires_at)
     WHERE expires_at IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_user_memory_blocks_label
-    ON test.user_memory_blocks(block_label);
+    ON :SCHEMA_NAME.user_memory_blocks(block_label);
 
 CREATE INDEX IF NOT EXISTS idx_user_memory_blocks_email_label
-    ON test.user_memory_blocks(customer_email, block_label);
+    ON :SCHEMA_NAME.user_memory_blocks(customer_email, block_label);
 
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT SELECT, INSERT, UPDATE, DELETE ON test.user_memory_profiles TO mcp_user;
-GRANT SELECT, INSERT, UPDATE, DELETE ON test.user_memory_blocks TO mcp_user;
-GRANT USAGE, SELECT ON SEQUENCE test.user_memory_blocks_id_seq TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON :SCHEMA_NAME.user_memory_profiles TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON :SCHEMA_NAME.user_memory_blocks TO mcp_user;
+GRANT USAGE, SELECT ON SEQUENCE :SCHEMA_NAME.user_memory_blocks_id_seq TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION

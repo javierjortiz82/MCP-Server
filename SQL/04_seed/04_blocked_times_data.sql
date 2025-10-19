@@ -1,5 +1,5 @@
 -- BLOCKED_TIMES
-INSERT INTO test.blocked_times (reason,end_time,block_date,start_time,is_full_day) VALUES
+INSERT INTO :SCHEMA_NAME.blocked_times (reason,end_time,block_date,start_time,is_full_day) VALUES
 ('Christmas Day',NULL,'2025-12-25',NULL,TRUE),
 ('New Year''s Day',NULL,'2026-01-01',NULL,TRUE),
 ('Independence Day',NULL,'2026-07-04',NULL,TRUE),

@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Configuración de horarios de atención generales por día de semana
 
-CREATE TABLE IF NOT EXISTS test.business_hours (
+CREATE TABLE IF NOT EXISTS :SCHEMA_NAME.business_hours (
     id SERIAL PRIMARY KEY,
     day_of_week INTEGER NOT NULL,  -- 0=Monday, 1=Tuesday, ..., 6=Sunday
     open_time TIME NOT NULL,
@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS test.business_hours (
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT SELECT, INSERT, UPDATE, DELETE ON test.business_hours TO mcp_user;
-GRANT USAGE, SELECT ON SEQUENCE test.business_hours_id_seq TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON :SCHEMA_NAME.business_hours TO mcp_user;
+GRANT USAGE, SELECT ON SEQUENCE :SCHEMA_NAME.business_hours_id_seq TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION

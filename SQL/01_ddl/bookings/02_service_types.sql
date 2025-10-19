@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Catálogo de servicios disponibles con metadatos para UI
 
-CREATE TABLE IF NOT EXISTS test.service_types (
+CREATE TABLE IF NOT EXISTS :SCHEMA_NAME.service_types (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
     display_name VARCHAR(200) NOT NULL,
@@ -25,14 +25,14 @@ CREATE TABLE IF NOT EXISTS test.service_types (
 
 -- Index for active services lookup
 CREATE INDEX IF NOT EXISTS idx_service_types_active
-    ON test.service_types(active)
+    ON :SCHEMA_NAME.service_types(active)
     WHERE active = true;
 
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT SELECT, INSERT, UPDATE, DELETE ON test.service_types TO mcp_user;
-GRANT USAGE, SELECT ON SEQUENCE test.service_types_id_seq TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON :SCHEMA_NAME.service_types TO mcp_user;
+GRANT USAGE, SELECT ON SEQUENCE :SCHEMA_NAME.service_types_id_seq TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION

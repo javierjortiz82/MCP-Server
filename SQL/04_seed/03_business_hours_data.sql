@@ -1,5 +1,5 @@
 -- BUSINESS_HOURS
-INSERT INTO test.business_hours (active,open_time,close_time,day_of_week) VALUES
+INSERT INTO :SCHEMA_NAME.business_hours (active,open_time,close_time,day_of_week) VALUES
 (TRUE,'09:00:00','18:00:00',0),
 (TRUE,'09:00:00','18:00:00',1),
 (TRUE,'09:00:00','18:00:00',2),
