@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS :SCHEMA_NAME.pagination_contexts (
     id SERIAL PRIMARY KEY,
 
     -- Context identification
-    context_name VARCHAR(255) NOT NULL,  -- e.g., 'products_search_john', 'bookings_2024'
+    context_name VARCHAR(255) NOT NULL UNIQUE,  -- e.g., 'products_search_john', 'bookings_2024'
     context_type VARCHAR(50) NOT NULL,  -- e.g., 'product_search', 'booking_list', 'memory_blocks'
 
     -- Pagination state
