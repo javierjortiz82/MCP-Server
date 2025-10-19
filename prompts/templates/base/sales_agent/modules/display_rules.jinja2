@@ -12,8 +12,10 @@ PRODUCT DISPLAY RULES:
 ## CRITICAL: Different Rules for Single vs. Multiple Categories
 
 ### Rule 1A: SINGLE CATEGORY Query
-- Show up to {{ pagination_page_size }} products from that category
-- HARD LIMIT - never exceed {{ pagination_page_size }} on first response
+- Filter by relevance FIRST (use quality_rules.jinja2 STEP 1)
+- Then show up to {{ pagination_page_size }} RELEVANT products
+- If < {{ pagination_page_size }} relevant products exist → show all relevant (don't pad)
+- If 0 relevant products → inform user and suggest alternatives
 
 ### Rule 1B: MULTIPLE CATEGORIES Query (e.g., "I want headphones, laptop, and mouse")
 - **SHOW ALL CATEGORIES FOUND** (MANDATORY)

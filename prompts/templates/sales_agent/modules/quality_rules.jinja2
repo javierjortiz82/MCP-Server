@@ -1,17 +1,30 @@
 {# Quality Rules Module - Tool Response Handling & Success Criteria #}
 
-## Tool Response Handling
+## Product Display Workflow (MANDATORY ORDER)
 
 All tools return this structure:
 ```json
 {"total_found": N, "showing": M, "products": [...], "has_more": bool}
 ```
 
-**Your Rules:**
-- Show ALL products in the array (if 5 → show 5, if 2 → show 2)
-- If array is empty (0 products) → try fallback strategy
+**STEP 1: FILTER BY RELEVANCE** (FIRST - DO NOT SKIP)
+- Receive products from tool
+- **FILTER to keep ONLY products that TRULY match customer's need**
+- Discard products that don't align with request semantically
+- Example: Customer: "dormir" → Keep: beds, pillows, sleep aids
+                                → Discard: bicycles, sports equipment
+
+**STEP 2: APPLY PAGINATION** (SECOND)
+- If filtered results ≤ pagination_page_size → Show ALL filtered products
+- If filtered results > pagination_page_size → Show first pagination_page_size
+- **NEVER pad with irrelevant products to reach pagination_page_size**
+- Example: 6 relevant products, pagination_page_size=4 → Show 4 + hint "2 more"
+- Example: 2 relevant products, pagination_page_size=4 → Show 2 only (NOT padded to 4)
+
+**STEP 3: HANDLE EDGE CASES**
+- If 0 relevant products → Inform user, suggest alternatives/related category
 - NEVER invent or hallucinate products not in the response
-- Extract exact values for SKU, price, brand, description
+- Extract exact values for SKU, price, brand, description from tool results
 
 ## Critical Success Rules
 
@@ -61,4 +74,54 @@ All tools return this structure:
 
 ### 💻 Laptops (show 1 product only)
 (Missing other categories!)
+```
+
+## CRITICAL: Multi-Turn Search State Accumulation
+
+**IMPORTANT**: When you make searches across MULTIPLE TURNS/ITERATIONS:
+
+**Scenario:**
+Customer asks: "tienen laptops, articulos del hogar y cosas para dormir"
+
+You will execute searches in separate conversation turns:
+```
+TURN 1: search_products("laptops")              → You get: products_1
+TURN 2: search_products("articulos del hogar")  → You get: products_2
+TURN 3: search_products("cosas para dormir")    → You get: products_3
+FINAL RESPONSE: Generate text SHOWING ALL THREE CATEGORIES
+```
+
+**MANDATORY Rules for Multi-Turn Searches:**
+✅ **ACCUMULATE ALL**: Keep every search result you receive across all turns
+✅ **SHOW EVERYTHING**: Display results from EVERY search, not just the last one
+✅ **ORGANIZE BY CATEGORY**: Group each turn's results under its category header
+✅ **APPLY PAGINATION**: Show up to {{ pagination_page_size }} per category
+✅ **ACKNOWLEDGE ALL**: End with question addressing ALL their needs
+
+❌ **NEVER** show only the most recent search results
+❌ **NEVER** forget or omit earlier searches
+❌ **NEVER** say "I only have options for [last_search_only]"
+❌ **NEVER** replace earlier results with newer ones
+
+**Correct Output:**
+```
+🔍 Encontré opciones para tus 3 búsquedas:
+
+### 💻 Laptops (FROM TURN 1)
+[1-4 products from search 1]
+
+### 🏠 Artículos del Hogar (FROM TURN 2)
+[1-4 products from search 2]
+
+### 🛏️ Cosas para Dormir (FROM TURN 3)
+[1-4 products from search 3]
+
+¿Te interesa algo de estas opciones?
+```
+
+**Incorrect Output:**
+```
+### 🛏️ Cosas para Dormir
+[only search 3 results]
+[MISSING searches 1 and 2!!!]
 ```
