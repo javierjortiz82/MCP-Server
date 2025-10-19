@@ -117,7 +117,7 @@ check_database() {
 start_mcp_server() {
     echo -e "${YELLOW}Starting MCP server...${NC}"
 
-    cd "$PROJECT_ROOT/mcp"
+    cd "$PROJECT_ROOT/mcp_server"
 
     # Check if already running
     if [ -f "$PID_DIR/mcp_server.pid" ]; then
@@ -129,7 +129,7 @@ start_mcp_server() {
     fi
 
     # Start MCP server in background
-    nohup python main.py > "$LOG_DIR/mcp_server.log" 2>&1 &
+    nohup python server.py > "$LOG_DIR/mcp_server.log" 2>&1 &
     echo $! > "$PID_DIR/mcp_server.pid"
 
     sleep 3
