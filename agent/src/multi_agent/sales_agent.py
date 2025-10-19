@@ -38,7 +38,19 @@ if str(client_mcp_path) not in sys.path:
     sys.path.insert(0, str(client_mcp_path))
 
 try:
-    from config.settings import settings  # client_mcp settings (has ENABLE_THINKING, etc.)
+    # Import settings from client_mcp explicitly to avoid sys.path conflicts
+    # (multi_agent/__init__.py manipulates sys.path, potentially loading mcp_server.config instead)
+    from importlib.util import spec_from_file_location, module_from_spec
+
+    client_settings_path = client_mcp_path / "config" / "settings.py"
+    spec = spec_from_file_location("client_mcp_settings", client_settings_path)
+    if spec and spec.loader:
+        client_settings_module = module_from_spec(spec)
+        spec.loader.exec_module(client_settings_module)
+        settings = client_settings_module.settings
+    else:
+        raise ImportError("Could not load client_mcp settings")
+
     from core.conversation_manager import ConversationManager
     from core.debug_formatter import DebugFormatter
     from core.function_call_handler import FunctionCallHandler

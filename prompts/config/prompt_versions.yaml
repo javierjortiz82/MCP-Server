@@ -14,9 +14,11 @@
 
 active_versions:
   router: v1.0       # Intent classification prompt
-  booking: v1.0      # Booking agent system prompt - MODULAR
-                     # v1.0: Direct confirmation (default)
-                     # v1.1: Pre-confirmation summary (A/B test variant)
+  booking: v2.1      # Booking agent system prompt - MODULAR
+                     # v1.0: Direct confirmation (legacy)
+                     # v1.1: Pre-confirmation summary (legacy A/B variant)
+                     # v2.0: Smart UX with intent detection
+                     # v2.1: [NEW] Gemini 2.5 best practices (scope + UX optimization)
   general: v1.0      # General agent system prompt - MODULAR
                      # v1.0: Detailed responses (default)
                      # v1.1: Concise responses (A/B test variant)
@@ -121,6 +123,37 @@ ab_testing:
       success_criteria:
         - "version_b.user_satisfaction >= version_a.user_satisfaction"
         - "version_b.followup_questions_rate <= version_a.followup_questions_rate"
+
+    # ===========================================================================
+    # BOOKING AGENT EXPERIMENT: Gemini 2.5 Best Practices (Scope + UX)
+    # ===========================================================================
+    # Hypothesis: Strict scope boundaries + UX optimization improves quality
+    # Metrics: hallucination_rate, off_topic_responses, user_satisfaction
+    # Start: 2025-10-19, Duration: 2 weeks
+    # ===========================================================================
+    - name: booking_gemini_2_5_best_practices
+      agent: booking
+      description: "Test Gemini 2.5 best practices (scope guardrails + UX optimization)"
+      version_a: v2.0              # Control: Smart UX with intent detection
+      version_a_params:
+        scope_enforcement: "soft"    # Only in instructions
+        ux_optimization: "basic"     # Basic flow
+      version_b: v2.1              # Variant: Full Gemini 2.5 best practices
+      version_b_params:
+        scope_enforcement: "strict"  # Explicit guardrails module
+        ux_optimization: "advanced"  # Conditional flows + anti-redundancy
+      traffic_split: 0.5           # 50% to each version
+      enabled: false               # Set true to activate experiment
+      metrics:
+        - hallucination_rate         # Primary: % responses with made-up data
+        - off_topic_responses        # Primary: % responses outside scope
+        - user_satisfaction          # Secondary: explicit user feedback
+        - response_quality_score     # Secondary: relevance + accuracy
+        - context_reuse_efficiency   # Secondary: % avoiding redundant questions
+      success_criteria:
+        - "version_b.hallucination_rate < version_a.hallucination_rate"
+        - "version_b.off_topic_responses < version_a.off_topic_responses"
+        - "version_b.user_satisfaction >= version_a.user_satisfaction"
 
     # Example experiment: test new router classification approach
     - name: router_more_specific

@@ -6,11 +6,13 @@ enhanced UX, intent detection, and dynamic context.
 
 MODULAR ARCHITECTURE:
 ├─ base.jinja2: Identity and role definition
+├─ modules/scope_guardrails.jinja2: [NEW] Strict scope boundaries (Gemini 2.5 best practice)
 ├─ modules/smart_greeting.jinja2: Proactive initial greeting with menu
 ├─ modules/intent_detection.jinja2: Automatic intent classification
+├─ modules/ux_conversational.jinja2: [NEW] Conditional UX flows (Jinja2 logic)
 ├─ modules/context_enrichment.jinja2: Dynamic services and availability
 ├─ modules/tool_usage_rules.jinja2: Function calling guidelines
-├─ modules/confirmation_flow.jinja2: Booking workflow (A/B testable)
+├─ modules/confirmation_flow.jinja2: Booking workflow (A/B testable, anti-redundancy)
 ├─ modules/data_requirements.jinja2: Required data for operations
 ├─ modules/flexible_dates.jinja2: Date parsing and relative dates
 ├─ modules/examples.jinja2: Few-shot examples and formatting
@@ -24,6 +26,12 @@ VERSION HISTORY:
     - Added intent detection for better routing
     - Added context enrichment for zero hardcoding
     - Improved conversation flow and recommendations
+  v2.1 (2025-10-19): Gemini 2.5 Best Practices Optimization
+    - [NEW] Scope guardrails module (prevents hallucinations/off-topic)
+    - [NEW] UX conversational flows (Jinja2 conditional logic)
+    - [IMPROVED] Anti-redundancy in confirmation flows
+    - [IMPROVED] Out-of-scope detection with redirection protocol
+    - [IMPROVED] Stricter scope boundaries in base module
 
 KEY IMPROVEMENTS v2.0:
   ✅ Zero hardcoding of services/times
@@ -54,6 +62,11 @@ Version: {{ version|default('v2.0') }}
 {% include 'booking_agent/base.jinja2' %}
 
 {# ================================================================ #}
+{# PHASE 1.5: SCOPE GUARDRAILS (NEW - Gemini 2.5 Best Practice)    #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/scope_guardrails.jinja2' %}
+
+{# ================================================================ #}
 {# PHASE 2: DYNAMIC CONTEXT ENRICHMENT (No Hardcoding!)            #}
 {# ================================================================ #}
 {% include 'booking_agent/modules/context_enrichment.jinja2' %}
@@ -67,6 +80,11 @@ Version: {{ version|default('v2.0') }}
 {# PHASE 4: INTENT DETECTION FOR SMART ROUTING                     #}
 {# ================================================================ #}
 {% include 'booking_agent/modules/intent_detection.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 4.5: UX CONVERSATIONAL FLOWS (NEW - Jinja2 Conditional)   #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/ux_conversational.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 5: TOOL USAGE RULES (Critical)                            #}

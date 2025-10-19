@@ -8,10 +8,26 @@ This module provides a high-level executor that orchestrates all improvements:
 """
 
 import uuid
+from pathlib import Path
 from typing import Any
 
+# Explicit import to avoid sys.path conflicts across different modules
 try:
-    from ..config.settings import settings
+    from importlib.util import spec_from_file_location, module_from_spec
+
+    settings_path = Path(__file__).parent.parent / "config" / "settings.py"
+    spec = spec_from_file_location("client_mcp_settings_executor", settings_path)
+    if spec and spec.loader:
+        _settings_module = module_from_spec(spec)
+        spec.loader.exec_module(_settings_module)
+        settings = _settings_module.settings
+    else:
+        raise ImportError("Failed to load settings module")
+except (ImportError, AttributeError):
+    # Fallback: try standard import
+    from config.settings import settings
+
+try:
     from ..observability.tracker import ToolTracker, get_global_tracker
     from ..strategies.fallback import FallbackStrategy
     from ..strategies.retry import RetryConfig, RetryStrategy
@@ -20,7 +36,6 @@ try:
     from .tool_validator import ToolValidator
 except ImportError:
     # Fallback for test environment
-    from config.settings import settings
     from core.mcp_connector import MCPConnector
     from core.tool_cache import ToolCache, get_global_cache
     from core.tool_validator import ToolValidator
