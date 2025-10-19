@@ -23,8 +23,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY --chown=mcp:mcp . .
 
-# Copy Google Calendar credentials
-COPY --chown=mcp:mcp credentials/ /app/credentials/
+# Copy Google Calendar credentials to root for proper path resolution
+COPY --chown=mcp:mcp credentials/ /credentials/
 
 # Create logs directory
 RUN mkdir -p /app/logs && chown mcp:mcp /app/logs
