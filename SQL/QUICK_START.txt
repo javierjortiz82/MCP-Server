@@ -86,10 +86,12 @@ Expected directories:
   data/               → Source JSON files for data loading
 
 Expected files in root:
-  deploy.sql                    → Master deployment orchestrator
-  validate_deployment.sql       → Validation and health checks
   README.md                     → Full documentation
   QUICK_START.txt               → This file
+
+Expected files in 05_orchestration/ (Orchestration):
+  01_deploy.sql                 → Master deployment orchestrator (10 phases)
+  02_validate_deployment.sql    → Validation and health checks
 
 
 ▶️  STEP 2: FULL AUTOMATED DEPLOYMENT (RECOMMENDED)
@@ -354,7 +356,7 @@ Problem: "File not found: deploy.sql"
 Solution:
   Ensure you're in the SQL directory:
   $ pwd  # Should show: /path/to/Lab01-MCP/SQL
-  $ ls deploy.sql  # Should list the file
+  $ ls 05_orchestration/01_deploy.sql  # Should list the file
 
 Problem: "Permission denied" when running scripts
 Solution:
@@ -562,7 +564,8 @@ Manual deployment without verification:
 $ cd SQL && ./scripts/deploy.sh --no-verify
 
 Manual phase deployment:
-$ cd SQL && docker exec mcp-postgres psql -U mcp_user -d mcpdb -f deploy.sql
+$ cd SQL && docker exec mcp-postgres psql -U mcp_user -d mcpdb \
+  -f 05_orchestration/01_deploy.sql
 
 Check container status:
 $ docker ps | grep mcp-postgres
