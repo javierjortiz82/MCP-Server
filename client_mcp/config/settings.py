@@ -212,6 +212,19 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # Error Pattern Configuration
+    # ============================================================================
+    CACHE_ERROR_PATTERNS: str = Field(
+        default="CacheError,RESOURCE_EXHAUSTED,cache",
+        description="Cache error patterns to detect (comma-separated)",
+    )
+
+    RATE_LIMIT_ERROR_PATTERNS: str = Field(
+        default="429,RATE_LIMIT_EXCEEDED,quota",
+        description="Rate limit error patterns to detect (comma-separated)",
+    )
+
+    # ============================================================================
     # Fallback Configuration
     # ============================================================================
     ENABLE_FALLBACK: bool = Field(
