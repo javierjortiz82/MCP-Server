@@ -14,12 +14,16 @@ Before starting, ensure you have:
    $ docker-compose --version
 
 2. PostgreSQL container running (mcp-postgres)
-   $ cd ../DockerConfig && docker-compose up -d
+   $ cd ../DockerConfig && docker-compose up -d postgres
+
+   ⏳ Wait for healthcheck to pass (~30 seconds)
 
    Verify container is running:
    $ docker ps | grep mcp-postgres
 
    Expected: Container should show as "Up" on port 5434
+
+   ⚠️  Note: Container starts EMPTY (no automatic initialization)
 
 3. Python 3 installed (for data loading with embeddings)
    $ python3 --version

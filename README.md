@@ -26,12 +26,22 @@ cd Lab01-MCP
 cp .env.example .env
 # Edit .env and add your GOOGLE_API_KEY
 
-# 3. Start services with Docker
+# 3. Start Docker services
+cd DockerConfig
 docker-compose up -d
+# ⏳ Wait for PostgreSQL to be healthy (healthcheck ~30s)
 
-# 4. Run the AI sales agent
+# 4. Initialize database (REQUIRED STEP)
+cd ../SQL
+./scripts/deploy.sh
+# This creates schema, tables, functions, and loads seed data
+
+# 5. Run the AI sales agent
+cd ..
 python -m client_mcp
 ```
+
+⚠️ **Important:** Step 4 (`./scripts/deploy.sh`) is required after `docker-compose up`. The database is not automatically initialized.
 
 **First Conversation:**
 ```
