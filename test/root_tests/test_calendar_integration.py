@@ -41,31 +41,22 @@ logger = setup_logging("calendar_test")
 
 def print_header():
     """Print test header."""
-    print("=" * 77)
-    print("GOOGLE CALENDAR INTEGRATION TEST")
-    print("=" * 77)
-    print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print()
 
 
 def print_step(step_num: int, total_steps: int, message: str):
     """Print step header."""
-    print(f"Step {step_num}/{total_steps}: {message}")
 
 
 def print_success(message: str):
     """Print success message."""
-    print(f"✅ {message}")
 
 
 def print_error(message: str):
     """Print error message."""
-    print(f"❌ {message}")
 
 
 def print_info(message: str, indent: int = 3):
     """Print info message with indentation."""
-    print(f"{' ' * indent}{message}")
 
 
 def test_configuration() -> bool:
@@ -73,6 +64,7 @@ def test_configuration() -> bool:
 
     Returns:
         bool: True if configuration valid
+
     """
     print_step(1, 5, "Loading configuration...")
 
@@ -98,7 +90,6 @@ def test_configuration() -> bool:
         print_info(f"Calendar ID: {settings.GOOGLE_CALENDAR_ID}")
         print_info(f"Timezone: {settings.GOOGLE_CALENDAR_TIMEZONE}")
         print_info(f"Credentials: {settings.GOOGLE_CALENDAR_CREDENTIALS_PATH}")
-        print()
 
         return True
 
@@ -112,6 +103,7 @@ def test_client_initialization() -> GoogleCalendarClient | None:
 
     Returns:
         GoogleCalendarClient | None: Client instance if successful
+
     """
     print_step(2, 5, "Initializing GoogleCalendarClient...")
 
@@ -125,7 +117,6 @@ def test_client_initialization() -> GoogleCalendarClient | None:
             timezone=settings.GOOGLE_CALENDAR_TIMEZONE,
         )
         print_success("GoogleCalendarClient initialized")
-        print()
         return client
 
     except FileNotFoundError as e:
@@ -152,6 +143,7 @@ def test_create_event(client: GoogleCalendarClient) -> dict | None:
 
     Returns:
         dict | None: Event data if successful
+
     """
     print_step(3, 5, "Creating test event...")
 
@@ -184,7 +176,6 @@ def test_create_event(client: GoogleCalendarClient) -> dict | None:
         print_info(f"Event ID: {event.event_id}")
         print_info(f"Calendar Link: {event.html_link}")
         print_info(f"Start Time: {start_datetime}")
-        print()
 
         return {
             "event_id": event.event_id,
@@ -196,13 +187,11 @@ def test_create_event(client: GoogleCalendarClient) -> dict | None:
     except Exception as e:
         print_error(f"Event creation failed: {e}")
         logger.exception("Event creation error")
-        print()
         print_info("Common causes:", indent=0)
         print_info("1. Calendar not shared with service account")
         print_info("2. Service account lacks 'Make changes to events' permission")
         print_info("3. Calendar API not enabled in Google Cloud Console")
         print_info("4. Invalid calendar ID in configuration")
-        print()
         return None
 
 
@@ -215,6 +204,7 @@ def test_verify_event(client: GoogleCalendarClient, event_data: dict) -> bool:
 
     Returns:
         bool: True if event verified
+
     """
     print_step(4, 5, "Verifying event in calendar...")
 
@@ -226,7 +216,6 @@ def test_verify_event(client: GoogleCalendarClient, event_data: dict) -> bool:
 
         print_success("Event verified in Google Calendar")
         print_info("Event is visible in calendar")
-        print()
         return True
 
     except Exception as e:
@@ -244,6 +233,7 @@ def test_delete_event(client: GoogleCalendarClient, event_id: str) -> bool:
 
     Returns:
         bool: True if deleted successfully
+
     """
     print_step(5, 5, "Cleaning up (deleting test event)...")
 
@@ -253,13 +243,11 @@ def test_delete_event(client: GoogleCalendarClient, event_id: str) -> bool:
         if success:
             print_success("Test event deleted")
             print_info("Calendar cleaned up successfully")
-            print()
             return True
         else:
             print_error("Event deletion returned False")
             print_info("Event may still exist in calendar")
             print_info("You can manually delete it from Google Calendar")
-            print()
             return False
 
     except Exception as e:
@@ -267,7 +255,6 @@ def test_delete_event(client: GoogleCalendarClient, event_id: str) -> bool:
         logger.exception("Event deletion error")
         print_info("You may need to manually delete the test event:")
         print_info(f"Event ID: {event_id}")
-        print()
         return False
 
 
@@ -276,95 +263,41 @@ def main() -> int:
 
     Returns:
         int: Exit code (0 for success, 1 for failure)
+
     """
     print_header()
 
     # Test 1: Configuration
     if not test_configuration():
-        print()
-        print("=" * 77)
         print_error("Configuration test FAILED")
-        print("=" * 77)
-        print()
-        print("Next steps:")
-        print("1. Review docs/GOOGLE_CALENDAR_SETUP.md")
-        print("2. Ensure service account is created")
-        print("3. Verify credentials file exists")
-        print("4. Set GOOGLE_CALENDAR_ENABLED=true in .env")
         return 1
 
     # Test 2: Client initialization
     client = test_client_initialization()
     if not client:
-        print()
-        print("=" * 77)
         print_error("Client initialization FAILED")
-        print("=" * 77)
-        print()
-        print("Next steps:")
-        print("1. Verify service account JSON is valid")
-        print("2. Check credentials file path matches .env")
-        print("3. Ensure Google Calendar API is enabled")
         return 1
 
     # Test 3: Create event
     event_data = test_create_event(client)
     if not event_data:
-        print()
-        print("=" * 77)
         print_error("Event creation FAILED")
-        print("=" * 77)
-        print()
-        print("Next steps:")
-        print("1. Share calendar with service account email")
-        print("2. Grant 'Make changes to events' permission")
-        print("3. Wait 5 minutes for permissions to propagate")
-        print("4. Run this test again")
         return 1
 
     # Test 4: Verify event
     if not test_verify_event(client, event_data):
-        print()
-        print("=" * 77)
         print_error("Event verification FAILED")
-        print("=" * 77)
-        print()
         # Try to cleanup even if verification failed
         test_delete_event(client, event_data["event_id"])
         return 1
 
     # Test 5: Delete event
     if not test_delete_event(client, event_data["event_id"]):
-        print()
-        print("=" * 77)
         print_error("Event cleanup FAILED")
-        print("=" * 77)
-        print()
-        print("The test event still exists in your calendar:")
-        print(f"Event ID: {event_data['event_id']}")
-        print(f"Link: {event_data['html_link']}")
-        print()
-        print("You can manually delete it from Google Calendar.")
-        print("The integration itself is working correctly.")
         return 1
 
     # All tests passed!
-    print()
-    print("=" * 77)
     print_success("ALL TESTS PASSED - Google Calendar integration is working!")
-    print("=" * 77)
-    print()
-    print("Next steps:")
-    print("1. Create a test booking via your application")
-    print("2. Check that the event appears in Google Calendar")
-    print("3. Try rescheduling and cancelling bookings")
-    print("4. Monitor logs for any errors")
-    print()
-    print("Documentation:")
-    print("- Setup Guide: docs/GOOGLE_CALENDAR_SETUP.md")
-    print("- Source Code: mcp_server/utils/google_calendar.py")
-    print("- Booking Integration: mcp_server/tools/bookings.py")
-    print()
 
     return 0
 
@@ -375,12 +308,10 @@ if __name__ == "__main__":
         sys.exit(exit_code)
 
     except KeyboardInterrupt:
-        print()
         print_error("Test interrupted by user")
         sys.exit(130)
 
     except Exception as e:
-        print()
         print_error(f"Unexpected error: {e}")
         logger.exception("Test script error")
         sys.exit(1)

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Test Flexible Date Formats in BookingAgent
+"""Test Flexible Date Formats in BookingAgent.
 ==========================================
 
 This script tests the flexible date parsing feature implemented in BookingAgent.
@@ -25,9 +24,6 @@ from agent.src.multi_agent.prompt_manager import PromptManager
 
 def print_section(title: str):
     """Print section header."""
-    print("\n" + "=" * 80)
-    print(f"  {title}")
-    print("=" * 80)
 
 
 def test_prompt_injection():
@@ -40,13 +36,9 @@ def test_prompt_injection():
     # Current date should be injected
     today = datetime.now().strftime("%Y-%m-%d")
 
-    print(f"\n📅 Today's date: {today}")
-    print(f"\n✅ Checking if '{today}' appears in prompt...")
-
     if today in prompt:
-        print(f"✅ PASS: Current date '{today}' found in prompt")
+        pass
     else:
-        print(f"❌ FAIL: Current date '{today}' NOT found in prompt")
         return False
 
     # Check for Spanish day name
@@ -62,17 +54,14 @@ def test_prompt_injection():
     found_day = any(day in prompt for day in spanish_days)
 
     if found_day:
-        day_found = [day for day in spanish_days if day in prompt][0]
-        print(f"✅ PASS: Spanish day name '{day_found}' found in prompt")
+        next(day for day in spanish_days if day in prompt)
     else:
-        print("❌ FAIL: No Spanish day name found in prompt")
         return False
 
     # Check for flexible date instructions
     if "MANEJO FLEXIBLE DE FECHAS" in prompt:
-        print("✅ PASS: Flexible date instructions found in prompt")
+        pass
     else:
-        print("❌ FAIL: Flexible date instructions NOT found in prompt")
         return False
 
     return True
@@ -96,9 +85,8 @@ def test_expected_formats():
     all_passed = True
     for fmt in expected_formats:
         if fmt in prompt:
-            print(f"✅ PASS: Format '{fmt}' documented in prompt")
+            pass
         else:
-            print(f"❌ FAIL: Format '{fmt}' NOT documented in prompt")
             all_passed = False
 
     return all_passed
@@ -121,9 +109,8 @@ def test_conversion_examples():
     all_passed = True
     for example in examples:
         if example in prompt:
-            print(f"✅ PASS: Example marker '{example}' found in prompt")
+            pass
         else:
-            print(f"❌ FAIL: Example marker '{example}' NOT found in prompt")
             all_passed = False
 
     return all_passed
@@ -137,14 +124,7 @@ def test_never_ask_format():
     prompt = manager.get_booking_prompt()
 
     # Check for explicit instruction
-    if "NUNCA pidas al cliente que cambie el formato" in prompt:
-        print(
-            "✅ PASS: Explicit instruction found: 'NUNCA pidas al cliente que cambie el formato'"
-        )
-        return True
-    else:
-        print("❌ FAIL: Missing instruction to never ask user to change format")
-        return False
+    return "NUNCA pidas al cliente que cambie el formato" in prompt
 
 
 def simulate_date_queries():
@@ -189,16 +169,9 @@ def simulate_date_queries():
         },
     ]
 
-    print("\n📝 Expected LLM behavior for various date inputs:\n")
+    for _i, _scenario in enumerate(scenarios, 1):
+        pass
 
-    for i, scenario in enumerate(scenarios, 1):
-        print(f"{i}. {scenario['description']}")
-        print(f"   User says: '{scenario['user_input']}'")
-        print(f"   LLM should convert to: '{scenario['expected_output']}'")
-        print(f"   LLM should call tool with: date=\"{scenario['expected_output']}\"")
-        print()
-
-    print("✅ All scenarios documented above should work with the updated prompt")
     return True
 
 
@@ -222,11 +195,8 @@ def test_spanish_day_helper():
     for weekday, expected_name in expected_days.items():
         actual_name = manager._get_spanish_day(weekday)
         if actual_name == expected_name:
-            print(f"✅ PASS: weekday={weekday} → '{actual_name}'")
+            pass
         else:
-            print(
-                f"❌ FAIL: weekday={weekday} → got '{actual_name}', expected '{expected_name}'"
-            )
             all_passed = False
 
     return all_passed
@@ -234,12 +204,6 @@ def test_spanish_day_helper():
 
 def main():
     """Run all tests."""
-    print("\n" + "╔" + "═" * 78 + "╗")
-    print("║" + " " * 78 + "║")
-    print("║" + "  🧪 FLEXIBLE DATE FORMATS - TEST SUITE".center(78) + "║")
-    print("║" + " " * 78 + "║")
-    print("╚" + "═" * 78 + "╝")
-
     tests = [
         ("Date Injection", test_prompt_injection),
         ("Format Documentation", test_expected_formats),
@@ -254,8 +218,7 @@ def main():
         try:
             passed = test_func()
             results.append((test_name, passed))
-        except Exception as e:
-            print(f"\n❌ ERROR in {test_name}: {e}")
+        except Exception:
             results.append((test_name, False))
 
     # Print summary
@@ -264,30 +227,12 @@ def main():
     passed_count = sum(1 for _, passed in results if passed)
     total_count = len(results)
 
-    print()
     for test_name, passed in results:
-        status = "✅ PASS" if passed else "❌ FAIL"
-        print(f"{status}: {test_name}")
-
-    print("\n" + "-" * 80)
-    print(f"Total: {passed_count}/{total_count} tests passed")
-    print("-" * 80)
+        pass
 
     if passed_count == total_count:
-        print(
-            "\n🎉 ALL TESTS PASSED - Flexible date format feature is working correctly!"
-        )
-        print("\nNext Steps:")
-        print("1. Start the bot: python -m client_mcp")
-        print("2. Test with real user inputs:")
-        print("   - 'Quiero reservar para mañana'")
-        print("   - 'Necesito una cita el 14/10/2025'")
-        print("   - 'Agendar para el próximo lunes'")
-        print("3. Verify that bot correctly converts dates to YYYY-MM-DD format")
-        print("4. Verify that bot NEVER asks user to change date format")
         return 0
     else:
-        print("\n❌ SOME TESTS FAILED - Please review the implementation")
         return 1
 
 
