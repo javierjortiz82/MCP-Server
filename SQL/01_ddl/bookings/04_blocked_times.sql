@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Registro de tiempos no disponibles: vacaciones, descansos, etc
 
-CREATE TABLE IF NOT EXISTS test.blocked_times (
+CREATE TABLE IF NOT EXISTS :SCHEMA_NAME.blocked_times (
     id SERIAL PRIMARY KEY,
     block_date DATE NOT NULL,
     start_time TIME,  -- NULL if full day block
@@ -28,18 +28,18 @@ CREATE TABLE IF NOT EXISTS test.blocked_times (
 
 -- Index for availability checks
 CREATE INDEX IF NOT EXISTS idx_blocked_times_date
-    ON test.blocked_times(block_date);
+    ON :SCHEMA_NAME.blocked_times(block_date);
 
 -- Composite index for time-specific blocks
 CREATE INDEX IF NOT EXISTS idx_blocked_times_date_time
-    ON test.blocked_times(block_date, start_time, end_time)
+    ON :SCHEMA_NAME.blocked_times(block_date, start_time, end_time)
     WHERE is_full_day = false;
 
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT SELECT, INSERT, UPDATE, DELETE ON test.blocked_times TO mcp_user;
-GRANT USAGE, SELECT ON SEQUENCE test.blocked_times_id_seq TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON :SCHEMA_NAME.blocked_times TO mcp_user;
+GRANT USAGE, SELECT ON SEQUENCE :SCHEMA_NAME.blocked_times_id_seq TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION

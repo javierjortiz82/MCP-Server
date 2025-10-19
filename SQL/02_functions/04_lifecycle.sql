@@ -5,7 +5,7 @@
 -- ============================================================================
 -- FUNCTION: archive_inactive_sessions() - Soft delete
 -- ============================================================================
-CREATE OR REPLACE FUNCTION test.archive_inactive_sessions(
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.archive_inactive_sessions(
     p_inactivity_days INTEGER DEFAULT 90
 )
 RETURNS TABLE (
@@ -16,7 +16,7 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
     RETURN QUERY
-    UPDATE test.conversation_sessions cs
+    UPDATE :SCHEMA_NAME.conversation_sessions cs
     SET
         archived = TRUE,
         updated_at = CURRENT_TIMESTAMP
@@ -33,7 +33,7 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- FUNCTION: cleanup_archived_sessions() - Hard delete
 -- ============================================================================
-CREATE OR REPLACE FUNCTION test.cleanup_archived_sessions(
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.cleanup_archived_sessions(
     p_archived_days INTEGER DEFAULT 365
 )
 RETURNS INTEGER AS $$
@@ -41,7 +41,7 @@ DECLARE
     v_deleted_count INTEGER;
 BEGIN
     WITH deleted AS (
-        DELETE FROM test.conversation_sessions
+        DELETE FROM :SCHEMA_NAME.conversation_sessions
         WHERE archived = TRUE
           AND updated_at < CURRENT_TIMESTAMP - (p_archived_days || ' days')::INTERVAL
         RETURNING id
@@ -55,7 +55,7 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- FUNCTION: cleanup_anonymous_sessions() - Anonymous session cleanup
 -- ============================================================================
-CREATE OR REPLACE FUNCTION test.cleanup_anonymous_sessions(
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.cleanup_anonymous_sessions(
     p_inactive_days INTEGER DEFAULT 30
 )
 RETURNS INTEGER AS $$
@@ -63,7 +63,7 @@ DECLARE
     v_deleted_count INTEGER;
 BEGIN
     WITH deleted AS (
-        DELETE FROM test.conversation_sessions
+        DELETE FROM :SCHEMA_NAME.conversation_sessions
         WHERE customer_email IS NULL
           AND last_activity_at < CURRENT_TIMESTAMP - (p_inactive_days || ' days')::INTERVAL
         RETURNING id
@@ -77,7 +77,7 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- FUNCTION: get_session_retention_stats() - Analytics
 -- ============================================================================
-CREATE OR REPLACE FUNCTION test.get_session_retention_stats()
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.get_session_retention_stats()
 RETURNS TABLE (
     metric VARCHAR(50),
     count BIGINT,
@@ -87,7 +87,7 @@ DECLARE
     v_total_sessions BIGINT;
 BEGIN
     -- Get total sessions for percentage calculation
-    SELECT COUNT(*) INTO v_total_sessions FROM test.conversation_sessions;
+    SELECT COUNT(*) INTO v_total_sessions FROM :SCHEMA_NAME.conversation_sessions;
 
     IF v_total_sessions = 0 THEN
         v_total_sessions := 1;  -- Avoid division by zero
@@ -99,7 +99,7 @@ BEGIN
         'active_sessions'::VARCHAR(50),
         COUNT(*),
         ROUND((COUNT(*) * 100.0 / v_total_sessions), 2)
-    FROM test.conversation_sessions
+    FROM :SCHEMA_NAME.conversation_sessions
     WHERE archived = FALSE;
 
     -- Archived sessions
@@ -108,7 +108,7 @@ BEGIN
         'archived_sessions'::VARCHAR(50),
         COUNT(*),
         ROUND((COUNT(*) * 100.0 / v_total_sessions), 2)
-    FROM test.conversation_sessions
+    FROM :SCHEMA_NAME.conversation_sessions
     WHERE archived = TRUE;
 
     -- Sessions with email (valuable)
@@ -117,7 +117,7 @@ BEGIN
         'with_email'::VARCHAR(50),
         COUNT(*),
         ROUND((COUNT(*) * 100.0 / v_total_sessions), 2)
-    FROM test.conversation_sessions
+    FROM :SCHEMA_NAME.conversation_sessions
     WHERE customer_email IS NOT NULL;
 
     -- Anonymous sessions
@@ -126,7 +126,7 @@ BEGIN
         'anonymous'::VARCHAR(50),
         COUNT(*),
         ROUND((COUNT(*) * 100.0 / v_total_sessions), 2)
-    FROM test.conversation_sessions
+    FROM :SCHEMA_NAME.conversation_sessions
     WHERE customer_email IS NULL;
 
     -- Active last 7 days
@@ -135,7 +135,7 @@ BEGIN
         'active_7d'::VARCHAR(50),
         COUNT(*),
         ROUND((COUNT(*) * 100.0 / v_total_sessions), 2)
-    FROM test.conversation_sessions
+    FROM :SCHEMA_NAME.conversation_sessions
     WHERE last_activity_at >= CURRENT_TIMESTAMP - INTERVAL '7 days';
 
     -- Active last 30 days
@@ -144,7 +144,7 @@ BEGIN
         'active_30d'::VARCHAR(50),
         COUNT(*),
         ROUND((COUNT(*) * 100.0 / v_total_sessions), 2)
-    FROM test.conversation_sessions
+    FROM :SCHEMA_NAME.conversation_sessions
     WHERE last_activity_at >= CURRENT_TIMESTAMP - INTERVAL '30 days';
 
     -- Inactive > 90 days (eligible for archiving)
@@ -153,7 +153,7 @@ BEGIN
         'eligible_archive'::VARCHAR(50),
         COUNT(*),
         ROUND((COUNT(*) * 100.0 / v_total_sessions), 2)
-    FROM test.conversation_sessions
+    FROM :SCHEMA_NAME.conversation_sessions
     WHERE archived = FALSE
       AND last_activity_at < CURRENT_TIMESTAMP - INTERVAL '90 days';
 
@@ -163,7 +163,7 @@ BEGIN
         'eligible_delete'::VARCHAR(50),
         COUNT(*),
         ROUND((COUNT(*) * 100.0 / v_total_sessions), 2)
-    FROM test.conversation_sessions
+    FROM :SCHEMA_NAME.conversation_sessions
     WHERE archived = TRUE
       AND updated_at < CURRENT_TIMESTAMP - INTERVAL '365 days';
 END;
@@ -172,10 +172,10 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT EXECUTE ON FUNCTION test.archive_inactive_sessions(INTEGER) TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.cleanup_archived_sessions(INTEGER) TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.cleanup_anonymous_sessions(INTEGER) TO mcp_user;
-GRANT EXECUTE ON FUNCTION test.get_session_retention_stats() TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.archive_inactive_sessions(INTEGER) TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.cleanup_archived_sessions(INTEGER) TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.cleanup_anonymous_sessions(INTEGER) TO mcp_user;
+GRANT EXECUTE ON FUNCTION :SCHEMA_NAME.get_session_retention_stats() TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION

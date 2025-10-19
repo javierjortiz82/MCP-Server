@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Tabla principal para registro de citas y reservas
 
-CREATE TABLE IF NOT EXISTS test.appointments (
+CREATE TABLE IF NOT EXISTS :SCHEMA_NAME.appointments (
     -- Primary key
     id SERIAL PRIMARY KEY,
 
@@ -44,32 +44,32 @@ CREATE TABLE IF NOT EXISTS test.appointments (
 
 -- Performance indexes for appointments
 CREATE INDEX IF NOT EXISTS idx_appointments_date
-    ON test.appointments(booking_date);
+    ON :SCHEMA_NAME.appointments(booking_date);
 
 CREATE INDEX IF NOT EXISTS idx_appointments_email
-    ON test.appointments(customer_email);
+    ON :SCHEMA_NAME.appointments(customer_email);
 
 CREATE INDEX IF NOT EXISTS idx_appointments_status
-    ON test.appointments(status);
+    ON :SCHEMA_NAME.appointments(status);
 
 CREATE INDEX IF NOT EXISTS idx_appointments_calendar_id
-    ON test.appointments(google_calendar_event_id)
+    ON :SCHEMA_NAME.appointments(google_calendar_event_id)
     WHERE google_calendar_event_id IS NOT NULL;
 
 -- Composite index for availability queries (most common query pattern)
 CREATE INDEX IF NOT EXISTS idx_appointments_date_time_status
-    ON test.appointments(booking_date, booking_time, status)
+    ON :SCHEMA_NAME.appointments(booking_date, booking_time, status)
     WHERE status IN ('confirmed', 'rescheduled');
 
 -- Index for customer booking history
 CREATE INDEX IF NOT EXISTS idx_appointments_customer_date
-    ON test.appointments(customer_email, booking_date DESC);
+    ON :SCHEMA_NAME.appointments(customer_email, booking_date DESC);
 
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT SELECT, INSERT, UPDATE, DELETE ON test.appointments TO mcp_user;
-GRANT USAGE, SELECT ON SEQUENCE test.appointments_id_seq TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON :SCHEMA_NAME.appointments TO mcp_user;
+GRANT USAGE, SELECT ON SEQUENCE :SCHEMA_NAME.appointments_id_seq TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION
