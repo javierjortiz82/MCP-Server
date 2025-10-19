@@ -264,7 +264,7 @@ def _create_booking_atomic(
             # RECHECK: Verify slot is still available after locking
             # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
             availability_check_query = f"""
-                SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s, %s) as available
+                SELECT {settings.SCHEMA_NAME}.is_slot_available(%s::date, %s::time, %s, %s) as available
             """
 
             cur.execute(
@@ -491,7 +491,7 @@ def create_booking(
     # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
     try:
         availability_check = fetchone(
-            f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s, %s) as available",
+            f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s::date, %s::time, %s, %s) as available",
             (booking_date, booking_time, duration_minutes, service_type),
         )
 
@@ -798,7 +798,7 @@ def reschedule_booking(
     # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
     try:
         availability_check = fetchone(
-            f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s, %s) as available",
+            f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s::date, %s::time, %s, %s) as available",
             (new_date, new_time, booking["duration_minutes"], booking["service_type"]),
         )
 
@@ -1173,7 +1173,7 @@ def get_available_slots(
         # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
         try:
             availability = fetchone(
-                f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s, %s) as available",
+                f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s::date, %s::time, %s, %s) as available",
                 (date, time_str, duration_minutes, service_type),
             )
 
