@@ -294,7 +294,7 @@ Next Steps:
 4. Collect data for 2+ weeks
 5. Analyze results and declare winner
 
-See: agent/README_AB_TESTING.md for deployment instructions
+See: docs/AGENT_AB_TESTING_GUIDE.md for deployment instructions
         """)
 
         return 0

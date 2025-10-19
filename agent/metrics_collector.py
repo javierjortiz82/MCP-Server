@@ -202,7 +202,7 @@ class ABTestMetricsCollector:
         print("3. Calculate conversion_rate per variant")
         print("4. Run statistical significance test")
         print("5. Declare winner and rollout to 100%")
-        print("\nFor more info, see: agent/README_AB_TESTING.md")
+        print("\nFor more info, see: docs/AGENT_AB_TESTING_GUIDE.md")
 
 
 def main():
