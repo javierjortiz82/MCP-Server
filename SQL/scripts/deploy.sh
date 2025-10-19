@@ -214,8 +214,12 @@ run_deployment() {
 
     # 2. Fix unaccent() function calls to use public.unaccent() schema prefix
     # This ensures the unaccent() function from the unaccent extension is found
+    # IMPORTANT: Only replace bare unaccent( calls, NOT already-prefixed public.unaccent(
     info "Fixing unaccent() function references to use public schema prefix..."
-    docker exec mcp-postgres sed -i "s/unaccent(/public.unaccent(/g" /tmp/sql_deploy/01_ddl/01_products.sql
+    docker exec mcp-postgres sed -i \
+        -e "s/\([[:space:]]\)unaccent(/\1public.unaccent(/g" \
+        -e "s/^unaccent(/public.unaccent(/" \
+        /tmp/sql_deploy/01_ddl/01_products.sql
     if [ $? -ne 0 ]; then
         error "Failed to preprocess products file"
         return 1
