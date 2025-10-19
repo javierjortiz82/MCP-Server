@@ -9,6 +9,23 @@ description = "Lab01-MCP - Multi-Agent System with Bookings and Memory"
 requires-python = ">=3.10"
 
 # ============================================================================
+# SETUPTOOLS Configuration - Explicit Package Discovery
+# ============================================================================
+[tool.setuptools]
+packages = [
+    "client_mcp",
+    "email_service",
+    "mcp_server",
+    "gemini_agent",
+    "multi_agent",
+]
+
+[tool.setuptools.package-dir]
+# Agent packages are located in agent/src/
+gemini_agent = "agent/src/gemini_agent"
+multi_agent = "agent/src/multi_agent"
+
+# ============================================================================
 # RUFF Configuration - Fast Python Linter (replaces flake8, pylint, etc.)
 # ============================================================================
 [tool.ruff]
