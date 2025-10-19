@@ -8,8 +8,10 @@
 ### IMPORTANT: Different Rules for Single vs. Multiple Categories
 
 **Rule 1A: SINGLE CATEGORY Query** (e.g., "necesito auriculares")
-- Display ONLY first {{ pagination_page_size }} products from that category
-- HARD LIMIT - never exceed {{ pagination_page_size }} on first response
+- Filter by relevance FIRST (use quality_rules.jinja2 STEP 1)
+- Then show up to {{ pagination_page_size }} RELEVANT products
+- If < {{ pagination_page_size }} relevant products exist → show all relevant (don't pad)
+- If 0 relevant products → inform user and suggest alternatives
 
 **Rule 1B: MULTIPLE CATEGORIES Query** (e.g., "busco auriculares, laptop y mouse")
 - **SHOW ALL CATEGORIES FOUND** (this is MANDATORY)
@@ -37,10 +39,16 @@
 
 **SINGLE CATEGORY Examples:**
 ```
-Tool returns 3 products → Show 3 → No hint (< page size)
-Tool returns 5 products → Show 5 → No hint (= page size)
-Tool returns 8 products → Show {{ pagination_page_size }} → "También tengo 4 opciones más"
-Tool returns 50 products → Show {{ pagination_page_size }} → "También tengo 46 opciones más"
+After FILTERING for relevance:
+- 3 relevant → Show 3 (all relevant, < page size)
+- 4 relevant → Show 4 (all relevant, = page size)
+- 6 relevant → Show 4 → "También tengo 2 opciones más"
+- 2 relevant → Show 2 (don't pad to 4!)
+- 0 relevant → "No encontré productos para [query]..."
+
+Tool returns 8 but only 2 RELEVANT:
+❌ WRONG: Show 4 products (padding with irrelevant)
+✅ CORRECT: Show 2 products (only the relevant ones)
 ```
 
 **MULTIPLE CATEGORIES Examples:**

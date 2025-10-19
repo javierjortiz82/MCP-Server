@@ -7,6 +7,28 @@ Author: Lab01-MCP Team
 Created: 2025-10-13
 Version: 2.0 (Updated: Card Format)
 #}
+**PRODUCT DISPLAY WORKFLOW (MANDATORY - DO STEPS IN ORDER)**
+
+**STEP 1: FILTER BY RELEVANCE** (DO THIS FIRST)
+- Receive products from search tool
+- Filter to keep ONLY products that TRULY match customer's need
+- Discard products that don't align with request semantically
+- **Example: Query "what to sleep on?"**
+  - ✅ Keep: beds, pillows, blankets, mattresses
+  - ❌ Discard: bicycles, sports equipment, furniture that's not for sleeping
+- **CRITICAL: Never pad results** - if only 2 products are relevant, show 2 (not 4)
+- If 0 are relevant → inform user and suggest alternatives
+
+**STEP 2: APPLY PAGINATION**
+- If filtered results ≤ pagination_page_size → show ALL relevant
+- If filtered results > pagination_page_size → show first pagination_page_size
+
+**STEP 3: FORMAT & PRESENT**
+- Use card format for each product
+- Add pagination hint if more results exist
+
+---
+
 RESPONSE FORMAT GUIDELINES:
 
 1. GREETING/OPENING:
