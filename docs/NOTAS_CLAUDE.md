@@ -4,6 +4,86 @@ Este archivo documenta todos los cambios realizados por Claude en el proyecto.
 
 ---
 
+## 🔧 FIX: PostgreSQL Function Schema Resolution Issues (2025-10-19)
+
+### Problem Summary
+Two critical SQL function issues were discovered and resolved:
+
+#### Issue 1: Email Functions Failing with `:SCHEMA_NAME` in Function Bodies
+**Error:**
+```
+ERROR: syntax error at or near ":" at character 474
+STATEMENT: CREATE OR REPLACE FUNCTION test.enqueue_email(
+```
+
+**Root Cause:**
+- PostgreSQL **does NOT substitute psql variables** inside `$$ ... $$` delimiters (function bodies)
+- File `02_email.sql` contained 18 occurrences of `:SCHEMA_NAME` inside function bodies
+- These were left literal, causing SQL syntax errors
+- All 5 email functions failed to create:
+  - `test.enqueue_email()` ❌
+  - `test.get_pending_emails()` ❌
+  - `test.update_email_status()` ❌
+  - `test.retry_email()` ❌
+  - `test.cleanup_old_emails()` ❌
+
+**Solution Implemented:**
+Enhanced `SQL/scripts/deploy.sh` with sed preprocessing to replace `:SCHEMA_NAME` BEFORE psql execution:
+```bash
+docker exec mcp-postgres sed -i "s/:SCHEMA_NAME/$SCHEMA_NAME/g" /tmp/sql_deploy/02_functions/02_email.sql
+```
+
+**Result:** ✅ All 5 functions created successfully
+
+---
+
+#### Issue 2: unaccent() Function Not Found in test Schema
+**Error:**
+```
+ERROR: function unaccent(text) does not exist at character 7
+CONTEXT: PL/pgSQL function test.normalize_text(text) line 3 at RETURN
+```
+
+**Root Cause:**
+- Function `normalize_text()` in `01_products.sql` called `unaccent()` without schema prefix
+- While `unaccent` extension is installed in `public` schema, PostgreSQL's search_path doesn't automatically find it from functions in other schemas
+- This breaks the search normalization feature for products
+
+**Solution Implemented:**
+1. Updated `01_products.sql`: Changed `unaccent(p_text)` → `public.unaccent(p_text)`
+2. Enhanced `SQL/scripts/deploy.sh` with additional sed preprocessing:
+```bash
+docker exec mcp-postgres sed -i "s/unaccent(/public.unaccent(/g" /tmp/sql_deploy/01_ddl/01_products.sql
+```
+
+**Verification:**
+```sql
+SELECT test.normalize_text('Café Español');
+-- Result: cafe espanol ✅
+```
+
+---
+
+### Files Modified
+- `SQL/01_ddl/01_products.sql` - Fixed unaccent() calls
+- `SQL/scripts/deploy.sh` - Added enhanced preprocessing pipeline
+
+### Related Ticket/Issue
+This fix resolves the email worker error:
+```
+function test.get_pending_emails(integer) does not exist
+```
+
+### Technical Details
+PostgreSQL behavior with variable substitution:
+- ✅ **Variables ARE substituted** in regular SQL statements and function definitions
+- ❌ **Variables are NOT substituted** inside string delimiters (`$$...$$`, `'...'`)
+- ✅ **Solution**: Preprocess files with sed before psql execution
+
+This is why the deploy script needed to use sed preprocessing for SQL files that contain psql variables within function bodies.
+
+---
+
 ## ✅ AUTOMATIC MULTILINGUAL SUPPORT WITH GEMINI (2025-10-18) - COMPLETE
 
 ### Summary
