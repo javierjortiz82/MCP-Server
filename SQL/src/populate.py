@@ -265,7 +265,14 @@ def generate_products_sql(products: List[Dict], columns: List[str]) -> str:
         embedding = prod["embedding"]
 
         tags_str = "'{" + ",".join(tags) + "}'" if tags else "NULL"
-        embedding_str = f"'{embedding}'::vector" if isinstance(embedding, str) else str(embedding)
+        # Convert embedding list to PostgreSQL vector format
+        if isinstance(embedding, list):
+            embedding_values = ",".join([str(float(x)) for x in embedding])
+            embedding_str = f"'[{embedding_values}]'::vector"
+        elif isinstance(embedding, str):
+            embedding_str = f"'{embedding}'::vector"
+        else:
+            embedding_str = str(embedding)
 
         values = (
             f"('{sku}', '{name}', '{description}', '{category}', "
