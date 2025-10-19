@@ -8,7 +8,7 @@
 CREATE OR REPLACE FUNCTION :SCHEMA_NAME.normalize_text(p_text TEXT)
 RETURNS TEXT AS $$
 BEGIN
-    RETURN LOWER(unaccent(p_text));
+    RETURN LOWER(public.unaccent(p_text));
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
