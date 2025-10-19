@@ -16,12 +16,29 @@ import json
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from config.settings import settings
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
+
+# Explicit import to avoid sys.path conflicts across different modules
+# (agent/__init__.py manipulates sys.path, potentially loading wrong settings)
+try:
+    from importlib.util import spec_from_file_location, module_from_spec
+
+    settings_path = Path(__file__).parent.parent / "config" / "settings.py"
+    spec = spec_from_file_location("client_mcp_settings_pagination", settings_path)
+    if spec and spec.loader:
+        _settings_module = module_from_spec(spec)
+        spec.loader.exec_module(_settings_module)
+        settings = _settings_module.settings
+    else:
+        raise ImportError("Failed to load settings module")
+except (ImportError, AttributeError):
+    # Fallback: try standard import
+    from config.settings import settings
 
 logger = logging.getLogger(__name__)
 

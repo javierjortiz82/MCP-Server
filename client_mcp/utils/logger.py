@@ -244,12 +244,24 @@ class MCPLogger:
 def _get_global_logger() -> MCPLogger:
     """Get global logger with LOG_LEVEL from settings."""
     try:
-        from config.settings import settings
+        from importlib.util import spec_from_file_location, module_from_spec
 
-        return MCPLogger(level=settings.LOG_LEVEL)
-    except ImportError:
+        settings_path = Path(__file__).parent.parent / "config" / "settings.py"
+        spec = spec_from_file_location("client_mcp_settings_logger", settings_path)
+        if spec and spec.loader:
+            _settings_module = module_from_spec(spec)
+            spec.loader.exec_module(_settings_module)
+            settings = _settings_module.settings
+            return MCPLogger(level=settings.LOG_LEVEL)
+        else:
+            raise ImportError("Failed to load settings module")
+    except (ImportError, AttributeError):
         # Fallback if settings not available
-        return MCPLogger(level="INFO")
+        try:
+            from config.settings import settings
+            return MCPLogger(level=settings.LOG_LEVEL)
+        except ImportError:
+            return MCPLogger(level="INFO")
 
 
 logger = _get_global_logger()

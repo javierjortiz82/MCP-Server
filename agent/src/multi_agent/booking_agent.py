@@ -40,11 +40,46 @@ from gemini_agent.config.booking_agent_settings import booking_agent_settings
 from google.genai import types
 from multi_agent.prompt_manager import PromptManager
 
-# Import language context for MCP tool execution
+# Gemini 2.5 Function Calling Optimization (Scope Limiting)
+# Autodiscover booking tools from MCP server (single source of truth)
+# This avoids hardcoding tool names and ensures automatic sync when tools change
+
+# Setup MCP server path for imports
 mcp_server_path = Path(__file__).parent.parent.parent.parent / "mcp_server"
 if str(mcp_server_path) not in sys.path:
     sys.path.insert(0, str(mcp_server_path))
 
+# Try to import autodiscovered booking tools
+# Fallback to hardcoded list if MCP server not available
+try:
+    from mcp_handlers.booking_handlers import get_booking_tool_names
+
+    BOOKING_TOOLS_ALLOWED = set(get_booking_tool_names())
+    _logger = __import__("logging").getLogger("booking_agent_init")
+    _logger.info(
+        f"✅ Autodiscovered {len(BOOKING_TOOLS_ALLOWED)} booking tools from MCP server"
+    )
+except ImportError as e:
+    _logger = __import__("logging").getLogger("booking_agent_init")
+    _logger.warning(
+        f"⚠️ Could not autodiscover booking tools from MCP server: {e}. "
+        f"Using fallback hardcoded list."
+    )
+    # Fallback: Hardcoded list (8 booking tools)
+    # This ensures the agent works even if MCP server is not available
+    # But updates to tools must be made in BOTH places (not ideal - prefer autodiscover)
+    BOOKING_TOOLS_ALLOWED = {
+        "create_booking",
+        "cancel_booking",
+        "reschedule_booking",
+        "get_available_slots",
+        "get_booking_by_id",
+        "list_customer_bookings",
+        "get_services",
+        "get_business_hours",
+    }
+
+# Import language context for MCP tool execution
 try:
     from utils.language_context import set_current_language
 
@@ -220,12 +255,19 @@ class BookingAgent(BaseAgent):
     ) -> str:
         """Generate response for user query with function calling support.
 
+        Implements Gemini 2.5 Best Practices:
+        - Scope limiting: Only booking tools are available
+        - Strict system instructions: Prevents hallucinations and off-topic responses
+        - Function calling with AUTO mode: Flexible, natural conversation flow
+        - Runtime scope validation: Ensures no function calls outside allowed scope
+
         This method overrides BaseAgent.generate_response() to add function
         calling loop support. When Gemini wants to call a tool, this method:
         1. Detects the function call
-        2. Executes it via MCP
-        3. Sends result back to Gemini
-        4. Repeats until text response
+        2. Validates it's in BOOKING_TOOLS_ALLOWED (scope check)
+        3. Executes it via MCP
+        4. Sends result back to Gemini
+        5. Repeats until text response
 
         Args:
             query: User query/message to respond to.
@@ -243,6 +285,11 @@ class BookingAgent(BaseAgent):
             ...     "Quiero agendar para el 2025-10-27",
             ...     customer_email="customer@example.com"
             ... )
+
+        Security Notes (Gemini 2.5):
+        - All functions validated against BOOKING_TOOLS_ALLOWED before execution
+        - System prompt includes explicit scope boundaries
+        - Out-of-scope queries are redirected to appropriate teams
         """
         # Check if client is initialized
         if not self.client:
@@ -304,12 +351,38 @@ class BookingAgent(BaseAgent):
             }
 
             # Add tools and tool config if available
+            # Implements Gemini 2.5 Function Calling Best Practices
             if self.mcp_tools:
+                # Validate tools are in allowed booking tools (scope limiting)
+                # BOOKING_TOOLS_ALLOWED is autodiscovered from get_booking_tool_names()
+                # This prevents the agent from calling unintended functions
+                # If autodiscover failed, falls back to hardcoded list
+                tool_names = {func.name for func in self.mcp_tools}
+                invalid_tools = tool_names - BOOKING_TOOLS_ALLOWED
+                if invalid_tools:
+                    self.logger.warning(
+                        f"⚠️ Invalid tools passed to BookingAgent (not in BOOKING_TOOLS_ALLOWED): "
+                        f"{invalid_tools}. These will be available but not recommended by system prompt."
+                    )
+
                 config_dict["tools"] = [types.Tool(function_declarations=self.mcp_tools)]
                 config_dict["tool_config"] = types.ToolConfig(
                     function_calling_config=types.FunctionCallingConfig(
+                        # Mode selection rationale:
+                        # - AUTO (default): Model decides when to call functions
+                        #   ✅ Flexible (can choose text or function calls)
+                        #   ✅ Good for booking (sometimes just answer questions)
+                        #   ✅ Prevents forced function calling when not needed
+                        # - ANY: Model MUST call a function (if specified allowed_function_names)
+                        #   ❌ Not ideal for booking (some queries need text only)
+                        # - NONE: No function calling (use only if debugging)
+                        #   ❌ Defeats purpose of MCP integration
                         mode=types.FunctionCallingConfigMode.AUTO,
                     )
+                )
+
+                self.logger.info(
+                    f"✅ Function calling configured: AUTO mode with {len(self.mcp_tools)} booking tools"
                 )
 
             dynamic_config = types.GenerateContentConfig(**config_dict)  # type: ignore[arg-type]
@@ -457,17 +530,47 @@ class BookingAgent(BaseAgent):
     async def _execute_function_calls(self, function_calls: list[Any]) -> list[types.Part]:
         """Execute function calls and return structured responses.
 
+        Implements scope validation (Gemini 2.5 best practice) to ensure
+        the agent only calls booking-related functions and never attempts
+        to call functions outside the allowed scope.
+
         Args:
             function_calls: List of function call objects from response.
 
         Returns:
             List of FunctionResponse Parts with structured data.
+
+        Raises:
+            ValueError: If function call attempts to call non-booking function.
         """
         function_response_parts = []
 
         for fc in function_calls:
             function_name = fc.name
             function_args = dict(fc.args)
+
+            # SCOPE VALIDATION: Gemini 2.5 Best Practice
+            # Ensure agent only calls allowed booking tools
+            if function_name not in BOOKING_TOOLS_ALLOWED:
+                self.logger.error(
+                    f"🚫 SCOPE VIOLATION: Attempted to call '{function_name}' "
+                    f"which is NOT in BOOKING_TOOLS_ALLOWED. Returning error."
+                )
+                # Return error response instead of calling the invalid function
+                response_data = {
+                    "error": f"Function '{function_name}' is not available for this agent. "
+                    f"Only booking-related functions are allowed.",
+                    "function": function_name,
+                    "allowed_functions": sorted(BOOKING_TOOLS_ALLOWED),
+                }
+                function_response_parts.append(
+                    types.Part(
+                        function_response=types.FunctionResponse(
+                            name=function_name, response=response_data
+                        )
+                    )
+                )
+                continue  # Skip to next function call
 
             self.logger.info(f"🔧 Executing: {function_name}({function_args})")
 

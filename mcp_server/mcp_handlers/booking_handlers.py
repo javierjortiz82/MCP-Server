@@ -11,9 +11,33 @@ This module provides MCP tool decorators for booking/reservation functionality:
 - Retrieve booking details
 - List customer booking history
 
+═══════════════════════════════════════════════════════════════════════════════
+🔒 SCOPE ENFORCEMENT (Gemini 2.5 Best Practice)
+═══════════════════════════════════════════════════════════════════════════════
+
+CRITICAL: All tools in this module are BOOKING-ONLY.
+
+✅ ALLOWED uses:
+   - Creating reservations
+   - Checking availability
+   - Modifying/canceling bookings
+   - Service/schedule information
+   - Booking history queries
+
+❌ FORBIDDEN uses (redirect to appropriate agent/team):
+   - Pricing/cost questions → sales team
+   - Technical troubleshooting → support team
+   - Company information → general info
+   - Billing/payments → accounting team
+
+Each tool returns ONLY verified data from database.
+NO HALLUCINATIONS. NO INVENTED DATA.
+
+═══════════════════════════════════════════════════════════════════════════════
+
 Author: Lab01-MCP Team
 Created: 2025-10-11
-Version: 1.0.0
+Version: 1.1.0 (Gemini 2.5 Scope Enforcement)
 """
 
 # NOTE: Do NOT add "from __future__ import annotations" here!
@@ -76,6 +100,22 @@ def register_booking_tools():
 
     Creates MCP tool decorators for all booking-related functionality.
     Each tool is an async wrapper around pure business logic functions.
+
+    Implements Gemini 2.5 Scope Boundaries:
+    - All tools in this module are BOOKING-ONLY (no sales, support, general queries)
+    - All tools enforce language context from agents
+    - All tools use MCP Context for logging/progress reporting
+    - All tools return structured responses (never hallucinated data)
+
+    Available Tools (8 total):
+    ✅ create_booking: New reservations
+    ✅ cancel_booking: Cancellations
+    ✅ reschedule_booking: Date/time changes
+    ✅ get_available_slots: Availability checking
+    ✅ get_booking_by_id: Booking details
+    ✅ list_customer_bookings: Customer's reservations
+    ✅ get_services: Service catalog
+    ✅ get_business_hours: Operating hours
     """
 
     @mcp.tool()  # type: ignore[union-attr]
@@ -91,6 +131,9 @@ def register_booking_tools():
         notes: str = "",
     ) -> dict[str, Any]:
         """Create a new booking/reservation appointment.
+
+        Scope: BOOKING ONLY - This tool is for creating reservations.
+        Never use for sales questions, pricing inquiries, or technical support.
 
         ** WHEN TO USE THIS TOOL **:
         ✅ Customer wants to schedule an appointment or reservation
@@ -109,6 +152,7 @@ def register_booking_tools():
         ❌ Customer wants to modify existing booking (use reschedule_booking)
         ❌ Customer wants to cancel booking (use cancel_booking)
         ❌ Missing required information (name, email, phone, service, date, time)
+        ❌ Customer asks: "¿Cuánto cuesta?" or "¿Hay descuento?" → NOT booking scope
 
         ** WHAT IT DOES **:
         1. Validates customer information and service type
@@ -244,6 +288,9 @@ def register_booking_tools():
     ) -> dict[str, Any]:
         """Cancel an existing booking/reservation.
 
+        Scope: BOOKING ONLY - Use only for canceling confirmed reservations.
+        If customer needs help with something else, redirect appropriately.
+
         ** WHEN TO USE THIS TOOL **:
         ✅ Customer wants to cancel their appointment
         ✅ Customer provides booking ID or you retrieved it from list_customer_bookings
@@ -259,6 +306,7 @@ def register_booking_tools():
         ❌ Customer wants to change date/time (use reschedule_booking instead)
         ❌ Booking ID is unknown (use list_customer_bookings first)
         ❌ Customer is just asking about cancellation policy
+        ❌ Customer asks: "¿Hay penalidad por cancelación?" → NOT a cancellation action
 
         ** WHAT IT DOES **:
         1. Marks booking as cancelled in database (soft delete)

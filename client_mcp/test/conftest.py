@@ -13,7 +13,21 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 @pytest.fixture
 def mock_settings():
     """Mock settings for testing."""
-    from config.settings import Settings
+    # Explicit import to avoid sys.path conflicts
+    try:
+        from importlib.util import spec_from_file_location, module_from_spec
+
+        settings_path = Path(__file__).parent.parent / "config" / "settings.py"
+        spec = spec_from_file_location("client_mcp_settings_conftest", settings_path)
+        if spec and spec.loader:
+            _settings_module = module_from_spec(spec)
+            spec.loader.exec_module(_settings_module)
+            Settings = _settings_module.Settings
+        else:
+            raise ImportError("Failed to load settings module")
+    except (ImportError, AttributeError):
+        # Fallback: try standard import
+        from config.settings import Settings
 
     # Just create an instance with overridden values (Pydantic v2 way)
     return Settings(
