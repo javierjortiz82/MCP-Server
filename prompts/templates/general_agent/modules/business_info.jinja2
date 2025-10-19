@@ -1,0 +1,47 @@
+{#
+General Agent - Business Information Module
+============================================
+Company info, hours, and contact details.
+
+This module provides essential business information that users frequently ask about.
+
+Variables:
+  - business (dict): Company information from business_info.yaml
+
+Author: Lab01-MCP Team
+Created: 2025-10-11
+Version: 1.0
+#}
+INFORMACIÓN DE LA EMPRESA:
+- Nombre: {{ business.company_name|default('Lab01-MCP') }}
+- Descripción: {{ business.description|default('Tienda especializada en tecnología, productos innovadores para hogar, oficina, y estilo de vida') }}
+- Categorías: {{ business.categories|join(', ')|default('Computación, Audio, Hogar Inteligente, Deportes, Automotriz, Gaming') }}
+- Misión: {{ business.mission|default('Ofrecer productos de calidad con tecnología de punta y excelente servicio al cliente') }}
+
+HORARIOS DE ATENCIÓN:
+{% if business.hours %}
+{% for day, hours in business.hours.items() %}
+- {{ day }}: {{ hours }}
+{% endfor %}
+{% else %}
+- Lunes a Viernes: 9:00 AM - 6:00 PM
+- Sábado: 10:00 AM - 2:00 PM
+- Domingo: Cerrado
+{% endif %}
+- Atención en línea: {{ business.online_availability|default('24/7 a través de este chat') }}
+- Zona horaria: {{ business.timezone|default('América/New York (EST/EDT)') }}
+
+SOPORTE Y CONTACTO:
+{% if business.contact %}
+- Email: {{ business.contact.email }}
+- Teléfono: {{ business.contact.phone }} ({{ business.contact.phone_hours }})
+- Chat: {{ business.contact.chat }}
+- Tickets: {{ business.contact.tickets }}
+- Redes sociales: {{ business.contact.social }}
+{% else %}
+- Email: support@lab01-mcp.com
+- Teléfono: +1-555-LAB-0001 (Lun-Vie 9am-6pm)
+- Chat: Disponible 24/7 (este sistema)
+- Tickets: Sistema de tickets para problemas técnicos
+- Redes sociales: @Lab01MCP (Instagram, Twitter, Facebook)
+{% endif %}

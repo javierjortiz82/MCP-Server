@@ -1,0 +1,126 @@
+{#
+Booking Agent System Prompt - Modular Template (v2.0)
+======================================================
+Master template that orchestrates all booking agent modules with
+enhanced UX, intent detection, and dynamic context.
+
+MODULAR ARCHITECTURE:
+├─ base.jinja2: Identity and role definition
+├─ modules/smart_greeting.jinja2: Proactive initial greeting with menu
+├─ modules/intent_detection.jinja2: Automatic intent classification
+├─ modules/context_enrichment.jinja2: Dynamic services and availability
+├─ modules/tool_usage_rules.jinja2: Function calling guidelines
+├─ modules/confirmation_flow.jinja2: Booking workflow (A/B testable)
+├─ modules/data_requirements.jinja2: Required data for operations
+├─ modules/flexible_dates.jinja2: Date parsing and relative dates
+├─ modules/examples.jinja2: Few-shot examples and formatting
+└─ modules/ux_best_practices.jinja2: Error handling and UX patterns
+
+VERSION HISTORY:
+  v1.0 (2025-10-11): Initial modular version with basic workflow
+  v1.1 (2025-10-11): Enhanced pre-confirmation flow (A/B testing)
+  v2.0 (2025-10-19): Smart UX with intent detection and dynamic context
+    - Added smart greeting with proactive menu
+    - Added intent detection for better routing
+    - Added context enrichment for zero hardcoding
+    - Improved conversation flow and recommendations
+
+KEY IMPROVEMENTS v2.0:
+  ✅ Zero hardcoding of services/times
+  ✅ Automatic intent detection
+  ✅ Proactive availability display
+  ✅ Dynamic context from database
+  ✅ Predictive guidance
+  ✅ Better error handling
+
+Variables:
+  - version (str): Template version identifier
+  - services (list): Available services from database
+  - customer_email (str, optional): Current customer email
+  - show_pre_confirmation_summary (bool): A/B test parameter
+  - current_date (str): Today's date (YYYY-MM-DD)
+  - current_day_es (str): Today's day name in Spanish
+  - current_datetime (datetime): Full datetime for context
+
+Author: Lab01-MCP Team
+Created: 2025-10-11
+Updated: 2025-10-19 (v2.0 - Smart UX + Intent Detection)
+Version: {{ version|default('v2.0') }}
+#}
+
+{# ================================================================ #}
+{# PHASE 1: CORE IDENTITY & ROLE                                   #}
+{# ================================================================ #}
+{% include 'booking_agent/base.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 2: DYNAMIC CONTEXT ENRICHMENT (No Hardcoding!)            #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/context_enrichment.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 3: SMART GREETING & INITIAL INTERACTION                   #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/smart_greeting.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 4: INTENT DETECTION FOR SMART ROUTING                     #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/intent_detection.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 5: TOOL USAGE RULES (Critical)                            #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/tool_usage_rules.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 6: CONFIRMATION FLOW (Workflow)                           #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/confirmation_flow.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 7: DATA REQUIREMENTS & VALIDATION                         #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/data_requirements.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 8: FLEXIBLE DATE PARSING (Relative Dates)                 #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/flexible_dates.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 9: FEW-SHOT EXAMPLES (Pattern Learning)                   #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/examples.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 10: UX BEST PRACTICES (Error Handling)                    #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/ux_best_practices.jinja2' %}
+
+{# ================================================================ #}
+{# SUMMARY OF EXECUTION ORDER                                       #}
+{# ================================================================ #}
+
+{#
+AGENT EXECUTION FLOW:
+
+1. Load context: services, dates, customer_email
+2. Show smart greeting with menu (if first turn)
+3. Receive user query
+4. Detect intent automatically (create/cancel/reschedule/info)
+5. Route to appropriate workflow based on intent
+6. Call necessary tools in order specified
+7. Validate responses against rules
+8. Format output with UX best practices
+9. Provide next steps or fallback options
+
+CRITICAL RULES:
+- Tool calls ONLY after reading user input
+- Intent detection BEFORE tool selection
+- No hallucinations (use tool data or nothing)
+- Always confirm destructive operations
+- No hardcoding (all from context or tools)
+- Flexible date parsing with explicit examples
+-#}
+
