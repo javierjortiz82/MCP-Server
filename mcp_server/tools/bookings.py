@@ -822,6 +822,8 @@ def reschedule_booking(
 
     # Update Google Calendar event if exists
     calendar_updated = False
+    calendar_link = booking.get("google_calendar_link")  # Keep existing link if available
+
     if booking["google_calendar_event_id"]:
         try:
             calendar_client = _get_calendar_client()
@@ -849,20 +851,59 @@ def reschedule_booking(
             logger.warning(f"Failed to update calendar event: {exc}")
             # Continue anyway - calendar is optional
 
+    # If google_calendar_link is NULL, try to create one or retrieve it from the event
+    if not calendar_link and settings.GOOGLE_CALENDAR_ENABLED:
+        try:
+            calendar_client = _get_calendar_client()
+            if calendar_client:
+                if booking["google_calendar_event_id"]:
+                    # Try to get the link from existing event
+                    event = calendar_client.get_event(booking["google_calendar_event_id"])
+                    if event:
+                        calendar_link = event.html_link
+                        logger.info(
+                            f"Retrieved Google Calendar link for existing event: {booking['google_calendar_event_id']}"
+                        )
+                else:
+                    # Create new Google Calendar event if we don't have one
+                    start_datetime = _format_datetime_iso(new_date, new_time)
+                    end_time = (
+                        datetime.fromisoformat(f"{new_date}T{new_time}:00")
+                        + timedelta(minutes=booking["duration_minutes"])
+                    ).strftime("%H:%M")
+                    end_datetime = _format_datetime_iso(new_date, end_time)
+
+                    event = calendar_client.create_event(
+                        summary=f"{booking['service_type']} - {booking['customer_name']}",
+                        description=f"Service: {booking['service_type']}\nCustomer: {booking['customer_name']}\nNotes: {booking.get('notes', '')}",
+                        start_datetime=start_datetime,
+                        end_datetime=end_datetime,
+                        attendee_email=booking["customer_email"],
+                    )
+
+                    calendar_link = event.html_link
+                    logger.info(
+                        f"Created new Google Calendar event for rescheduled booking: {event.event_id}"
+                    )
+        except Exception as exc:
+            logger.warning(f"Failed to create/retrieve Google Calendar link: {exc}")
+            # Continue anyway - calendar is optional
+
     # Update database
     try:
         update_sql = f"""
         UPDATE {settings.SCHEMA_NAME}.appointments
         SET booking_date = %s,
             booking_time = %s,
-            status = %s
+            status = %s,
+            google_calendar_link = %s
         WHERE id = %s
-        RETURNING booking_date, booking_time, status
+        RETURNING booking_date, booking_time, status, google_calendar_link
         """
 
         result = fetchone(
             update_sql,
-            (new_date, new_time, BookingStatus.RESCHEDULED.value, booking_id),
+            (new_date, new_time, BookingStatus.RESCHEDULED.value, calendar_link, booking_id),
             commit=True,
         )  # UPDATE requires commit
 
@@ -872,12 +913,16 @@ def reschedule_booking(
 
         logger.info(f"✅ Booking rescheduled successfully: ID={booking_id}")
 
+        # Get updated calendar link from result if available
+        updated_calendar_link = result.get("google_calendar_link") or calendar_link
+
         reschedule_response = {
             "booking_id": booking_id,
             "status": result["status"],
             "new_date": str(result["booking_date"]),
             "new_time": str(result["booking_time"]),
             "calendar_event_updated": calendar_updated,
+            "google_calendar_link": updated_calendar_link,
         }
 
         # Enqueue rescheduled email
@@ -891,7 +936,7 @@ def reschedule_booking(
                 "booking_date": new_date,
                 "booking_time": new_time,
             },
-            calendar_link=booking.get("google_calendar_link"),
+            calendar_link=updated_calendar_link,
             old_date=str(booking["booking_date"]),
             old_time=str(booking["booking_time"]),
         )
