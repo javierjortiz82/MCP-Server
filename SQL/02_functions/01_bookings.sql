@@ -61,7 +61,7 @@ DECLARE
     v_day_of_week INTEGER;
     v_open_time TIME;
     v_close_time TIME;
-    v_hours_exist BOOLEAN;
+    v_hours_exist BOOLEAN := false;
 BEGIN
     -- Calculate end time
     v_end_time := p_booking_time + (p_duration_minutes || ' minutes')::INTERVAL;
@@ -73,7 +73,6 @@ BEGIN
 
     -- HYBRID SCHEDULING LOGIC:
     -- Step 1: Try to get service-specific hours if service_type provided
-    v_hours_exist := false;
     IF p_service_type IS NOT NULL THEN
         SELECT INTO v_open_time, v_close_time, v_hours_exist
             sh.open_time, sh.close_time, true
@@ -84,15 +83,21 @@ BEGIN
         AND sh.active = true
         ORDER BY sh.priority ASC
         LIMIT 1;
+        -- IMPORTANT: If SELECT INTO finds no rows, it sets ALL variables to NULL
+        -- (including v_hours_exist which was initialized to false).
+        -- Reset v_hours_exist if needed
+        IF v_hours_exist IS NULL THEN
+            v_hours_exist := false;
+        END IF;
     END IF;
 
     -- Step 2: If no service-specific hours, fall back to business_hours
     IF NOT v_hours_exist THEN
         SELECT INTO v_open_time, v_close_time
-            open_time, close_time
-        FROM :SCHEMA_NAME.business_hours
-        WHERE day_of_week = v_day_of_week
-        AND active = true;
+            bh.open_time, bh.close_time
+        FROM :SCHEMA_NAME.business_hours bh
+        WHERE bh.day_of_week = v_day_of_week
+        AND bh.active = true;
     END IF;
 
     -- Check if we found valid hours
