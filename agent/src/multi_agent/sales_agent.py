@@ -300,9 +300,8 @@ class SalesAgent(BaseAgent):
         if self.pagination_manager._db and self.pagination_manager._db.is_enabled:
             self.logger.info("💾 Persistencia de paginación: ACTIVA")
             self.logger.info(
-                f"   📊 Database: {settings.PAGINATION_DB_NAME} "
-                f"(TTL: {settings.PAGINATION_TTL_HOURS}h, "
-                f"Page size: {settings.PAGINATION_PAGE_SIZE})"
+                f"   📊 Contexto TTL: {settings.PAGINATION_TTL_HOURS}h, "
+                f"Tamaño página: {settings.PAGINATION_PAGE_SIZE}"
             )
         else:
             self.logger.info("💾 Persistencia de paginación: Solo memoria")

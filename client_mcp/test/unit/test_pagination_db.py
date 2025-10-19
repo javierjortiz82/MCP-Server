@@ -16,11 +16,7 @@ class TestPaginationDBInit:
     def test_init_with_persistence_enabled(self, mock_pool_class, mock_settings):
         """Test initialization with persistence enabled."""
         mock_settings.PAGINATION_PERSISTENCE_ENABLED = True
-        mock_settings.PAGINATION_DB_HOST = "localhost"
-        mock_settings.PAGINATION_DB_PORT = 5434
-        mock_settings.PAGINATION_DB_NAME = "sales"
-        mock_settings.PAGINATION_DB_USER = "postgres"
-        mock_settings.PAGINATION_DB_PASSWORD = "password"
+        mock_settings.DATABASE_URL = "postgresql://postgres:password@localhost:5434/sales"
 
         mock_pool = MagicMock()
         mock_pool_class.return_value = mock_pool
@@ -46,11 +42,7 @@ class TestPaginationDBInit:
     def test_init_pool_failure(self, mock_pool_class, mock_settings):
         """Test initialization handles pool creation failure gracefully."""
         mock_settings.PAGINATION_PERSISTENCE_ENABLED = True
-        mock_settings.PAGINATION_DB_HOST = "localhost"
-        mock_settings.PAGINATION_DB_PORT = 5434
-        mock_settings.PAGINATION_DB_NAME = "sales"
-        mock_settings.PAGINATION_DB_USER = "postgres"
-        mock_settings.PAGINATION_DB_PASSWORD = "password"
+        mock_settings.DATABASE_URL = "postgresql://postgres:password@localhost:5434/sales"
 
         # Simulate connection error
         mock_pool_class.side_effect = Exception("Connection failed")
@@ -70,11 +62,7 @@ class TestSaveContext:
     def test_save_context_success(self, mock_pool_class, mock_settings):
         """Test saving context successfully."""
         mock_settings.PAGINATION_PERSISTENCE_ENABLED = True
-        mock_settings.PAGINATION_DB_HOST = "localhost"
-        mock_settings.PAGINATION_DB_PORT = 5434
-        mock_settings.PAGINATION_DB_NAME = "sales"
-        mock_settings.PAGINATION_DB_USER = "postgres"
-        mock_settings.PAGINATION_DB_PASSWORD = "password"
+        mock_settings.DATABASE_URL = "postgresql://postgres:password@localhost:5434/sales"
         mock_settings.PAGINATION_TTL_HOURS = 24
 
         mock_pool = MagicMock()
@@ -128,11 +116,7 @@ class TestSaveContext:
     def test_save_context_handles_error(self, mock_pool_class, mock_settings):
         """Test save_context handles database errors gracefully."""
         mock_settings.PAGINATION_PERSISTENCE_ENABLED = True
-        mock_settings.PAGINATION_DB_HOST = "localhost"
-        mock_settings.PAGINATION_DB_PORT = 5434
-        mock_settings.PAGINATION_DB_NAME = "sales"
-        mock_settings.PAGINATION_DB_USER = "postgres"
-        mock_settings.PAGINATION_DB_PASSWORD = "password"
+        mock_settings.DATABASE_URL = "postgresql://postgres:password@localhost:5434/sales"
         mock_settings.PAGINATION_TTL_HOURS = 24
 
         mock_pool = MagicMock()
@@ -168,11 +152,7 @@ class TestLoadContext:
     def test_load_context_success(self, mock_pool_class, mock_settings):
         """Test loading context successfully."""
         mock_settings.PAGINATION_PERSISTENCE_ENABLED = True
-        mock_settings.PAGINATION_DB_HOST = "localhost"
-        mock_settings.PAGINATION_DB_PORT = 5434
-        mock_settings.PAGINATION_DB_NAME = "sales"
-        mock_settings.PAGINATION_DB_USER = "postgres"
-        mock_settings.PAGINATION_DB_PASSWORD = "password"
+        mock_settings.DATABASE_URL = "postgresql://postgres:password@localhost:5434/sales"
 
         mock_pool = MagicMock()
         mock_conn = MagicMock()
@@ -223,11 +203,7 @@ class TestLoadContext:
     def test_load_context_not_found(self, mock_pool_class, mock_settings):
         """Test load_context returns None when context not found."""
         mock_settings.PAGINATION_PERSISTENCE_ENABLED = True
-        mock_settings.PAGINATION_DB_HOST = "localhost"
-        mock_settings.PAGINATION_DB_PORT = 5434
-        mock_settings.PAGINATION_DB_NAME = "sales"
-        mock_settings.PAGINATION_DB_USER = "postgres"
-        mock_settings.PAGINATION_DB_PASSWORD = "password"
+        mock_settings.DATABASE_URL = "postgresql://postgres:password@localhost:5434/sales"
 
         mock_pool = MagicMock()
         mock_conn = MagicMock()
@@ -253,11 +229,7 @@ class TestDeleteContext:
     def test_delete_context_success(self, mock_pool_class, mock_settings):
         """Test deleting context successfully."""
         mock_settings.PAGINATION_PERSISTENCE_ENABLED = True
-        mock_settings.PAGINATION_DB_HOST = "localhost"
-        mock_settings.PAGINATION_DB_PORT = 5434
-        mock_settings.PAGINATION_DB_NAME = "sales"
-        mock_settings.PAGINATION_DB_USER = "postgres"
-        mock_settings.PAGINATION_DB_PASSWORD = "password"
+        mock_settings.DATABASE_URL = "postgresql://postgres:password@localhost:5434/sales"
 
         mock_pool = MagicMock()
         mock_conn = MagicMock()
@@ -295,11 +267,7 @@ class TestCleanupExpired:
     def test_cleanup_expired_success(self, mock_pool_class, mock_settings):
         """Test cleanup expired contexts successfully."""
         mock_settings.PAGINATION_PERSISTENCE_ENABLED = True
-        mock_settings.PAGINATION_DB_HOST = "localhost"
-        mock_settings.PAGINATION_DB_PORT = 5434
-        mock_settings.PAGINATION_DB_NAME = "sales"
-        mock_settings.PAGINATION_DB_USER = "postgres"
-        mock_settings.PAGINATION_DB_PASSWORD = "password"
+        mock_settings.DATABASE_URL = "postgresql://postgres:password@localhost:5434/sales"
 
         mock_pool = MagicMock()
         mock_conn = MagicMock()
@@ -335,11 +303,7 @@ class TestCleanupSession:
     def test_cleanup_session_success(self, mock_pool_class, mock_settings):
         """Test cleanup session contexts successfully."""
         mock_settings.PAGINATION_PERSISTENCE_ENABLED = True
-        mock_settings.PAGINATION_DB_HOST = "localhost"
-        mock_settings.PAGINATION_DB_PORT = 5434
-        mock_settings.PAGINATION_DB_NAME = "sales"
-        mock_settings.PAGINATION_DB_USER = "postgres"
-        mock_settings.PAGINATION_DB_PASSWORD = "password"
+        mock_settings.DATABASE_URL = "postgresql://postgres:password@localhost:5434/sales"
 
         mock_pool = MagicMock()
         mock_conn = MagicMock()
@@ -365,11 +329,7 @@ class TestClose:
     def test_close(self, mock_pool_class, mock_settings):
         """Test closing database pool."""
         mock_settings.PAGINATION_PERSISTENCE_ENABLED = True
-        mock_settings.PAGINATION_DB_HOST = "localhost"
-        mock_settings.PAGINATION_DB_PORT = 5434
-        mock_settings.PAGINATION_DB_NAME = "sales"
-        mock_settings.PAGINATION_DB_USER = "postgres"
-        mock_settings.PAGINATION_DB_PASSWORD = "password"
+        mock_settings.DATABASE_URL = "postgresql://postgres:password@localhost:5434/sales"
 
         mock_pool = MagicMock()
         mock_pool_class.return_value = mock_pool
@@ -388,11 +348,7 @@ class TestIsEnabled:
     def test_is_enabled_true(self, mock_pool_class, mock_settings):
         """Test is_enabled returns True when persistence is working."""
         mock_settings.PAGINATION_PERSISTENCE_ENABLED = True
-        mock_settings.PAGINATION_DB_HOST = "localhost"
-        mock_settings.PAGINATION_DB_PORT = 5434
-        mock_settings.PAGINATION_DB_NAME = "sales"
-        mock_settings.PAGINATION_DB_USER = "postgres"
-        mock_settings.PAGINATION_DB_PASSWORD = "password"
+        mock_settings.DATABASE_URL = "postgresql://postgres:password@localhost:5434/sales"
 
         mock_pool = MagicMock()
         mock_pool_class.return_value = mock_pool
