@@ -95,7 +95,6 @@ services:
     volumes:
       - mcp_logs:/app/logs
       - ../email_service:/app/email_service:ro
-      - ../credentials:/credentials:ro
     networks:
       - mcp-network
     depends_on:
