@@ -57,16 +57,12 @@ try:
     if str(mcp_server_lang_path) not in sys.path:
         sys.path.insert(0, str(mcp_server_lang_path))
     from utils.language_context import set_current_language  # noqa: E402
-    from utils.language_detector import detect_language_from_query  # noqa: E402
     LANGUAGE_CONTEXT_AVAILABLE = True
 except ImportError:
     LANGUAGE_CONTEXT_AVAILABLE = False
     def set_current_language(lang: str) -> None:  # noqa: F811
         """No-op when language context not available."""
         pass
-    def detect_language_from_query(query: str) -> str:  # noqa: F811
-        """Fallback language detection - returns default Spanish."""
-        return "es"
 
 # Setup logger BEFORE using it
 logger = get_logger("agent_orchestrator")
@@ -272,7 +268,7 @@ class AgentOrchestrator:
         """Process user query through appropriate agent(s).
 
         This is the main entry point for all user queries. It:
-        1. Routes to OdiseoBot if routing disabled (legacy mode)
+        1. Routes to SalesAgent if routing disabled (single-agent mode)
         2. Classifies intent and routes to specialized agent if enabled
 
         Args:
@@ -293,7 +289,7 @@ class AgentOrchestrator:
             ... )
         """
         if not self.routing_enabled:
-            # Legacy mode: Route to OdiseoBot
+            # Single-agent mode: Route to SalesAgent only
             return await self._process_legacy(query)
 
         else:
