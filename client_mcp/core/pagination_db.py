@@ -161,7 +161,8 @@ class PaginationDB:
             }
 
             with self._get_connection() as conn, conn.cursor() as cur:
-                # Upsert: Insert or update if session_id + context_type exists
+                # Upsert: Insert or update if context_name exists
+                # Note: Always use "custom" as context_type to satisfy CHECK constraint
                 cur.execute(
                     f"""
                     INSERT INTO {self._schema}.pagination_contexts (
@@ -182,7 +183,7 @@ class PaginationDB:
                     """,
                     (
                         context_name,
-                        category,  # context_type
+                        "custom",  # context_type (use "custom" to satisfy CHECK constraint)
                         str(session_id),
                         last_offset,
                         page_size,  # last_limit
