@@ -28,17 +28,14 @@ def test_ab_testing_disabled():
         manager = PromptManager()
 
         # Verify A/B testing is disabled
-        ab_config = manager.config.get('ab_testing', {})
-        is_enabled = ab_config.get('enabled', False)
+        ab_config = manager.config.get("ab_testing", {})
+        is_enabled = ab_config.get("enabled", False)
 
         print(f"\n✅ A/B testing enabled: {is_enabled}")
         print(f"✅ Active sales version: {manager.config['active_versions']['sales']}")
 
         # Test with user_id (should still use default since AB testing disabled)
-        prompt = manager.get_sales_prompt(
-            user_id="test_user_123",
-            mcp_tools=None
-        )
+        prompt = manager.get_sales_prompt(user_id="test_user_123", mcp_tools=None)
 
         # Should use default pagination (4)
         checks = [
@@ -57,6 +54,7 @@ def test_ab_testing_disabled():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -72,15 +70,14 @@ def test_version_selector():
 
         # Test with A/B testing disabled
         version, pagination = manager._select_ab_test_version(
-            agent='sales',
-            user_id='test_user_123'
+            agent="sales", user_id="test_user_123"
         )
 
         print(f"\n✅ Selected version: {version}")
         print(f"✅ Selected pagination: {pagination}")
 
         checks = [
-            ("Version is v1.0 (default)", version == 'v1.0'),
+            ("Version is v1.0 (default)", version == "v1.0"),
             ("Pagination is 4 (default)", pagination == 4),
         ]
 
@@ -95,6 +92,7 @@ def test_version_selector():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -109,7 +107,7 @@ def test_experiment_config_loading():
         manager = PromptManager()
 
         # Get pagination experiment config
-        exp = manager.get_experiment_config('sales_pagination_6_products')
+        exp = manager.get_experiment_config("sales_pagination_6_products")
 
         if exp:
             print(f"\n✅ Experiment found: {exp['name']}")
@@ -117,17 +115,21 @@ def test_experiment_config_loading():
             print(f"✅ Agent: {exp['agent']}")
             print(f"✅ Enabled: {exp['enabled']}")
             print(f"✅ Traffic split: {exp['traffic_split']}")
-            print(f"✅ Version A: {exp['version_a']} (pagination: {exp['version_a_params']['pagination_page_size']})")
-            print(f"✅ Version B: {exp['version_b']} (pagination: {exp['version_b_params']['pagination_page_size']})")
+            print(
+                f"✅ Version A: {exp['version_a']} (pagination: {exp['version_a_params']['pagination_page_size']})"
+            )
+            print(
+                f"✅ Version B: {exp['version_b']} (pagination: {exp['version_b_params']['pagination_page_size']})"
+            )
 
             checks = [
                 ("Experiment found", exp is not None),
-                ("Correct agent", exp['agent'] == 'sales'),
-                ("Has version_a", 'version_a' in exp),
-                ("Has version_b", 'version_b' in exp),
-                ("Has traffic_split", 'traffic_split' in exp),
-                ("Version A pagination is 4", exp['version_a_params']['pagination_page_size'] == 4),
-                ("Version B pagination is 6", exp['version_b_params']['pagination_page_size'] == 6),
+                ("Correct agent", exp["agent"] == "sales"),
+                ("Has version_a", "version_a" in exp),
+                ("Has version_b", "version_b" in exp),
+                ("Has traffic_split", "traffic_split" in exp),
+                ("Version A pagination is 4", exp["version_a_params"]["pagination_page_size"] == 4),
+                ("Version B pagination is 6", exp["version_b_params"]["pagination_page_size"] == 6),
             ]
 
             print("\nChecks:")
@@ -144,6 +146,7 @@ def test_experiment_config_loading():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -162,25 +165,22 @@ def test_ab_testing_enabled_simulation():
         original_config = manager.config.copy()
 
         # Enable A/B testing temporarily
-        manager.config['ab_testing']['enabled'] = True
-        manager.config['ab_testing']['experiments'][0]['enabled'] = True
+        manager.config["ab_testing"]["enabled"] = True
+        manager.config["ab_testing"]["experiments"][0]["enabled"] = True
 
         print(f"✅ A/B testing enabled: {manager.config['ab_testing']['enabled']}")
         print(f"✅ Experiment enabled: {manager.config['ab_testing']['experiments'][0]['enabled']}")
 
         # Test with multiple users (should bucket into variants)
-        test_users = ['user_1', 'user_2', 'user_3', 'user_4', 'user_5']
+        test_users = ["user_1", "user_2", "user_3", "user_4", "user_5"]
         results = {}
 
         for user_id in test_users:
-            version, pagination = manager._select_ab_test_version(
-                agent='sales',
-                user_id=user_id
-            )
+            version, pagination = manager._select_ab_test_version(agent="sales", user_id=user_id)
             results[user_id] = {
-                'version': version,
-                'pagination': pagination,
-                'variant': 'A' if version == 'v1.0' else 'B'
+                "version": version,
+                "pagination": pagination,
+                "variant": "A" if version == "v1.0" else "B",
             }
 
         print("\nUser Bucketing Results:")
@@ -188,16 +188,22 @@ def test_ab_testing_enabled_simulation():
             print(f"  {user_id}: {result['variant']} (pagination={result['pagination']})")
 
         # Count variants
-        variant_a_count = sum(1 for r in results.values() if r['variant'] == 'A')
-        variant_b_count = sum(1 for r in results.values() if r['variant'] == 'B')
+        variant_a_count = sum(1 for r in results.values() if r["variant"] == "A")
+        variant_b_count = sum(1 for r in results.values() if r["variant"] == "B")
 
         print(f"\n✅ Variant A: {variant_a_count} users (4 products)")
         print(f"✅ Variant B: {variant_b_count} users (6 products)")
 
         checks = [
             ("Both variants used", variant_a_count > 0 and variant_b_count > 0),
-            ("Variant A has pagination 4", all(r['pagination'] == 4 for r in results.values() if r['variant'] == 'A')),
-            ("Variant B has pagination 6", all(r['pagination'] == 6 for r in results.values() if r['variant'] == 'B')),
+            (
+                "Variant A has pagination 4",
+                all(r["pagination"] == 4 for r in results.values() if r["variant"] == "A"),
+            ),
+            (
+                "Variant B has pagination 6",
+                all(r["pagination"] == 6 for r in results.values() if r["variant"] == "B"),
+            ),
         ]
 
         print("\nChecks:")
@@ -214,6 +220,7 @@ def test_ab_testing_enabled_simulation():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -228,18 +235,15 @@ def test_deterministic_bucketing():
         manager = PromptManager()
 
         # Enable A/B testing
-        manager.config['ab_testing']['enabled'] = True
-        manager.config['ab_testing']['experiments'][0]['enabled'] = True
+        manager.config["ab_testing"]["enabled"] = True
+        manager.config["ab_testing"]["experiments"][0]["enabled"] = True
 
         # Test same user multiple times
-        user_id = 'consistent_user_123'
+        user_id = "consistent_user_123"
         results = []
 
         for i in range(5):
-            version, pagination = manager._select_ab_test_version(
-                agent='sales',
-                user_id=user_id
-            )
+            version, pagination = manager._select_ab_test_version(agent="sales", user_id=user_id)
             results.append((version, pagination))
 
         print(f"\n✅ User '{user_id}' tested 5 times:")
@@ -251,8 +255,8 @@ def test_deterministic_bucketing():
 
         checks = [
             ("All results identical (deterministic)", all_same),
-            ("Consistent version", len(set(r[0] for r in results)) == 1),
-            ("Consistent pagination", len(set(r[1] for r in results)) == 1),
+            ("Consistent version", len({r[0] for r in results}) == 1),
+            ("Consistent pagination", len({r[1] for r in results}) == 1),
         ]
 
         print("\nChecks:")
@@ -266,6 +270,7 @@ def test_deterministic_bucketing():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

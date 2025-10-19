@@ -142,7 +142,9 @@ class TestToolCache:
     def test_cache_tool_with_wrapper(self):
         """Test caching tool with callable wrapper."""
         cache = ToolCache()
-        wrapper = lambda x: x * 2
+
+        def wrapper(x):
+            return x * 2
 
         cache.cache_tool(
             name="calc",

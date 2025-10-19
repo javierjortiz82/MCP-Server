@@ -1,7 +1,6 @@
 """Unit tests for error handling utilities."""
 
 import pytest
-
 from utils.error_handler import (
     ApplicationError,
     DatabaseError,

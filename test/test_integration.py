@@ -40,18 +40,19 @@ class TestSystemIntegration:
             # Setup mock response
             mock_response = AsyncMock()
             mock_response.candidates = [
-                Mock(content=Mock(parts=[Mock(text="Test response")]))
+                Mock(content=Mock(parts=[Mock(text="Test response")])),
             ]
 
             mock_client.aio.models.generate_content = AsyncMock(
-                return_value=mock_response
+                return_value=mock_response,
             )
 
             await agent.initialize()
 
             # Test response generation
             response = await agent.generate_response(
-                prompt="Test prompt", system_prompt="Test system"
+                prompt="Test prompt",
+                system_prompt="Test system",
             )
 
             assert response.candidates[0].content.parts[0].text == "Test response"
@@ -74,10 +75,12 @@ class TestSystemIntegration:
 
         for i in range(25):
             user_msg = types.Content(
-                role="user", parts=[types.Part(text=f"Message {i}")]
+                role="user",
+                parts=[types.Part(text=f"Message {i}")],
             )
             model_msg = types.Content(
-                role="model", parts=[types.Part(text=f"Response {i}")]
+                role="model",
+                parts=[types.Part(text=f"Response {i}")],
             )
             agent.add_to_history(user_msg, model_msg)
 
@@ -94,7 +97,10 @@ class TestSystemIntegration:
 
         # Update configuration
         agent.update_generation_config(
-            temperature=0.8, top_k=50, top_p=0.95, max_output_tokens=4096
+            temperature=0.8,
+            top_k=50,
+            top_p=0.95,
+            max_output_tokens=4096,
         )
 
         assert agent._generation_config.temperature == 0.8
@@ -130,11 +136,14 @@ class TestSystemIntegration:
             await agent.generate_response("test")
 
         # Test initialization failure
-        with patch(
-            "agent.gemini_agent.genai.Client", side_effect=Exception("API Error")
+        with (
+            patch(
+                "agent.gemini_agent.genai.Client",
+                side_effect=Exception("API Error"),
+            ),
+            pytest.raises(Exception, match="API Error"),
         ):
-            with pytest.raises(Exception, match="API Error"):
-                await agent.initialize()
+            await agent.initialize()
 
 
 class TestEndToEnd:
@@ -142,7 +151,8 @@ class TestEndToEnd:
 
     @pytest.mark.asyncio
     @pytest.mark.skipif(
-        not os.getenv("GOOGLE_API_KEY"), reason="No API key for E2E tests"
+        not os.getenv("GOOGLE_API_KEY"),
+        reason="No API key for E2E tests",
     )
     async def test_real_agent_flow(self):
         """Test real agent flow with actual API (requires API key)."""
@@ -156,7 +166,8 @@ class TestEndToEnd:
 
             # Generate simple response
             response = await agent.generate_response(
-                prompt="Say 'Hello, World!' and nothing else", include_history=False
+                prompt="Say 'Hello, World!' and nothing else",
+                include_history=False,
             )
 
             # Check response
@@ -181,7 +192,7 @@ class TestEndToEnd:
             async def mock_generate(model, contents, config, tools, tool_config):
                 await asyncio.sleep(0.1)  # Simulate delay
                 return AsyncMock(
-                    candidates=[Mock(content=Mock(parts=[Mock(text="Response")]))]
+                    candidates=[Mock(content=Mock(parts=[Mock(text="Response")]))],
                 )
 
             mock_client.aio.models.generate_content = mock_generate
@@ -205,8 +216,9 @@ class TestValidation:
         """Test that all required modules can be imported."""
         try:
             # Test imports - not actually using them, just checking availability
-            import agent  # noqa: F401
             import google.genai  # noqa: F401
+
+            import agent  # noqa: F401
 
             assert True
         except ImportError as e:

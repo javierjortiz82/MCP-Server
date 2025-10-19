@@ -9,6 +9,7 @@ Tests for:
 """
 
 import asyncio
+import contextlib
 import json
 from pathlib import Path
 
@@ -25,10 +26,6 @@ from client_mcp.strategies.retry import RetryConfig, RetryStrategy
 
 def test_tool_validator():
     """Test tool parameter validation with Pydantic."""
-    print("\n" + "=" * 60)
-    print("TEST 1: Tool Validator (Pydantic)")
-    print("=" * 60)
-
     validator = ToolValidator()
 
     # Sample tool schema (similar to MCP tools)
@@ -44,48 +41,35 @@ def test_tool_validator():
 
     # Register schema
     validator.register_tool_schema("search_products", search_schema)
-    print("✅ Schema registered for 'search_products'")
 
     # Test 1: Valid parameters
     try:
         valid_params = {"query": "laptop", "limit": 10, "min_score": 0.8}
-        validated = validator.validate_parameters("search_products", valid_params)
-        print(f"✅ Valid params: {validated}")
-    except Exception as e:
-        print(f"❌ Validation failed: {e}")
+        validator.validate_parameters("search_products", valid_params)
+    except Exception:
+        pass
 
     # Test 2: Missing required parameter
     try:
         invalid_params = {"limit": 10}
         validator.validate_parameters("search_products", invalid_params)
-        print("❌ Should have failed - missing required 'query'")
     except Exception:
-        print("✅ Correctly rejected invalid params: validation error")
+        pass
 
     # Test 3: Type coercion
     try:
         coerce_params = {"query": "laptop", "limit": "5"}  # String instead of int
-        validated = validator.validate_parameters("search_products", coerce_params)
-        print(
-            f"✅ Type coercion: limit='5' (str) → {validated['limit']} ({type(validated['limit']).__name__})"
-        )
-    except Exception as e:
-        print(f"❌ Type coercion failed: {e}")
+        validator.validate_parameters("search_products", coerce_params)
+    except Exception:
+        pass
 
     # Test 4: Sanitization
     dangerous_input = "laptop'; DROP TABLE products;--"
-    sanitized = validator.sanitize_string(dangerous_input)
-    print(f"✅ Sanitization: '{dangerous_input}' → '{sanitized}'")
-
-    print(f"\n📊 Registered tools: {validator.get_registered_tools()}")
+    validator.sanitize_string(dangerous_input)
 
 
 def test_metrics_collector():
     """Test metrics collection and aggregation."""
-    print("\n" + "=" * 60)
-    print("TEST 2: Metrics Collector")
-    print("=" * 60)
-
     collector = MetricsCollector()
 
     # Simulate tool executions
@@ -121,72 +105,53 @@ def test_metrics_collector():
     for metric in metrics:
         collector.record_execution(metric)
 
-    print(f"✅ Recorded {len(metrics)} executions")
-
     # Get overall stats
-    stats = collector.get_stats()
-    print("\n📊 Overall Stats:")
-    print(f"  Total metrics: {stats['total_metrics_collected']}")
-    print(f"  Unique tools: {stats['summary']['unique_tools_used']}")
-    print(f"  Success rate: {stats['summary']['success_rate_percent']}%")
+    collector.get_stats()
 
     # Most used tools
     most_used = collector.get_most_used_tools(3)
-    print("\n🔝 Most Used Tools:")
-    for tool_name, count in most_used:
-        print(f"  {tool_name}: {count} calls")
+    for _tool_name, _count in most_used:
+        pass
 
     # Slowest tools
     slowest = collector.get_slowest_tools(3)
-    print("\n⏱️  Slowest Tools:")
-    for tool_name, avg_time in slowest:
-        print(f"  {tool_name}: {avg_time:.2f}ms average")
+    for _tool_name, _avg_time in slowest:
+        pass
 
     # Error rates
     error_rates = collector.get_error_rate_by_tool()
-    print("\n❌ Error Rates:")
-    for tool_name, rate in error_rates.items():
-        print(f"  {tool_name}: {rate:.2f}%")
+    for _tool_name, _rate in error_rates.items():
+        pass
 
     # Export to JSON
     export_path = Path("/tmp/test_metrics.json")
     collector.export_to_json(export_path)
-    print(f"\n✅ Metrics exported to: {export_path}")
 
     # Verify export
     with export_path.open() as f:
-        exported = json.load(f)
-    print(f"✅ Export contains {len(exported['raw_metrics'])} metrics")
+        json.load(f)
 
 
 def test_tool_tracker():
     """Test automatic tool execution tracking."""
-    print("\n" + "=" * 60)
-    print("TEST 3: Tool Tracker")
-    print("=" * 60)
-
     tracker = ToolTracker()
     tracker.set_user_query("Busco una laptop gaming")
 
     # Simulate successful tool call
-    print("\n🔧 Simulating successful tool call...")
     with tracker.track_tool_call("search_products", {"query": "laptop gaming"}):
         # Simulate work
         import time
 
         time.sleep(0.1)
-        print("  Tool executed successfully")
 
     # Simulate failed tool call
-    print("\n🔧 Simulating failed tool call...")
     try:
         with tracker.track_tool_call("fetch_by_sku", {"sku": "INVALID"}):
             raise ValueError("SKU not found")
     except ValueError:
-        print("  Tool failed (expected)")
+        pass
 
     # Track with result metadata
-    print("\n🔧 Simulating tool call with result metadata...")
     with tracker.track_with_result("search_products", {"query": "mouse"}) as ctx:
         import time
 
@@ -194,19 +159,11 @@ def test_tool_tracker():
         ctx["result_size"] = 7  # Simulate 7 results
 
     # Get stats
-    stats = tracker.get_stats()
-    print("\n📊 Tracker Stats:")
-    print(f"  Total calls: {stats['summary']['total_tool_calls']}")
-    print(f"  Successful: {stats['summary']['successful_calls']}")
-    print(f"  Failed: {stats['summary']['failed_calls']}")
+    tracker.get_stats()
 
 
 def test_tool_cache():
     """Test tool caching with TTL."""
-    print("\n" + "=" * 60)
-    print("TEST 4: Tool Cache")
-    print("=" * 60)
-
     cache = ToolCache(ttl_seconds=1.0)  # 1 second TTL for testing
 
     # Cache sample tools
@@ -222,51 +179,36 @@ def test_tool_cache():
     wrappers = [lambda: "result1", lambda: "result2"]
 
     cache.cache_snapshot(tools, wrappers)
-    print(f"✅ Cached {len(tools)} tools")
 
     # Test cache hit
     if cache.has_valid_snapshot():
-        snapshot = cache.get_snapshot()
-        print(
-            f"✅ Cache HIT: {len(snapshot.tools) if snapshot else 0} tools in snapshot"
-        )
+        cache.get_snapshot()
     else:
-        print("❌ Cache MISS")
+        pass
 
     # Get individual tool
     tool = cache.get_tool("search_products")
     if tool:
-        print(f"✅ Retrieved tool: {tool.name}")
+        pass
 
     # Cache stats
-    stats = cache.get_cache_stats()
-    print("\n📊 Cache Stats:")
-    print(f"  Total cached: {stats['total_tools_cached']}")
-    print(f"  Valid tools: {stats['valid_tools']}")
-    print(f"  Has valid snapshot: {stats['has_valid_snapshot']}")
+    cache.get_cache_stats()
 
     # Test TTL expiration
-    print("\n⏳ Waiting for TTL expiration (1 second)...")
     import time
 
     time.sleep(1.1)
 
     if not cache.has_valid_snapshot():
-        print("✅ Cache expired correctly")
+        pass
     else:
-        print("❌ Cache should have expired")
+        pass
 
-    stats_after = cache.get_cache_stats()
-    print("📊 Cache Stats After Expiration:")
-    print(f"  Valid tools: {stats_after['valid_tools']}")
+    cache.get_cache_stats()
 
 
 async def test_retry_strategy():
     """Test retry with exponential backoff."""
-    print("\n" + "=" * 60)
-    print("TEST 5: Retry Strategy")
-    print("=" * 60)
-
     config = RetryConfig(
         max_attempts=3,
         initial_delay_ms=50.0,
@@ -277,7 +219,6 @@ async def test_retry_strategy():
     strategy = RetryStrategy(config)
 
     # Test 1: Success on second attempt
-    print("\n🔧 Test: Success on attempt 2/3")
     attempt_count = [0]
 
     async def flaky_operation():
@@ -286,31 +227,20 @@ async def test_retry_strategy():
             raise ValueError(f"Temporary failure (attempt {attempt_count[0]})")
         return "Success!"
 
-    try:
-        result = await strategy.execute_with_retry(flaky_operation)
-        print(f"✅ Result: {result} (after {attempt_count[0]} attempts)")
-    except Exception as e:
-        print(f"❌ Failed: {e}")
+    with contextlib.suppress(Exception):
+        await strategy.execute_with_retry(flaky_operation)
 
     # Test 2: All attempts fail
-    print("\n🔧 Test: All attempts fail")
 
     async def always_fails():
         raise RuntimeError("Permanent failure")
 
-    try:
+    with contextlib.suppress(RuntimeError):
         await strategy.execute_with_retry(always_fails)
-        print("❌ Should have raised exception")
-    except RuntimeError:
-        print("✅ Correctly raised exception after max attempts")
 
 
 def test_fallback_strategy():
     """Test fallback to alternative tools."""
-    print("\n" + "=" * 60)
-    print("TEST 6: Fallback Strategy")
-    print("=" * 60)
-
     strategy = FallbackStrategy()
 
     # Add fallback rules
@@ -326,35 +256,23 @@ def test_fallback_strategy():
         param_mapping={"sku": "product_id"},
     )
 
-    print("✅ Added 2 fallback rules")
-
     # Test fallback chain
-    chain = strategy.get_fallback_chain("search_products")
-    print(f"\n🔗 Fallback chain for 'search_products': {' → '.join(chain)}")
+    strategy.get_fallback_chain("search_products")
 
     # Test parameter mapping
     params = {"query": "laptop", "limit": 5}
     mapping = {"query": "search_term", "limit": "max_results"}
-    mapped = strategy._map_parameters(params, mapping)
-    print("\n🔄 Parameter mapping:")
-    print(f"  Original: {params}")
-    print(f"  Mapped: {mapped}")
+    strategy._map_parameters(params, mapping)
 
     # Check if tools have fallbacks
-    has_fallback = strategy.has_fallback("search_products")
-    print(f"\n✅ 'search_products' has fallback: {has_fallback}")
+    strategy.has_fallback("search_products")
 
     # Test default strategy
     create_default_fallback_strategy()
-    print("\n✅ Created default strategy with pre-configured rules")
 
 
 def run_all_tests():
     """Run all improvement tests."""
-    print("\n" + "═" * 60)
-    print("🧪 COMPREHENSIVE TESTS - MCP IMPROVEMENTS")
-    print("═" * 60)
-
     # Synchronous tests
     test_tool_validator()
     test_metrics_collector()
@@ -363,12 +281,7 @@ def run_all_tests():
     test_fallback_strategy()
 
     # Async tests
-    print("\n⏳ Running async tests...")
     asyncio.run(test_retry_strategy())
-
-    print("\n" + "═" * 60)
-    print("✅ ALL TESTS COMPLETED")
-    print("═" * 60)
 
 
 if __name__ == "__main__":

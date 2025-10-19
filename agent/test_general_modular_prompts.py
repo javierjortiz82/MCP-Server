@@ -22,9 +22,9 @@ from multi_agent.prompt_manager import PromptManager
 
 def test_general_base_template_loads():
     """Test that general base template loads correctly."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 1: General Base Template Loading")
-    print("="*80)
+    print("=" * 80)
 
     manager = PromptManager()
 
@@ -67,9 +67,9 @@ def test_general_base_template_loads():
 
 def test_general_modular_system():
     """Test that modular system includes all required sections."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 2: General Modular System Structure")
-    print("="*80)
+    print("=" * 80)
 
     manager = PromptManager()
 
@@ -109,31 +109,28 @@ def test_general_modular_system():
 
 def test_general_ab_parameter_injection():
     """Test A/B parameter injection (response_detail_level)."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 3: A/B Test Parameter Injection")
-    print("="*80)
+    print("=" * 80)
 
     manager = PromptManager()
 
     # Test Variant A (v1.0): Detailed responses
     print("\n📋 Testing Variant A (v1.0): Detailed responses")
-    prompt_v1_0 = manager.get_general_prompt(
-        version="v1.0",
-        response_detail_level="detailed"
-    )
+    prompt_v1_0 = manager.get_general_prompt(version="v1.0", response_detail_level="detailed")
 
     # Test Variant B (v1.1): Concise responses
     print("📋 Testing Variant B (v1.1): Concise responses")
-    prompt_v1_1 = manager.get_general_prompt(
-        version="v1.1",
-        response_detail_level="concise"
-    )
+    prompt_v1_1 = manager.get_general_prompt(version="v1.1", response_detail_level="concise")
 
     # Validations
     print("\nVariant A (Detailed) validations:")
     variant_a_checks = [
         ("Contains detailed style marker", "Amigable y profesional" in prompt_v1_0),
-        ("Contains multiple examples", "Pregunta:" in prompt_v1_0 and prompt_v1_0.count("Respuesta:") >= 2),
+        (
+            "Contains multiple examples",
+            "Pregunta:" in prompt_v1_0 and prompt_v1_0.count("Respuesta:") >= 2,
+        ),
         ("Contains help offer", "algo más en lo que pueda asistirte" in prompt_v1_0),
         ("Does NOT contain concise marker", "CONCISO y DIRECTO" not in prompt_v1_0),
     ]
@@ -150,7 +147,10 @@ def test_general_ab_parameter_injection():
         ("Contains concise style marker", "Profesional y directo" in prompt_v1_1),
         ("Contains concise instruction", "CONCISO y DIRECTO" in prompt_v1_1),
         ("Has fewer examples", prompt_v1_1.count("Respuesta:") <= 1),
-        ("Does NOT contain detailed elaboration", "algo más en lo que pueda asistirte" not in prompt_v1_1),
+        (
+            "Does NOT contain detailed elaboration",
+            "algo más en lo que pueda asistirte" not in prompt_v1_1,
+        ),
     ]
 
     variant_b_passed = True
@@ -181,11 +181,11 @@ def test_general_ab_parameter_injection():
 
 def main():
     """Run all general modular prompt tests."""
-    print("\n" + "█"*80)
-    print("█" + " "*78 + "█")
+    print("\n" + "█" * 80)
+    print("█" + " " * 78 + "█")
     print("█" + "  GENERAL AGENT MODULAR PROMPTS TEST SUITE".center(78) + "█")
-    print("█" + " "*78 + "█")
-    print("█"*80)
+    print("█" + " " * 78 + "█")
+    print("█" * 80)
 
     try:
         # Test 1: Base template loading
@@ -198,9 +198,9 @@ def main():
         test_general_ab_parameter_injection()
 
         # Summary
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("  ✅ ALL TESTS PASSED (3/3)")
-        print("="*80)
+        print("=" * 80)
         print("\n✨ General Agent modular prompts system is working correctly!")
         print("\nNext steps:")
         print("  1. Test A/B bucketing with user_id")
@@ -210,11 +210,12 @@ def main():
         return 0
 
     except Exception as e:
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("  ❌ TESTS FAILED")
-        print("="*80)
+        print("=" * 80)
         print(f"\nError: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 

@@ -24,7 +24,7 @@ from pathlib import Path
 agent_src = Path(__file__).parent / "src"
 sys.path.insert(0, str(agent_src))
 
-from multi_agent.prompt_manager import PromptManager
+from multi_agent.prompt_manager import PromptManager  # noqa: E402
 
 
 def print_header(text: str, char: str = "="):
@@ -84,10 +84,10 @@ def scenario_2_ab_enabled():
     manager = PromptManager()
 
     # Temporarily enable A/B testing
-    manager.config['ab_testing']['enabled'] = True
-    for exp in manager.config['ab_testing']['experiments']:
-        if exp['name'] == 'general_response_style':
-            exp['enabled'] = True
+    manager.config["ab_testing"]["enabled"] = True
+    for exp in manager.config["ab_testing"]["experiments"]:
+        if exp["name"] == "general_response_style":
+            exp["enabled"] = True
             break
 
     # Test with 20 different users
@@ -103,15 +103,21 @@ def scenario_2_ab_enabled():
         variant = "B" if is_concise else "A"
         variant_counts[variant] += 1
 
-        print(f"  user{i:02d}@example.com: Variant {variant} {'(concise)' if variant == 'B' else '(detailed)'}")
+        print(
+            f"  user{i:02d}@example.com: Variant {variant} {'(concise)' if variant == 'B' else '(detailed)'}"
+        )
 
     # Display distribution
     print("\n📈 Distribution:")
-    print(f"  Variant A (detailed): {variant_counts['A']}/20 ({variant_counts['A']/20*100:.0f}%)")
-    print(f"  Variant B (concise): {variant_counts['B']}/20 ({variant_counts['B']/20*100:.0f}%)")
+    print(
+        f"  Variant A (detailed): {variant_counts['A']}/20 ({variant_counts['A'] / 20 * 100:.0f}%)"
+    )
+    print(
+        f"  Variant B (concise): {variant_counts['B']}/20 ({variant_counts['B'] / 20 * 100:.0f}%)"
+    )
 
     # Validation (allow some variance)
-    variance = abs((variant_counts['A'] / 20 * 100) - 50)
+    variance = abs((variant_counts["A"] / 20 * 100) - 50)
 
     if variance < 30:  # Allow 30% variance with small sample
         print(f"\n✅ PASS: Distribution is reasonable (variance: {variance:.0f}%)")
@@ -119,10 +125,10 @@ def scenario_2_ab_enabled():
         print(f"\n⚠️  WARNING: High variance ({variance:.0f}%) - normal with small sample")
 
     # Restore config
-    manager.config['ab_testing']['enabled'] = False
-    for exp in manager.config['ab_testing']['experiments']:
-        if exp['name'] == 'general_response_style':
-            exp['enabled'] = False
+    manager.config["ab_testing"]["enabled"] = False
+    for exp in manager.config["ab_testing"]["experiments"]:
+        if exp["name"] == "general_response_style":
+            exp["enabled"] = False
             break
 
 
@@ -136,10 +142,10 @@ def scenario_3_deterministic_bucketing():
     manager = PromptManager()
 
     # Enable A/B testing
-    manager.config['ab_testing']['enabled'] = True
-    for exp in manager.config['ab_testing']['experiments']:
-        if exp['name'] == 'general_response_style':
-            exp['enabled'] = True
+    manager.config["ab_testing"]["enabled"] = True
+    for exp in manager.config["ab_testing"]["experiments"]:
+        if exp["name"] == "general_response_style":
+            exp["enabled"] = True
             break
 
     # Test same user 10 times
@@ -167,10 +173,10 @@ def scenario_3_deterministic_bucketing():
         raise AssertionError("Deterministic bucketing failed")
 
     # Restore config
-    manager.config['ab_testing']['enabled'] = False
-    for exp in manager.config['ab_testing']['experiments']:
-        if exp['name'] == 'general_response_style':
-            exp['enabled'] = False
+    manager.config["ab_testing"]["enabled"] = False
+    for exp in manager.config["ab_testing"]["experiments"]:
+        if exp["name"] == "general_response_style":
+            exp["enabled"] = False
             break
 
 
@@ -184,17 +190,11 @@ def scenario_4_prompt_comparison():
 
     # Get variant A prompt
     print("\n📋 Generating Variant A (v1.0 - Detailed Responses)...")
-    prompt_a = manager.get_general_prompt(
-        version="v1.0",
-        response_detail_level="detailed"
-    )
+    prompt_a = manager.get_general_prompt(version="v1.0", response_detail_level="detailed")
 
     # Get variant B prompt
     print("📋 Generating Variant B (v1.1 - Concise Responses)...")
-    prompt_b = manager.get_general_prompt(
-        version="v1.1",
-        response_detail_level="concise"
-    )
+    prompt_b = manager.get_general_prompt(version="v1.1", response_detail_level="concise")
 
     # Comparison
     print("\n📊 Comparison:")
@@ -208,21 +208,35 @@ def scenario_4_prompt_comparison():
     # Variant A should have detailed style
     has_detailed_in_a = "Amigable y profesional" in prompt_a
     has_examples_in_a = prompt_a.count("Respuesta:") >= 2
-    print(f"  Variant A has detailed style: {'✅ YES (expected)' if has_detailed_in_a else '❌ NO (unexpected)'}")
-    print(f"  Variant A has multiple examples: {'✅ YES (expected)' if has_examples_in_a else '❌ NO (unexpected)'}")
+    print(
+        f"  Variant A has detailed style: {'✅ YES (expected)' if has_detailed_in_a else '❌ NO (unexpected)'}"
+    )
+    print(
+        f"  Variant A has multiple examples: {'✅ YES (expected)' if has_examples_in_a else '❌ NO (unexpected)'}"
+    )
 
     # Variant B should have concise style
     has_concise_in_b = "Profesional y directo" in prompt_b
     has_brief_instruction_in_b = "CONCISO y DIRECTO" in prompt_b
-    print(f"  Variant B has concise style: {'✅ YES (expected)' if has_concise_in_b else '❌ NO (unexpected)'}")
-    print(f"  Variant B has brief instruction: {'✅ YES (expected)' if has_brief_instruction_in_b else '❌ NO (unexpected)'}")
+    print(
+        f"  Variant B has concise style: {'✅ YES (expected)' if has_concise_in_b else '❌ NO (unexpected)'}"
+    )
+    print(
+        f"  Variant B has brief instruction: {'✅ YES (expected)' if has_brief_instruction_in_b else '❌ NO (unexpected)'}"
+    )
 
     # Validation
-    if (has_detailed_in_a and has_examples_in_a and
-        has_concise_in_b and has_brief_instruction_in_b and
-        len(prompt_a) > len(prompt_b)):
+    if (
+        has_detailed_in_a
+        and has_examples_in_a
+        and has_concise_in_b
+        and has_brief_instruction_in_b
+        and len(prompt_a) > len(prompt_b)
+    ):
         print("\n✅ PASS: Variants are correctly differentiated")
-        print(f"\n💡 Insight: Concise variant is {len(prompt_a) - len(prompt_b)} chars shorter ({(1 - len(prompt_b)/len(prompt_a))*100:.1f}% reduction)")
+        print(
+            f"\n💡 Insight: Concise variant is {len(prompt_a) - len(prompt_b)} chars shorter ({(1 - len(prompt_b) / len(prompt_a)) * 100:.1f}% reduction)"
+        )
     else:
         print("\n❌ FAIL: Variants not properly differentiated")
         raise AssertionError("Prompt variants validation failed")
@@ -291,6 +305,7 @@ See: agent/README_AB_TESTING.md for deployment instructions
         print("=" * 80)
         print(f"\nError: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 

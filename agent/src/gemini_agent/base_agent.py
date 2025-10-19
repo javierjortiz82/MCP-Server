@@ -40,11 +40,10 @@ from abc import ABC, abstractmethod
 from datetime import UTC
 from typing import Any, TypedDict
 
-from google import genai
-from google.genai import types
-
 from gemini_agent.config import settings
 from gemini_agent.utils.logger import setup_logging
+from google import genai
+from google.genai import types
 
 
 class MetricsDict(TypedDict):
@@ -263,9 +262,7 @@ class BaseAgent(ABC):
             self.client = genai.Client(api_key=self.api_key)
 
             # Build generation configuration
-            self.generation_config = self._build_generation_config(
-                **self._generation_params
-            )
+            self.generation_config = self._build_generation_config(**self._generation_params)
 
             self.logger.info(
                 f"✅ {self.agent_name} initialized successfully "
@@ -338,9 +335,7 @@ class BaseAgent(ABC):
                 logger.info(f"🔄 Resuming session {session_id[:8]}...")
 
             # Create agent with memory enabled
-            agent = cls(
-                session_id=session_id, memory_manager=memory_manager, **agent_params
-            )
+            agent = cls(session_id=session_id, memory_manager=memory_manager, **agent_params)
 
             # Initialize Gemini client
             await agent.initialize()
@@ -404,17 +399,11 @@ class BaseAgent(ABC):
                         if delta.total_seconds() < 60:
                             last_activity = "just now"
                         elif delta.total_seconds() < 3600:
-                            last_activity = (
-                                f"{int(delta.total_seconds() / 60)} minutes ago"
-                            )
+                            last_activity = f"{int(delta.total_seconds() / 60)} minutes ago"
                         elif delta.total_seconds() < 86400:
-                            last_activity = (
-                                f"{int(delta.total_seconds() / 3600)} hours ago"
-                            )
+                            last_activity = f"{int(delta.total_seconds() / 3600)} hours ago"
                         else:
-                            last_activity = (
-                                f"{int(delta.total_seconds() / 86400)} days ago"
-                            )
+                            last_activity = f"{int(delta.total_seconds() / 86400)} days ago"
                 except Exception:
                     pass
 
@@ -424,9 +413,7 @@ class BaseAgent(ABC):
                 logger.info(f"   - Loaded to RAM: {messages_loaded} messages")
                 logger.info(f"   - Session memory blocks: {session_blocks_count}")
                 if load_user_memory and customer_email:
-                    logger.info(
-                        f"   - User memory blocks: {user_blocks_count} (cross-session)"
-                    )
+                    logger.info(f"   - User memory blocks: {user_blocks_count} (cross-session)")
                     logger.info(f"   - Customer: {customer_email}")
                 logger.info("✅ Session resumed successfully")
 
@@ -470,11 +457,7 @@ class BaseAgent(ABC):
         temp = temperature if temperature is not None else settings.TEMPERATURE
         k = top_k if top_k is not None else settings.TOP_K
         p = top_p if top_p is not None else settings.TOP_P
-        tokens = (
-            max_output_tokens
-            if max_output_tokens is not None
-            else settings.MAX_OUTPUT_TOKENS
-        )
+        tokens = max_output_tokens if max_output_tokens is not None else settings.MAX_OUTPUT_TOKENS
 
         self.logger.debug(
             f"Generation config: temp={temp}, top_k={k}, top_p={p}, max_tokens={tokens}"
@@ -497,9 +480,7 @@ class BaseAgent(ABC):
                     mode=types.FunctionCallingConfigMode.AUTO,
                 )
             )
-            self.logger.debug(
-                f"Added {len(self.mcp_tools)} MCP tools to generation config"
-            )
+            self.logger.debug(f"Added {len(self.mcp_tools)} MCP tools to generation config")
 
         # Type ignore: MyPy can't infer kwargs unpacking for GenerateContentConfig
         return types.GenerateContentConfig(**config_params)  # type: ignore[arg-type]
@@ -556,9 +537,7 @@ class BaseAgent(ABC):
 
         return function_declarations
 
-    def _convert_json_schema_to_gemini_schema(
-        self, json_schema: dict[str, Any]
-    ) -> types.Schema:
+    def _convert_json_schema_to_gemini_schema(self, json_schema: dict[str, Any]) -> types.Schema:
         """Convert JSON Schema to Gemini Schema format.
 
         Args:
@@ -582,9 +561,7 @@ class BaseAgent(ABC):
         for prop_name, prop_def in properties.items():
             # Skip 'ctx' parameter - it's auto-injected by MCP framework
             if prop_name == "ctx":
-                self.logger.debug(
-                    "Skipping 'ctx' parameter (MCP Context, auto-injected)"
-                )
+                self.logger.debug("Skipping 'ctx' parameter (MCP Context, auto-injected)")
                 continue
             gemini_properties[prop_name] = self._convert_property_to_schema(prop_def)
 
@@ -636,8 +613,8 @@ class BaseAgent(ABC):
 
             gemini_nested_properties = {}
             for nested_prop_name, nested_prop_def in nested_properties.items():
-                gemini_nested_properties[nested_prop_name] = (
-                    self._convert_property_to_schema(nested_prop_def)
+                gemini_nested_properties[nested_prop_name] = self._convert_property_to_schema(
+                    nested_prop_def
                 )
 
             return types.Schema(
@@ -741,36 +718,36 @@ class BaseAgent(ABC):
         if not self.client:
             self._metrics["failed_requests"] += 1
             error_type = "RuntimeError"
-            self._metrics["errors"][error_type] = (
-                self._metrics["errors"].get(error_type, 0) + 1
-            )
+            self._metrics["errors"][error_type] = self._metrics["errors"].get(error_type, 0) + 1
             elapsed_ms = (time.time() - start_time) * 1000
             self._metrics["total_response_time_ms"] += elapsed_ms
 
-            self.logger.error(
-                f"{self.agent_name} not initialized - call initialize() first"
-            )
+            self.logger.error(f"{self.agent_name} not initialized - call initialize() first")
             raise RuntimeError(f"{self.agent_name} not initialized")
 
         try:
             self.logger.info(f"Generating response for: '{query[:100]}...'")
 
             # Update agent language if provided in kwargs (allows orchestrator to change language per-query)
-            if 'language' in kwargs:
-                new_language = kwargs['language']
+            if "language" in kwargs:
+                new_language = kwargs["language"]
                 if new_language != self.language:
-                    self.logger.info(f"🌐 Updating agent language: {self.language} → {new_language}")
+                    self.logger.info(
+                        f"🌐 Updating agent language: {self.language} → {new_language}"
+                    )
                     self.language = new_language
 
             # Build conversation contents (uses template method pattern)
             contents = self._build_contents(query, include_history, **kwargs)
 
             # Build system prompt using language context
-            kwargs['user_lang'] = self.language
+            kwargs["user_lang"] = self.language
             system_prompt = self.get_system_prompt(**kwargs)
 
             self.logger.debug(f"Generating with {len(self.mcp_tools)} tools available")
-            self.logger.debug(f"Language: {self.language}, System prompt length: {len(system_prompt)}")
+            self.logger.debug(
+                f"Language: {self.language}, System prompt length: {len(system_prompt)}"
+            )
 
             # Build generation config with system instruction (following Google Gemini best practices)
             # Create a config copy with the language-specific system instruction
@@ -810,24 +787,16 @@ class BaseAgent(ABC):
                 self.logger.error(f"  - Response object: {response}")
                 self.logger.error(f"  - Has candidates: {bool(response.candidates)}")
                 if hasattr(response, "prompt_feedback"):
-                    self.logger.error(
-                        f"  - Prompt feedback: {response.prompt_feedback}"
-                    )
+                    self.logger.error(f"  - Prompt feedback: {response.prompt_feedback}")
                 if response.candidates:
                     for idx, candidate in enumerate(response.candidates):
                         self.logger.error(f"  - Candidate {idx}:")
                         if hasattr(candidate, "finish_reason"):
-                            self.logger.error(
-                                f"    - Finish reason: {candidate.finish_reason}"
-                            )
+                            self.logger.error(f"    - Finish reason: {candidate.finish_reason}")
                         if hasattr(candidate, "safety_ratings"):
-                            self.logger.error(
-                                f"    - Safety ratings: {candidate.safety_ratings}"
-                            )
+                            self.logger.error(f"    - Safety ratings: {candidate.safety_ratings}")
                         if hasattr(candidate, "content"):
-                            self.logger.error(
-                                f"    - Has content: {bool(candidate.content)}"
-                            )
+                            self.logger.error(f"    - Has content: {bool(candidate.content)}")
                 raise RuntimeError("No response from Gemini")
 
             # Safe indexing: check if parts exists and has at least one element
@@ -864,9 +833,7 @@ class BaseAgent(ABC):
 
             # Track error type
             error_type = type(e).__name__
-            self._metrics["errors"][error_type] = (
-                self._metrics["errors"].get(error_type, 0) + 1
-            )
+            self._metrics["errors"][error_type] = self._metrics["errors"].get(error_type, 0) + 1
 
             self.logger.exception(f"Error generating response: {e}")
             raise
@@ -916,9 +883,7 @@ class BaseAgent(ABC):
         contents.append(
             types.Content(
                 role="model",
-                parts=[
-                    types.Part(text=ack_message)
-                ],
+                parts=[types.Part(text=ack_message)],
             )
         )
 
@@ -962,12 +927,8 @@ class BaseAgent(ABC):
         if self._memory_enabled and self.memory_manager and self.session_id:
             try:
                 # Extract text from Content objects (ensure non-None strings for Pydantic)
-                user_text = (
-                    user_content.parts[0].text if user_content.parts else ""
-                ) or ""
-                model_text = (
-                    model_content.parts[0].text if model_content.parts else ""
-                ) or ""
+                user_text = (user_content.parts[0].text if user_content.parts else "") or ""
+                model_text = (model_content.parts[0].text if model_content.parts else "") or ""
 
                 # Save user message
                 self.memory_manager.save_message(
@@ -986,9 +947,7 @@ class BaseAgent(ABC):
                     intent=None,
                 )
 
-                self.logger.debug(
-                    f"Messages persisted to DB (session={self.session_id[:8]})"
-                )
+                self.logger.debug(f"Messages persisted to DB (session={self.session_id[:8]})")
             except Exception as e:
                 # Non-critical: Log but don't fail if persistence fails
                 self.logger.warning(f"Failed to persist messages to DB: {e}")
@@ -1052,7 +1011,8 @@ class BaseAgent(ABC):
         try:
             # Get recent messages from DB
             messages = self.memory_manager.get_recent_messages(
-                self.session_id, limit=limit * 2  # Each turn has user + model
+                self.session_id,
+                limit=limit * 2,  # Each turn has user + model
             )
 
             # Convert to types.Content and reverse (DB returns DESC order)
@@ -1124,9 +1084,7 @@ class BaseAgent(ABC):
                     f"Memory block saved (id={block_id}, label={block_label}, priority={priority})"
                 )
             else:
-                self.logger.debug(
-                    f"Memory block skipped (priority {priority} < threshold)"
-                )
+                self.logger.debug(f"Memory block skipped (priority {priority} < threshold)")
 
             return block_id
 
@@ -1291,7 +1249,8 @@ class BaseAgent(ABC):
 
             # Get recent messages from DB
             messages = self.memory_manager.get_recent_messages(
-                self.session_id, limit=10  # Last 5 turns
+                self.session_id,
+                limit=10,  # Last 5 turns
             )
 
             if not messages:
@@ -1300,8 +1259,7 @@ class BaseAgent(ABC):
 
             # Convert to format expected by extractor
             formatted_messages = [
-                {"role": msg["role"], "text": msg["message_text"]}
-                for msg in reversed(messages)
+                {"role": msg["role"], "text": msg["message_text"]} for msg in reversed(messages)
             ]
 
             # Extract semantic memory
@@ -1357,9 +1315,7 @@ class BaseAgent(ABC):
                     }
                     for m in result.memories
                 ]
-                self.logger.info(
-                    f"Extracted {len(extracted_blocks)} memory blocks (not saved)"
-                )
+                self.logger.info(f"Extracted {len(extracted_blocks)} memory blocks (not saved)")
 
             return extracted_blocks
 
@@ -1398,15 +1354,11 @@ class BaseAgent(ABC):
             >>> # Agent can now use new tools in responses
         """
         self.mcp_tools = mcp_tools
-        self.logger.info(
-            f"{self.agent_name} tools updated: {len(mcp_tools)} tools available"
-        )
+        self.logger.info(f"{self.agent_name} tools updated: {len(mcp_tools)} tools available")
 
         # Rebuild generation config to include new tools
         if self.client:
-            self.generation_config = self._build_generation_config(
-                **self._generation_params
-            )
+            self.generation_config = self._build_generation_config(**self._generation_params)
             self.logger.debug("Generation config rebuilt with updated tools")
 
     def get_metrics(self) -> dict[str, Any]:

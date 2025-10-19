@@ -105,8 +105,7 @@ class PromptManager:
         # Jinja2 is mandatory - no fallback mode
         if not JINJA2_AVAILABLE:
             raise RuntimeError(
-                "Jinja2 is REQUIRED for the prompt system. "
-                "Install with: pip install jinja2>=3.1.0"
+                "Jinja2 is REQUIRED for the prompt system. Install with: pip install jinja2>=3.1.0"
             )
 
         # Determine prompts directory
@@ -126,7 +125,7 @@ class PromptManager:
             loader=FileSystemLoader(str(self.templates_dir)),
             trim_blocks=True,
             lstrip_blocks=True,
-            autoescape=False,  # Prompts are not HTML
+            autoescape=False,  # nosec B701 - Prompts are not HTML, safe for template rendering
         )
         logger.info(f"✅ Jinja2 environment initialized: {self.templates_dir}")
 
@@ -134,8 +133,7 @@ class PromptManager:
         self.config = self._load_config()
 
         logger.info(
-            f"PromptManager initialized (Jinja2 templates MANDATORY) - "
-            f"Dir: {self.prompts_dir}"
+            f"PromptManager initialized (Jinja2 templates MANDATORY) - Dir: {self.prompts_dir}"
         )
 
     def _load_config(self) -> dict[str, Any]:
@@ -304,8 +302,8 @@ class PromptManager:
         # Check if A/B testing should override version/parameters
         if user_id and not version:
             # Use A/B testing to select version and parameters
-            selected_version, selected_show_summary = (
-                self._select_ab_test_version_booking(user_id=user_id)
+            selected_version, selected_show_summary = self._select_ab_test_version_booking(
+                user_id=user_id
             )
             version = selected_version
             show_pre_confirmation_summary = (
@@ -315,9 +313,7 @@ class PromptManager:
             )
         else:
             # Use defaults or provided values
-            version = version or self.config["active_versions"].get(
-                "booking", "v1.0"
-            )
+            version = version or self.config["active_versions"].get("booking", "v1.0")
             show_pre_confirmation_summary = show_pre_confirmation_summary or False
 
         # Load services data if not provided
@@ -341,9 +337,7 @@ class PromptManager:
             "current_date": now.strftime("%Y-%m-%d"),  # 2025-10-13
             "current_datetime": now,  # Full datetime object for Jinja2 filters
             "current_day": now.strftime("%A"),  # Sunday, Monday, etc.
-            "current_day_es": self._get_spanish_day(
-                now.weekday()
-            ),  # Domingo, Lunes, etc.
+            "current_day_es": self._get_spanish_day(now.weekday()),  # Domingo, Lunes, etc.
         }
 
         logger.debug(
@@ -401,8 +395,8 @@ class PromptManager:
         # Check if A/B testing should override version/parameters
         if user_id and not version:
             # Use A/B testing to select version and parameters
-            selected_version, selected_detail_level = (
-                self._select_ab_test_version_general(user_id=user_id)
+            selected_version, selected_detail_level = self._select_ab_test_version_general(
+                user_id=user_id
             )
             version = selected_version
             response_detail_level = (
@@ -412,9 +406,7 @@ class PromptManager:
             )
         else:
             # Use defaults or provided values
-            version = version or self.config["active_versions"].get(
-                "general", "v1.0"
-            )
+            version = version or self.config["active_versions"].get("general", "v1.0")
             response_detail_level = response_detail_level or "detailed"
 
         # Load business info and policies
@@ -549,9 +541,7 @@ class PromptManager:
             ) or "Sin descripción disponible"
 
             # Clean up description
-            desc_lines = [
-                line.strip() for line in tool_description.split("\n") if line.strip()
-            ]
+            desc_lines = [line.strip() for line in tool_description.split("\n") if line.strip()]
             first_line = desc_lines[0] if desc_lines else "Sin descripción"
 
             tools_info.append(f"\n### {i}. `{tool_name}`")
@@ -569,17 +559,11 @@ class PromptManager:
                             else "ANY"
                         )
                         param_desc = (
-                            param_schema.description
-                            if hasattr(param_schema, "description")
-                            else ""
+                            param_schema.description if hasattr(param_schema, "description") else ""
                         )
-                        required_list = (
-                            params.required if hasattr(params, "required") else []
-                        )
+                        required_list = params.required if hasattr(params, "required") else []
                         is_required = param_name in (required_list or [])
-                        required_marker = (
-                            " (required)" if is_required else " (optional)"
-                        )
+                        required_marker = " (required)" if is_required else " (optional)"
                         tools_info.append(
                             f"  - `{param_name}` ({param_type}){required_marker}: {param_desc}"
                         )
@@ -591,9 +575,7 @@ class PromptManager:
 
         # Generic instruction
         tools_info.append("\n💡 **Estrategia de Inferencia Automática**:")
-        tools_info.append(
-            "1. Analiza la INTENCIÓN del cliente (buscar, consultar, comparar)"
-        )
+        tools_info.append("1. Analiza la INTENCIÓN del cliente (buscar, consultar, comparar)")
         tools_info.append(
             "2. Detecta si hay MÚLTIPLES intenciones/categorías diferentes en una consulta"
         )
@@ -601,13 +583,9 @@ class PromptManager:
             "3. Para múltiples intenciones: haz MÚLTIPLES llamadas (una por categoría)"
         )
         tools_info.append("4. Identifica PALABRAS CLAVE relevantes en cada intención")
-        tools_info.append(
-            "5. Selecciona la herramienta MÁS APROPIADA para cada categoría"
-        )
+        tools_info.append("5. Selecciona la herramienta MÁS APROPIADA para cada categoría")
         tools_info.append("6. Si la consulta es ambigua, PREGUNTA para clarificar")
-        tools_info.append(
-            "7. Si ninguna herramienta aplica, responde con tu conocimiento general"
-        )
+        tools_info.append("7. Si ninguna herramienta aplica, responde con tu conocimiento general")
 
         return "\n".join(tools_info)
 
@@ -677,10 +655,8 @@ class PromptManager:
 
         if user_id:
             # Deterministic bucketing: same user always gets same variant
-            hash_value = int(hashlib.md5(user_id.encode()).hexdigest(), 16)
-            use_variant_b = (
-                hash_value % AB_BUCKETING_MODULO
-            ) / AB_BUCKETING_MODULO < traffic_split
+            hash_value = int(hashlib.md5(user_id.encode(), usedforsecurity=False).hexdigest(), 16)
+            use_variant_b = (hash_value % AB_BUCKETING_MODULO) / AB_BUCKETING_MODULO < traffic_split
         else:
             # Random bucketing if no user_id (for testing/anonymous users)
             use_variant_b = random.random() < traffic_split
@@ -703,9 +679,7 @@ class PromptManager:
 
         return (version, params)
 
-    def _select_ab_test_version(
-        self, agent: str, user_id: str | None = None
-    ) -> tuple[str, int]:
+    def _select_ab_test_version(self, agent: str, user_id: str | None = None) -> tuple[str, int]:
         """Select version for A/B test if enabled (Sales Agent).
 
         Args:
@@ -733,14 +707,10 @@ class PromptManager:
             default_params=default_params,
         )
 
-        pagination_page_size = params.get(
-            "pagination_page_size", DEFAULT_PAGINATION_SIZE
-        )
+        pagination_page_size = params.get("pagination_page_size", DEFAULT_PAGINATION_SIZE)
         return (version, pagination_page_size)
 
-    def _select_ab_test_version_booking(
-        self, user_id: str | None = None
-    ) -> tuple[str, bool]:
+    def _select_ab_test_version_booking(self, user_id: str | None = None) -> tuple[str, bool]:
         """Select version for Booking A/B test if enabled.
 
         Similar to _select_ab_test_version() but for booking agent.
@@ -775,9 +745,7 @@ class PromptManager:
         )
         return (version, show_pre_confirmation_summary)
 
-    def _select_ab_test_version_general(
-        self, user_id: str | None = None
-    ) -> tuple[str, str]:
+    def _select_ab_test_version_general(self, user_id: str | None = None) -> tuple[str, str]:
         """Select version for General Agent A/B test if enabled.
 
         Similar to _select_ab_test_version() but for general agent.
@@ -807,9 +775,7 @@ class PromptManager:
             default_params=default_params,
         )
 
-        response_detail_level = params.get(
-            "response_detail_level", DEFAULT_RESPONSE_DETAIL
-        )
+        response_detail_level = params.get("response_detail_level", DEFAULT_RESPONSE_DETAIL)
         return (version, response_detail_level)
 
     def get_experiment_config(self, experiment_name: str) -> dict[str, Any] | None:
@@ -890,7 +856,9 @@ class PromptManager:
         # ALWAYS use base/ templates with Google Gemini multilingual best practice
         # Templates in base/ have the instruction: "respond in the same language as the user's query"
         template_path = f"base/{template_name}"
-        logger.info(f"🌐 TEMPLATE_SELECTION: user_lang={user_lang} → {template_path} (Gemini handles multilingual)")
+        logger.info(
+            f"🌐 TEMPLATE_SELECTION: user_lang={user_lang} → {template_path} (Gemini handles multilingual)"
+        )
         return template_path
 
     def _get_spanish_day(self, weekday: int) -> str:

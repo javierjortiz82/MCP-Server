@@ -36,9 +36,7 @@ class TestGeminiAgent:
 
     def test_agent_initialization_with_generation_params(self, sample_api_key):
         """Test that GeminiAgent can be initialized with custom generation params."""
-        agent = GeminiAgent(
-            api_key=sample_api_key, temperature=0.5, top_k=50, top_p=0.95
-        )
+        agent = GeminiAgent(api_key=sample_api_key, temperature=0.5, top_k=50, top_p=0.95)
 
         assert agent._generation_params["temperature"] == 0.5
         assert agent._generation_params["top_k"] == 50

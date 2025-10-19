@@ -35,10 +35,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from google.genai import types
-
 from gemini_agent.base_agent import BaseAgent
 from gemini_agent.config.booking_agent_settings import booking_agent_settings
+from google.genai import types
 from multi_agent.prompt_manager import PromptManager
 
 # Import language context for MCP tool execution
@@ -48,6 +47,7 @@ if str(mcp_server_path) not in sys.path:
 
 try:
     from utils.language_context import set_current_language
+
     LANGUAGE_CONTEXT_AVAILABLE = True
 except ImportError:
     LANGUAGE_CONTEXT_AVAILABLE = False
@@ -118,7 +118,9 @@ class BookingAgent(BaseAgent):
         # Function calling support (max iterations configurable via booking_agent_settings)
         self.mcp_client = mcp_client
         self.function_call_handler = (
-            FunctionCallHandler(max_iterations=booking_agent_settings.BOOKING_MAX_FUNCTION_CALL_ITERATIONS)
+            FunctionCallHandler(
+                max_iterations=booking_agent_settings.BOOKING_MAX_FUNCTION_CALL_ITERATIONS
+            )
             if FUNCTION_CALLING_AVAILABLE
             else None
         )
@@ -244,9 +246,7 @@ class BookingAgent(BaseAgent):
         """
         # Check if client is initialized
         if not self.client:
-            self.logger.error(
-                f"{self.agent_name} not initialized - call initialize() first"
-            )
+            self.logger.error(f"{self.agent_name} not initialized - call initialize() first")
             raise RuntimeError(f"{self.agent_name} not initialized")
 
         # Start timing for metrics
@@ -259,10 +259,12 @@ class BookingAgent(BaseAgent):
             self.logger.info(f"Generating response for: '{query[:100]}...'")
 
             # Update agent language if provided in kwargs (allows orchestrator to change language per-query)
-            if 'language' in kwargs:
-                new_language = kwargs['language']
+            if "language" in kwargs:
+                new_language = kwargs["language"]
                 if new_language != self.language:
-                    self.logger.info(f"🌐 Updating agent language: {self.language} → {new_language}")
+                    self.logger.info(
+                        f"🌐 Updating agent language: {self.language} → {new_language}"
+                    )
                     self.language = new_language
 
             # Build conversation contents (uses template method pattern)
@@ -282,10 +284,14 @@ class BookingAgent(BaseAgent):
                 )
 
             # Build system prompt using language context (following Google Gemini best practices)
-            kwargs['user_lang'] = self.language
-            self.logger.info(f"🌐 GENERATE_RESPONSE: Agent language is '{self.language}', setting kwargs['user_lang']={self.language}")
+            kwargs["user_lang"] = self.language
+            self.logger.info(
+                f"🌐 GENERATE_RESPONSE: Agent language is '{self.language}', setting kwargs['user_lang']={self.language}"
+            )
             system_prompt = self.get_system_prompt(**kwargs)
-            self.logger.debug(f"Language: {self.language}, System prompt length: {len(system_prompt)}")
+            self.logger.debug(
+                f"Language: {self.language}, System prompt length: {len(system_prompt)}"
+            )
 
             # Build generation config with system instruction
             config_dict = {
@@ -340,7 +346,9 @@ class BookingAgent(BaseAgent):
 
             # Run function calling loop if tools are available
             if self.mcp_tools and self.function_call_handler:
-                final_text = await self._run_function_calling_loop(response, contents, dynamic_config)
+                final_text = await self._run_function_calling_loop(
+                    response, contents, dynamic_config
+                )
             else:
                 # No tools - extract text directly (fallback to BaseAgent behavior)
                 final_text = await self._extract_text_from_response(response)
@@ -358,9 +366,7 @@ class BookingAgent(BaseAgent):
             self._metrics["total_response_time_ms"] += elapsed_ms
             self._metrics["history_sizes"].append(len(self.conversation_history))
 
-            self.logger.info(
-                f"✅ Response generated ({len(final_text)} chars, {elapsed_ms:.0f}ms)"
-            )
+            self.logger.info(f"✅ Response generated ({len(final_text)} chars, {elapsed_ms:.0f}ms)")
             return final_text
 
         except Exception as e:
@@ -371,9 +377,7 @@ class BookingAgent(BaseAgent):
 
             # Track error type
             error_type = type(e).__name__
-            self._metrics["errors"][error_type] = (
-                self._metrics["errors"].get(error_type, 0) + 1
-            )
+            self._metrics["errors"][error_type] = self._metrics["errors"].get(error_type, 0) + 1
 
             self.logger.exception(f"Error generating response: {e}")
             raise
@@ -402,9 +406,7 @@ class BookingAgent(BaseAgent):
 
         while iteration < max_iterations:
             iteration += 1
-            self.logger.debug(
-                f"Function calling iteration {iteration}/{max_iterations}"
-            )
+            self.logger.debug(f"Function calling iteration {iteration}/{max_iterations}")
 
             # Check if response has candidates
             if not self.function_call_handler.has_candidates(response):
@@ -427,9 +429,7 @@ class BookingAgent(BaseAgent):
                     self.logger.debug(f"Extracted final text: {text[:100]}...")
                     return text
                 else:
-                    self.logger.warning(
-                        f"No function calls and no text in iteration {iteration}"
-                    )
+                    self.logger.warning(f"No function calls and no text in iteration {iteration}")
                     return self._create_fallback_response(iteration)
 
             # Execute function calls
@@ -451,14 +451,10 @@ class BookingAgent(BaseAgent):
             )
 
         # Exhausted iterations
-        self.logger.warning(
-            f"Function calling loop exhausted after {iteration} iterations"
-        )
+        self.logger.warning(f"Function calling loop exhausted after {iteration} iterations")
         return self._create_fallback_response(iteration)
 
-    async def _execute_function_calls(
-        self, function_calls: list[Any]
-    ) -> list[types.Part]:
+    async def _execute_function_calls(self, function_calls: list[Any]) -> list[types.Part]:
         """Execute function calls and return structured responses.
 
         Args:

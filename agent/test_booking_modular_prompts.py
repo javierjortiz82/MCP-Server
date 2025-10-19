@@ -22,9 +22,9 @@ from multi_agent.prompt_manager import PromptManager
 
 def test_booking_base_template_loads():
     """Test that booking base template loads correctly."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 1: Booking Base Template Loading")
-    print("="*80)
+    print("=" * 80)
 
     manager = PromptManager()
 
@@ -63,9 +63,9 @@ def test_booking_base_template_loads():
 
 def test_booking_modular_system():
     """Test that modular system includes all required sections."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 2: Booking Modular System Structure")
-    print("="*80)
+    print("=" * 80)
 
     manager = PromptManager()
 
@@ -104,25 +104,19 @@ def test_booking_modular_system():
 
 def test_booking_ab_parameter_injection():
     """Test A/B parameter injection (show_pre_confirmation_summary)."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 3: A/B Test Parameter Injection")
-    print("="*80)
+    print("=" * 80)
 
     manager = PromptManager()
 
     # Test Variant A (v1.0): Direct confirmation
     print("\n📋 Testing Variant A (v1.0): Direct confirmation")
-    prompt_v1_0 = manager.get_booking_prompt(
-        version="v1.0",
-        show_pre_confirmation_summary=False
-    )
+    prompt_v1_0 = manager.get_booking_prompt(version="v1.0", show_pre_confirmation_summary=False)
 
     # Test Variant B (v1.1): Pre-confirmation summary
     print("📋 Testing Variant B (v1.1): Pre-confirmation summary")
-    prompt_v1_1 = manager.get_booking_prompt(
-        version="v1.1",
-        show_pre_confirmation_summary=True
-    )
+    prompt_v1_1 = manager.get_booking_prompt(version="v1.1", show_pre_confirmation_summary=True)
 
     # Validations
     print("\nVariant A (Direct Confirmation) validations:")
@@ -174,11 +168,11 @@ def test_booking_ab_parameter_injection():
 
 def main():
     """Run all booking modular prompt tests."""
-    print("\n" + "█"*80)
-    print("█" + " "*78 + "█")
+    print("\n" + "█" * 80)
+    print("█" + " " * 78 + "█")
     print("█" + "  BOOKING AGENT MODULAR PROMPTS TEST SUITE".center(78) + "█")
-    print("█" + " "*78 + "█")
-    print("█"*80)
+    print("█" + " " * 78 + "█")
+    print("█" * 80)
 
     try:
         # Test 1: Base template loading
@@ -191,9 +185,9 @@ def main():
         test_booking_ab_parameter_injection()
 
         # Summary
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("  ✅ ALL TESTS PASSED (3/3)")
-        print("="*80)
+        print("=" * 80)
         print("\n✨ Booking Agent modular prompts system is working correctly!")
         print("\nNext steps:")
         print("  1. Test A/B bucketing with user_id")
@@ -203,11 +197,12 @@ def main():
         return 0
 
     except Exception as e:
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("  ❌ TESTS FAILED")
-        print("="*80)
+        print("=" * 80)
         print(f"\nError: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 

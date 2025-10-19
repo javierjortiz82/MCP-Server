@@ -24,7 +24,7 @@ from pathlib import Path
 agent_src = Path(__file__).parent / "src"
 sys.path.insert(0, str(agent_src))
 
-from multi_agent.prompt_manager import PromptManager
+from multi_agent.prompt_manager import PromptManager  # noqa: E402
 
 
 def print_header(text: str, char: str = "="):
@@ -84,10 +84,10 @@ def scenario_2_ab_enabled():
     manager = PromptManager()
 
     # Temporarily enable A/B testing
-    manager.config['ab_testing']['enabled'] = True
-    for exp in manager.config['ab_testing']['experiments']:
-        if exp['name'] == 'booking_confirmation_flow':
-            exp['enabled'] = True
+    manager.config["ab_testing"]["enabled"] = True
+    for exp in manager.config["ab_testing"]["experiments"]:
+        if exp["name"] == "booking_confirmation_flow":
+            exp["enabled"] = True
             break
 
     # Test with 20 different users
@@ -103,15 +103,19 @@ def scenario_2_ab_enabled():
         variant = "B" if has_summary else "A"
         variant_counts[variant] += 1
 
-        print(f"  user{i:02d}@example.com: Variant {variant} {'(summary)' if variant == 'B' else '(direct)'}")
+        print(
+            f"  user{i:02d}@example.com: Variant {variant} {'(summary)' if variant == 'B' else '(direct)'}"
+        )
 
     # Display distribution
     print("\n📈 Distribution:")
-    print(f"  Variant A (direct): {variant_counts['A']}/20 ({variant_counts['A']/20*100:.0f}%)")
-    print(f"  Variant B (summary): {variant_counts['B']}/20 ({variant_counts['B']/20*100:.0f}%)")
+    print(f"  Variant A (direct): {variant_counts['A']}/20 ({variant_counts['A'] / 20 * 100:.0f}%)")
+    print(
+        f"  Variant B (summary): {variant_counts['B']}/20 ({variant_counts['B'] / 20 * 100:.0f}%)"
+    )
 
     # Validation (allow some variance)
-    variance = abs((variant_counts['A'] / 20 * 100) - 50)
+    variance = abs((variant_counts["A"] / 20 * 100) - 50)
 
     if variance < 30:  # Allow 30% variance with small sample
         print(f"\n✅ PASS: Distribution is reasonable (variance: {variance:.0f}%)")
@@ -119,10 +123,10 @@ def scenario_2_ab_enabled():
         print(f"\n⚠️  WARNING: High variance ({variance:.0f}%) - normal with small sample")
 
     # Restore config
-    manager.config['ab_testing']['enabled'] = False
-    for exp in manager.config['ab_testing']['experiments']:
-        if exp['name'] == 'booking_confirmation_flow':
-            exp['enabled'] = False
+    manager.config["ab_testing"]["enabled"] = False
+    for exp in manager.config["ab_testing"]["experiments"]:
+        if exp["name"] == "booking_confirmation_flow":
+            exp["enabled"] = False
             break
 
 
@@ -136,10 +140,10 @@ def scenario_3_deterministic_bucketing():
     manager = PromptManager()
 
     # Enable A/B testing
-    manager.config['ab_testing']['enabled'] = True
-    for exp in manager.config['ab_testing']['experiments']:
-        if exp['name'] == 'booking_confirmation_flow':
-            exp['enabled'] = True
+    manager.config["ab_testing"]["enabled"] = True
+    for exp in manager.config["ab_testing"]["experiments"]:
+        if exp["name"] == "booking_confirmation_flow":
+            exp["enabled"] = True
             break
 
     # Test same user 10 times
@@ -167,10 +171,10 @@ def scenario_3_deterministic_bucketing():
         raise AssertionError("Deterministic bucketing failed")
 
     # Restore config
-    manager.config['ab_testing']['enabled'] = False
-    for exp in manager.config['ab_testing']['experiments']:
-        if exp['name'] == 'booking_confirmation_flow':
-            exp['enabled'] = False
+    manager.config["ab_testing"]["enabled"] = False
+    for exp in manager.config["ab_testing"]["experiments"]:
+        if exp["name"] == "booking_confirmation_flow":
+            exp["enabled"] = False
             break
 
 
@@ -184,17 +188,11 @@ def scenario_4_prompt_comparison():
 
     # Get variant A prompt
     print("\n📋 Generating Variant A (v1.0 - Direct Confirmation)...")
-    prompt_a = manager.get_booking_prompt(
-        version="v1.0",
-        show_pre_confirmation_summary=False
-    )
+    prompt_a = manager.get_booking_prompt(version="v1.0", show_pre_confirmation_summary=False)
 
     # Get variant B prompt
     print("📋 Generating Variant B (v1.1 - Pre-Confirmation Summary)...")
-    prompt_b = manager.get_booking_prompt(
-        version="v1.1",
-        show_pre_confirmation_summary=True
-    )
+    prompt_b = manager.get_booking_prompt(version="v1.1", show_pre_confirmation_summary=True)
 
     # Comparison
     print("\n📊 Comparison:")
@@ -207,11 +205,15 @@ def scenario_4_prompt_comparison():
 
     # Variant A should NOT have summary
     has_summary_in_a = "RESUMEN DE RESERVA" in prompt_a
-    print(f"  Variant A has summary block: {'❌ YES (unexpected)' if has_summary_in_a else '✅ NO (expected)'}")
+    print(
+        f"  Variant A has summary block: {'❌ YES (unexpected)' if has_summary_in_a else '✅ NO (expected)'}"
+    )
 
     # Variant B should have summary
     has_summary_in_b = "RESUMEN DE RESERVA" in prompt_b
-    print(f"  Variant B has summary block: {'✅ YES (expected)' if has_summary_in_b else '❌ NO (unexpected)'}")
+    print(
+        f"  Variant B has summary block: {'✅ YES (expected)' if has_summary_in_b else '❌ NO (unexpected)'}"
+    )
 
     # Show sample from variant B summary
     if has_summary_in_b:
@@ -219,7 +221,7 @@ def scenario_4_prompt_comparison():
         # Extract summary section
         start_idx = prompt_b.find("MUESTRA RESUMEN completo")
         if start_idx != -1:
-            sample = prompt_b[start_idx:start_idx+400]
+            sample = prompt_b[start_idx : start_idx + 400]
             print("  " + "\n  ".join(sample.split("\n")[:10]))
 
     # Validation
@@ -293,6 +295,7 @@ See: agent/README_AB_TESTING.md for deployment instructions
         print("=" * 80)
         print(f"\nError: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 

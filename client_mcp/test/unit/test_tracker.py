@@ -5,7 +5,6 @@ import tempfile
 import time
 
 import pytest
-
 from observability.metrics import MetricsCollector
 from observability.tracker import ToolTracker, get_global_tracker
 
@@ -118,7 +117,7 @@ class TestToolTracker:
         """Test track_with_result when exception occurs."""
         tracker = ToolTracker(collector=self.collector)
 
-        with pytest.raises(RuntimeError), tracker.track_with_result("failing_tool", {}) as ctx:
+        with pytest.raises(RuntimeError), tracker.track_with_result("failing_tool", {}):
             raise RuntimeError("Failed")
 
         last_metric = tracker.collector.get_last_metric()
@@ -129,7 +128,7 @@ class TestToolTracker:
         """Test that result_size defaults to 0."""
         tracker = ToolTracker(collector=self.collector)
 
-        with tracker.track_with_result("search", {}) as ctx:
+        with tracker.track_with_result("search", {}):
             # Don't set result_size
             pass
 

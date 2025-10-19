@@ -40,11 +40,10 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from google import genai
-from google.genai import types
-
 from gemini_agent.config import settings
 from gemini_agent.utils.logger import setup_logging
+from google import genai
+from google.genai import types
 from multi_agent.prompt_manager import PromptManager
 
 # Try to import MCP server settings for memory configuration
@@ -156,15 +155,11 @@ NO agregues explicaciones ni puntuación adicional."""
 
                 # Get prompt from PromptManager
                 prompt = cls._prompt_manager.get_router_prompt()
-                logger.debug(
-                    f"Loaded router prompt from PromptManager ({len(prompt)} chars)"
-                )
+                logger.debug(f"Loaded router prompt from PromptManager ({len(prompt)} chars)")
                 return prompt
 
         except Exception as e:
-            logger.warning(
-                f"Failed to load prompt from PromptManager: {e}. Using legacy prompt."
-            )
+            logger.warning(f"Failed to load prompt from PromptManager: {e}. Using legacy prompt.")
 
         # Fallback to legacy prompt
         logger.debug("Using legacy CLASSIFICATION_PROMPT")
@@ -258,15 +253,11 @@ NO agregues explicaciones ni puntuación adicional."""
         block_value = block.get("block_value")
 
         if not isinstance(block_label, str):
-            logger_func(
-                f"block_label must be str, got {type(block_label).__name__}: {block_label}"
-            )
+            logger_func(f"block_label must be str, got {type(block_label).__name__}: {block_label}")
             return False
 
         if not isinstance(block_value, str):
-            logger_func(
-                f"block_value must be str, got {type(block_value).__name__}: {block_value}"
-            )
+            logger_func(f"block_value must be str, got {type(block_value).__name__}: {block_value}")
             return False
 
         return True
@@ -318,7 +309,9 @@ NO agregues explicaciones ni puntuación adicional."""
             if session_blocks:
                 memory_lines.append("[MEMORIA DE LA SESIÓN ACTUAL]:")
                 # Prioritize high-priority blocks (configurable threshold)
-                high_priority = [b for b in session_blocks if b.get("priority", 0) >= high_threshold]
+                high_priority = [
+                    b for b in session_blocks if b.get("priority", 0) >= high_threshold
+                ]
                 medium_priority = [
                     b for b in session_blocks if medium_min <= b.get("priority", 0) < medium_max
                 ]
@@ -360,9 +353,7 @@ NO agregues explicaciones ni puntuación adicional."""
                             label = block.get("block_label", "unknown")
                             value = block.get("block_value", "")
                             priority = block.get("priority", 0)
-                            memory_lines.append(
-                                f"- {label}: {value[:100]} (p={priority})"
-                            )
+                            memory_lines.append(f"- {label}: {value[:100]} (p={priority})")
 
                         logger.debug(
                             f"Loaded {len(user_blocks)} user memory blocks for {customer_email}"
@@ -457,9 +448,7 @@ NO agregues explicaciones ni puntuación adicional."""
             # Add additional context information if provided
             if context:
                 if "last_intent" in context:
-                    query_text += (
-                        f"\n[CONTEXTO] Intención previa: {context['last_intent']}"
-                    )
+                    query_text += f"\n[CONTEXTO] Intención previa: {context['last_intent']}"
                 if "last_bot_message" in context:
                     last_msg = context["last_bot_message"]
                     query_text += f"\n[CONTEXTO] Última respuesta del bot: {last_msg}"
@@ -573,7 +562,14 @@ NO agregues explicaciones ni puntuación adicional."""
             # For longer/complex queries, raise error and require user to repeat/clarify
             is_short_query = len(query.strip()) < 10  # "¿y ese?" = follow-up
             is_likely_followup = query.lower().strip() in [
-                "sí", "si", "no", "ok", "okay", "de acuerdo", "bueno", "gracias"
+                "sí",
+                "si",
+                "no",
+                "ok",
+                "okay",
+                "de acuerdo",
+                "bueno",
+                "gracias",
             ]
 
             if (is_short_query or is_likely_followup) and context and "last_intent" in context:
@@ -623,8 +619,7 @@ NO agregues explicaciones ni puntuación adicional."""
 
         else:
             logger.warning(
-                f"⚠️ Unrecognized classification: '{classification_text}', "
-                f"defaulting to GENERAL"
+                f"⚠️ Unrecognized classification: '{classification_text}', defaulting to GENERAL"
             )
             return Intent.GENERAL
 
@@ -658,9 +653,7 @@ NO agregues explicaciones ni puntuación adicional."""
             try:
                 intent = await self.classify_intent(query)
                 intents.append(intent)
-                logger.debug(
-                    f"Batch {i}/{len(queries)}: '{query[:30]}...' → {intent.value}"
-                )
+                logger.debug(f"Batch {i}/{len(queries)}: '{query[:30]}...' → {intent.value}")
 
             except Exception as e:
                 logger.error(f"Error classifying query {i}: {e}")

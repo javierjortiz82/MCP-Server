@@ -8,10 +8,9 @@ for full compliance with MCP specifications.
 from typing import Any
 
 import httpx
+from config.settings import settings
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
-
-from config.settings import settings
 
 
 class MCPConnector:

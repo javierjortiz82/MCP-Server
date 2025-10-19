@@ -1,9 +1,8 @@
 """Unit tests for ToolValidator."""
 
 import pytest
-from pydantic import ValidationError
-
 from core.tool_validator import ToolValidator
+from pydantic import ValidationError
 
 
 class TestToolValidator:

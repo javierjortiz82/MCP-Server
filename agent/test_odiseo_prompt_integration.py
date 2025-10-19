@@ -40,7 +40,7 @@ def test_prompt_manager_availability():
         checks = [
             ("PromptManager initialized", manager is not None),
             ("Config loaded", manager.config is not None),
-            ("Templates enabled", manager.config.get('use_templates', False)),
+            ("Templates enabled", manager.config.get("use_templates", False)),
         ]
 
         print("\nChecks:")
@@ -54,6 +54,7 @@ def test_prompt_manager_availability():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -86,6 +87,7 @@ def test_odiseobot_import():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -109,8 +111,8 @@ async def test_odiseobot_initialization_with_user_id():
 
         checks = [
             ("user_id set correctly", bot.user_id == user_id),
-            ("prompt_manager attribute exists", hasattr(bot, 'prompt_manager')),
-            ("use_modular_prompts flag exists", hasattr(bot, 'use_modular_prompts')),
+            ("prompt_manager attribute exists", hasattr(bot, "prompt_manager")),
+            ("use_modular_prompts flag exists", hasattr(bot, "use_modular_prompts")),
         ]
 
         print("\nChecks:")
@@ -129,6 +131,7 @@ async def test_odiseobot_initialization_with_user_id():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -182,6 +185,7 @@ async def test_build_system_prompt_with_promptmanager():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -226,6 +230,7 @@ async def test_fallback_to_promptbuilder():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -275,6 +280,7 @@ async def test_ab_testing_user_bucketing():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -328,6 +334,7 @@ async def test_integration_summary():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -345,7 +352,9 @@ async def main():
     results.append(("PromptManager Availability", test_prompt_manager_availability()))
     results.append(("OdiseoBot Import", test_odiseobot_import()))
     results.append(("Bot Initialization", await test_odiseobot_initialization_with_user_id()))
-    results.append(("Build Prompt (PromptManager)", await test_build_system_prompt_with_promptmanager()))
+    results.append(
+        ("Build Prompt (PromptManager)", await test_build_system_prompt_with_promptmanager())
+    )
     results.append(("Fallback to PromptBuilder", await test_fallback_to_promptbuilder()))
     results.append(("A/B Testing Bucketing", await test_ab_testing_user_bucketing()))
     results.append(("Integration Workflow", await test_integration_summary()))

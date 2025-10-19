@@ -127,7 +127,10 @@ class TestOdiseoBotV2Integration:
 
             # Verify response content (should mention laptops or products)
             response_lower = response.lower()
-            assert any(keyword in response_lower for keyword in ["laptop", "producto", "encontr", "disponible"])
+            assert any(
+                keyword in response_lower
+                for keyword in ["laptop", "producto", "encontr", "disponible"]
+            )
             print("✅ Response contains relevant keywords")
 
             print("\n✅ TEST 2 PASSED: send_message() with real tools successful")
@@ -200,7 +203,9 @@ class TestOdiseoBotV2Integration:
             # Check if context caching was attempted
             if bot.cached_content:
                 print(f"✅ Context cache created: {bot.cached_content.name}")
-                print(f"✅ Cache display name: {bot.cached_content.display_name if hasattr(bot.cached_content, 'display_name') else 'N/A'}")
+                print(
+                    f"✅ Cache display name: {bot.cached_content.display_name if hasattr(bot.cached_content, 'display_name') else 'N/A'}"
+                )
 
                 # Verify generation config uses cache
                 assert bot.generation_config is not None
@@ -254,7 +259,7 @@ class TestOdiseoBotV2Integration:
         finally:
             await bot1.cleanup()
             await bot2.cleanup()
-            if 'bot1_duplicate' in locals():
+            if "bot1_duplicate" in locals():
                 await bot1_duplicate.cleanup()
             print("✅ Cleanup completed")
 
@@ -481,6 +486,7 @@ async def main():
 
     # Check if we should run pytest or manual
     import sys
+
     if len(sys.argv) > 1 and sys.argv[1] == "--demo":
         print("\n🎮 Running demos (manual mode)")
         await demo_full_conversation()
