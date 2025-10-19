@@ -1,0 +1,228 @@
+COMPLETE FILE LISTING BY ISSUE
+===============================
+
+
+1. MARKDOWN FILES TO MOVE TO /docs/ (VIOLATES CLAUDE.md RULE 1)
+================================================================
+
+ROOT LEVEL (2 files):
+  /home/javort/Lab01-MCP/RESUMEN_REFACTORING_MCP.md
+  /home/javort/Lab01-MCP/TESTING_REPORT.md
+
+AGENT DIRECTORY (4 files):
+  /home/javort/Lab01-MCP/agent/QUICKSTART.md
+  /home/javort/Lab01-MCP/agent/README_AB_TESTING.md
+  /home/javort/Lab01-MCP/agent/VISUAL_SUMMARY.md
+  /home/javort/Lab01-MCP/agent/RESUMEN_EJECUTIVO.md
+
+CLIENT_MCP DIRECTORY (1 file):
+  /home/javort/Lab01-MCP/client_mcp/CHANGELOG.md
+
+EMAIL_SERVICE DIRECTORY (2 files):
+  /home/javort/Lab01-MCP/email_service/CHANGELOG.md
+  /home/javort/Lab01-MCP/email_service/LOGGING_GUIDE.md
+
+TOTAL: 11 files to reorganize
+
+
+2. LOOSE TEST FILES IN ROOT DIRECTORY (CRITICAL - 17 files)
+============================================================
+
+/home/javort/Lab01-MCP/test_base_agent_memory.py
+/home/javort/Lab01-MCP/test_booking_fix.py
+/home/javort/Lab01-MCP/test_booking_flow.py
+/home/javort/Lab01-MCP/test_booking_flow_e2e.py
+/home/javort/Lab01-MCP/test_calendar_integration.py
+/home/javort/Lab01-MCP/test_context_routing.py
+/home/javort/Lab01-MCP/test_cross_session_memory.py
+/home/javort/Lab01-MCP/test_email_full_flow.py
+/home/javort/Lab01-MCP/test_email_template_rendering.py
+/home/javort/Lab01-MCP/test_flexible_dates.py
+/home/javort/Lab01-MCP/test_google_calendar_diagnostic.py
+/home/javort/Lab01-MCP/test_memory_improvements.py
+/home/javort/Lab01-MCP/test_memory_manager.py
+/home/javort/Lab01-MCP/test_multilingual.py
+/home/javort/Lab01-MCP/test_refactored_mcp.py
+/home/javort/Lab01-MCP/test_semantic_extraction.py
+/home/javort/Lab01-MCP/test_tool_filtering.py
+
+ACTION: Move all to /home/javort/Lab01-MCP/test/
+
+
+3. LOOSE UTILITY PYTHON FILES IN ROOT DIRECTORY (6 files)
+==========================================================
+
+DIAGNOSTIC TOOLS (2 files):
+  /home/javort/Lab01-MCP/diagnose_booking_agent.py
+  /home/javort/Lab01-MCP/diagnose_thinking_cache.py
+  DESTINATION: /home/javort/Lab01-MCP/scripts/diagnostic/
+
+VERIFICATION TOOLS (2 files):
+  /home/javort/Lab01-MCP/verify_db_transaction_fix.py
+  /home/javort/Lab01-MCP/verify_schema_fix.py
+  DESTINATION: /home/javort/Lab01-MCP/scripts/verify/
+
+LEGACY/UTILITY (2 files):
+  /home/javort/Lab01-MCP/odiseo_bot.py [AUDIT - likely duplicate]
+  /home/javort/Lab01-MCP/sync_bookings_to_calendar.py [Move to /scripts/]
+
+TOTAL: 6 files
+
+
+4. SCATTERED TEST FILES IN SUBDIRECTORIES (REVIEW NEEDED)
+=========================================================
+
+AGENT DIRECTORY (10 files):
+  /home/javort/Lab01-MCP/agent/test_ab_testing.py
+  /home/javort/Lab01-MCP/agent/test_agent_factory.py
+  /home/javort/Lab01-MCP/agent/test_booking_modular_prompts.py
+  /home/javort/Lab01-MCP/agent/test_general_modular_prompts.py
+  /home/javort/Lab01-MCP/agent/test_metrics.py
+  /home/javort/Lab01-MCP/agent/test_modular_sales_prompt.py
+  /home/javort/Lab01-MCP/agent/test_odiseo_bot_v2.py
+  /home/javort/Lab01-MCP/agent/test_odiseo_bot_v2_integration.py
+  /home/javort/Lab01-MCP/agent/test_odiseo_prompt_integration.py
+  /home/javort/Lab01-MCP/agent/src/multi_agent/test_booking_input_parser.py
+
+AGENT TESTS DIRECTORY (4 files - OK):
+  /home/javort/Lab01-MCP/agent/tests/test_agent.py
+  /home/javort/Lab01-MCP/agent/tests/test_base_agent.py
+  /home/javort/Lab01-MCP/agent/tests/test_config.py
+  /home/javort/Lab01-MCP/agent/tests/test_server.py
+
+MCP_SERVER DIRECTORY (1 file):
+  /home/javort/Lab01-MCP/mcp_server/test_product_handler_i18n.py
+
+ANALYSIS: Tests are fragmented across 4 different directories
+
+
+5. ORPHAN/CORRUPTED FILES TO DELETE (2 files)
+==============================================
+
+/home/javort/Lab01-MCP/=3.1.0 (0 bytes)
+/home/javort/Lab01-MCP/=6.0.0 (0 bytes)
+
+REASON: Appear to be pip artifact markers, not valid Python or configuration files
+
+
+6. EMPTY BACKUP DIRECTORY TO DELETE (1 directory)
+==================================================
+
+/home/javort/Lab01-MCP/.backup/
+
+CONTENTS: Empty (0 files)
+ACTION: Delete directory
+
+
+7. BACKUP DIRECTORIES TO ARCHIVE (1 directory tree)
+===================================================
+
+/home/javort/Lab01-MCP/backups/ (236 KB total)
+  /home/javort/Lab01-MCP/backups/2025-01-06/
+    /home/javort/Lab01-MCP/backups/2025-01-06/db_original.py (3.4 KB)
+    /home/javort/Lab01-MCP/backups/2025-01-06/fuzzy_search_original.py (26 KB)
+    /home/javort/Lab01-MCP/backups/2025-01-06/odiseo_bot_original.py (47 KB)
+  /home/javort/Lab01-MCP/backups/2025-10-07/
+    /home/javort/Lab01-MCP/backups/2025-10-07/client_mcp/
+    /home/javort/Lab01-MCP/backups/2025-10-07/mcp/
+  /home/javort/Lab01-MCP/backups/2025-10-08/
+    /home/javort/Lab01-MCP/backups/2025-10-08/client_mcp/
+
+ACTION: Move to external storage or add to .gitignore
+VIOLATES: CLAUDE.md rule #3 (no copies with suffixes)
+
+
+8. UTILITY DIRECTORIES TO REVIEW (3 directories)
+================================================
+
+/home/javort/Lab01-MCP/data/ (8 KB)
+  /home/javort/Lab01-MCP/data/execution_metrics.json
+  ASSESSMENT: Can be consolidated with /metrics/
+
+/home/javort/Lab01-MCP/metrics/ (8 KB)
+  /home/javort/Lab01-MCP/metrics/execution_metrics.json
+  ASSESSMENT: Can be consolidated with /data/
+
+/home/javort/Lab01-MCP/logs/ (8 KB)
+  /home/javort/Lab01-MCP/logs/session_lifecycle.log
+  ASSESSMENT: Should be in .gitignore, not version controlled
+
+ACTION: Consolidate and add to .gitignore
+
+
+9. CONFIGURATION ISSUES (0 critical)
+====================================
+
+/home/javort/Lab01-MCP/pyproject.toml [OK - Correct location]
+/home/javort/Lab01-MCP/.env [OK - Correct location, already in .gitignore]
+/home/javort/Lab01-MCP/.env.example [OK - Correct location]
+/home/javort/Lab01-MCP/.gitignore [OK - Correct location]
+
+
+10. PROPERLY ORGANIZED MODULES (5 directories - OK)
+===================================================
+
+/home/javort/Lab01-MCP/agent/ [CORE MODULE - OK]
+/home/javort/Lab01-MCP/client_mcp/ [CORE MODULE - OK]
+/home/javort/Lab01-MCP/mcp_server/ [CORE MODULE - OK]
+/home/javort/Lab01-MCP/email_service/ [CORE MODULE - OK]
+/home/javort/Lab01-MCP/scripts/ [UTILITIES - WELL ORGANIZED]
+
+
+11. PARTIALLY ORGANIZED (2 directories)
+=======================================
+
+/home/javort/Lab01-MCP/docs/ [DOCUMENTATION]
+  STATUS: Has 40+ files correctly placed
+  ISSUE: Missing 11 files that are scattered elsewhere
+
+/home/javort/Lab01-MCP/test/ [TESTS]
+  STATUS: Central test directory exists
+  ISSUE: Only partially utilized; 17 tests in root, many in subdirectories
+
+
+SUMMARY OF ABSOLUTE PATHS
+==========================
+
+MOVE TO /docs/ (11 files):
+  1. /home/javort/Lab01-MCP/RESUMEN_REFACTORING_MCP.md
+  2. /home/javort/Lab01-MCP/TESTING_REPORT.md
+  3. /home/javort/Lab01-MCP/agent/QUICKSTART.md
+  4. /home/javort/Lab01-MCP/agent/README_AB_TESTING.md
+  5. /home/javort/Lab01-MCP/agent/VISUAL_SUMMARY.md
+  6. /home/javort/Lab01-MCP/agent/RESUMEN_EJECUTIVO.md
+  7. /home/javort/Lab01-MCP/client_mcp/CHANGELOG.md
+  8. /home/javort/Lab01-MCP/email_service/CHANGELOG.md
+  9. /home/javort/Lab01-MCP/email_service/LOGGING_GUIDE.md
+
+MOVE TO /test/ (17 files):
+  All test_*.py files in /home/javort/Lab01-MCP/
+
+MOVE TO /scripts/diagnostic/ (2 files):
+  /home/javort/Lab01-MCP/diagnose_booking_agent.py
+  /home/javort/Lab01-MCP/diagnose_thinking_cache.py
+
+MOVE TO /scripts/verify/ (2 files):
+  /home/javort/Lab01-MCP/verify_db_transaction_fix.py
+  /home/javort/Lab01-MCP/verify_schema_fix.py
+
+DELETE (2 files):
+  /home/javort/Lab01-MCP/=3.1.0
+  /home/javort/Lab01-MCP/=6.0.0
+
+DELETE (1 directory):
+  /home/javort/Lab01-MCP/.backup/
+
+ARCHIVE/GITIGNORE (1 directory):
+  /home/javort/Lab01-MCP/backups/
+
+REVIEW/AUDIT (1 file):
+  /home/javort/Lab01-MCP/odiseo_bot.py
+
+CONSOLIDATE (2 directories):
+  /home/javort/Lab01-MCP/data/
+  /home/javort/Lab01-MCP/metrics/
+
+GITIGNORE (1 directory):
+  /home/javort/Lab01-MCP/logs/
+
