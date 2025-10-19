@@ -2,10 +2,10 @@
 -- Este script se ejecuta automáticamente al crear el contenedor
 
 -- Crear extensiones útiles
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "unaccent";
-CREATE EXTENSION IF NOT EXISTS "pg_trgm";
-CREATE EXTENSION IF NOT EXISTS "vector";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS "unaccent" SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS "pg_trgm" SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS "vector" SCHEMA public;
 
 -- Crear esquema para MCP
 CREATE SCHEMA IF NOT EXISTS test;
