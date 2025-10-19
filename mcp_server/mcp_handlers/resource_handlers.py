@@ -145,3 +145,30 @@ def register_resources():
             return json.dumps({"category": "bookings", "tools": tool_names, "count": len(tool_names)})
         except Exception as e:
             return json.dumps({"error": f"Error retrieving booking tool names: {str(e)}"})
+
+    @mcp.resource("tool-categories://pageable-tools")  # type: ignore[union-attr]
+    def get_pageable_tool_categories() -> str:
+        """
+        Resource providing list of tools that return pageable result lists.
+
+        This resource enables clients to dynamically discover which tools return
+        pageable lists for implementing client-side pagination. This eliminates
+        the need for hardcoding tool lists (like SEARCH_TOOL_NAMES) in client code.
+
+        Pageable tools return results in formats like:
+        - {"items": [...], "count": N}  (most common)
+        - list directly (fallback)
+
+        Returns:
+            JSON string containing list of pageable tool names
+        """
+        try:
+            tool_names = product_handlers.get_pageable_tool_names()
+            return json.dumps({
+                "category": "pageable",
+                "tools": tool_names,
+                "count": len(tool_names),
+                "description": "Tools that return pageable result lists"
+            })
+        except Exception as e:
+            return json.dumps({"error": f"Error retrieving pageable tool names: {str(e)}"})
