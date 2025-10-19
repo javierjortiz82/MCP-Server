@@ -70,7 +70,7 @@ class ClientHealthMonitor:
         """Set the bot instance for monitoring.
 
         Args:
-            bot: OdiseoBot instance
+            bot: Agent orchestrator instance (SalesAgent in single-agent mode, AgentOrchestrator in multi-agent)
         """
         self.bot_instance = bot
 
@@ -443,6 +443,6 @@ def setup_health_monitoring(bot_instance) -> None:
     """Set up health monitoring for a bot instance.
 
     Args:
-        bot_instance: OdiseoBot instance
+        bot_instance: Agent orchestrator or SalesAgent instance
     """
     health_monitor.set_bot_instance(bot_instance)

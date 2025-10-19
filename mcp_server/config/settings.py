@@ -64,11 +64,6 @@ class Settings(BaseSettings):
     # ============================================================================
     # Data Configuration
     # ============================================================================
-    PRODUCTS_JSON_PATH: str = Field(
-        default="./data/products.json",
-        description="Path to products JSON file",
-    )
-
     BATCH_SIZE: int = Field(
         default=8,
         gt=0,
@@ -416,15 +411,6 @@ class Settings(BaseSettings):
     def log_dir_path(self) -> Path:
         """Get absolute path to logs directory."""
         return Path(__file__).parent.parent / self.LOG_DIR
-
-    @property
-    def products_path(self) -> Path:
-        """Get absolute path to products JSON file."""
-        products_path = Path(self.PRODUCTS_JSON_PATH)
-        if not products_path.is_absolute():
-            # Resolve relative to project root
-            return Path(__file__).parent.parent / products_path
-        return products_path
 
     @property
     def google_calendar_credentials_path(self) -> Path:

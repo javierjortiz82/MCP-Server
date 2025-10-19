@@ -4,12 +4,11 @@
 Main entry point for the Lab01-MCP system with multi-agent routing support.
 This implementation provides:
 - Feature flag for gradual rollout (ENABLE_AGENT_ROUTING)
-- Backward compatibility with OdiseoBot (legacy mode)
 - Multi-agent routing (sales, booking, general)
 - Full compliance with MCP specifications
 
 Usage:
-    # Legacy mode (OdiseoBot only):
+    # Single-agent mode (SalesAgent only):
     ENABLE_AGENT_ROUTING=false python -m client_mcp
 
     # Multi-agent mode (Router + specialized agents):
@@ -17,7 +16,7 @@ Usage:
 
 Features:
     - AgentRouter: Intent classification (sales/booking/general)
-    - Sales Agent: OdiseoBot for product queries
+    - Sales Agent: Product queries and recommendations
     - Booking Agent: Appointment management
     - General Agent: FAQ and company information
     - Official Anthropic MCP SDK
@@ -82,7 +81,7 @@ async def main():
 
 if __name__ == "__main__":
     # Display startup banner
-    mode = "MULTI-AGENT" if settings.ENABLE_AGENT_ROUTING else "LEGACY (OdiseoBot)"
+    mode = "MULTI-AGENT" if settings.ENABLE_AGENT_ROUTING else "SINGLE-AGENT (SalesAgent)"
 
     print("🚀 Lab01-MCP - Multi-Agent Sales & Booking System")
     print("=" * 70)
