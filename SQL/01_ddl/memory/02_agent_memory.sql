@@ -4,12 +4,12 @@
 -- Follows Memory Blocks pattern (Letta) for structured context management
 -- Stores "facts about user" extracted from conversations
 
-CREATE TABLE IF NOT EXISTS :'SCHEMA_NAME'.agent_memory_blocks (
+CREATE TABLE IF NOT EXISTS test.agent_memory_blocks (
     -- Primary key
     id SERIAL PRIMARY KEY,
 
     -- Session reference
-    session_id UUID NOT NULL REFERENCES :'SCHEMA_NAME'.conversation_sessions(id) ON DELETE CASCADE,
+    session_id UUID NOT NULL REFERENCES test.conversation_sessions(id) ON DELETE CASCADE,
 
     -- Memory block structure (Letta pattern)
     block_label VARCHAR(100) NOT NULL,  -- 'user_preferences', 'purchase_history', 'product_interest', etc
@@ -36,30 +36,30 @@ CREATE TABLE IF NOT EXISTS :'SCHEMA_NAME'.agent_memory_blocks (
 
 -- Indexes for agent_memory_blocks
 CREATE INDEX IF NOT EXISTS idx_memory_blocks_session
-    ON :'SCHEMA_NAME'.agent_memory_blocks(session_id);
+    ON test.agent_memory_blocks(session_id);
 
 CREATE INDEX IF NOT EXISTS idx_memory_blocks_priority
-    ON :'SCHEMA_NAME'.agent_memory_blocks(priority DESC, extracted_at DESC);
+    ON test.agent_memory_blocks(priority DESC, extracted_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_memory_blocks_expires
-    ON :'SCHEMA_NAME'.agent_memory_blocks(expires_at)
+    ON test.agent_memory_blocks(expires_at)
     WHERE expires_at IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_memory_blocks_scope
-    ON :'SCHEMA_NAME'.agent_memory_blocks(agent_scope);
+    ON test.agent_memory_blocks(agent_scope);
 
 CREATE INDEX IF NOT EXISTS idx_memory_blocks_label
-    ON :'SCHEMA_NAME'.agent_memory_blocks(block_label);
+    ON test.agent_memory_blocks(block_label);
 
 -- ============================================================================
 -- AGENT CONTEXT TRANSFERS TABLE - Tracks handoffs between agents
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS :'SCHEMA_NAME'.agent_context_transfers (
+CREATE TABLE IF NOT EXISTS test.agent_context_transfers (
     -- Primary key
     id SERIAL PRIMARY KEY,
 
     -- Session reference
-    session_id UUID NOT NULL REFERENCES :'SCHEMA_NAME'.conversation_sessions(id) ON DELETE CASCADE,
+    session_id UUID NOT NULL REFERENCES test.conversation_sessions(id) ON DELETE CASCADE,
 
     -- Transfer metadata
     from_agent VARCHAR(50) NOT NULL,
@@ -87,21 +87,21 @@ CREATE TABLE IF NOT EXISTS :'SCHEMA_NAME'.agent_context_transfers (
 
 -- Indexes for agent_context_transfers
 CREATE INDEX IF NOT EXISTS idx_context_transfers_session
-    ON :'SCHEMA_NAME'.agent_context_transfers(session_id, created_at DESC);
+    ON test.agent_context_transfers(session_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_context_transfers_from_to
-    ON :'SCHEMA_NAME'.agent_context_transfers(from_agent, to_agent);
+    ON test.agent_context_transfers(from_agent, to_agent);
 
 CREATE INDEX IF NOT EXISTS idx_context_transfers_success
-    ON :'SCHEMA_NAME'.agent_context_transfers(success);
+    ON test.agent_context_transfers(success);
 
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
-GRANT SELECT, INSERT, UPDATE, DELETE ON :'SCHEMA_NAME'.agent_memory_blocks TO mcp_user;
-GRANT USAGE, SELECT ON SEQUENCE :'SCHEMA_NAME'.agent_memory_blocks_id_seq TO mcp_user;
-GRANT SELECT, INSERT, UPDATE, DELETE ON :'SCHEMA_NAME'.agent_context_transfers TO mcp_user;
-GRANT USAGE, SELECT ON SEQUENCE :'SCHEMA_NAME'.agent_context_transfers_id_seq TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON test.agent_memory_blocks TO mcp_user;
+GRANT USAGE, SELECT ON SEQUENCE test.agent_memory_blocks_id_seq TO mcp_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON test.agent_context_transfers TO mcp_user;
+GRANT USAGE, SELECT ON SEQUENCE test.agent_context_transfers_id_seq TO mcp_user;
 
 -- ============================================================================
 -- VERIFICATION

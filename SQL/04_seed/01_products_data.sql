@@ -9,12 +9,12 @@
 -- ============================================================================
 
 -- Disable triggers for faster insertion
-ALTER TABLE :'SCHEMA_NAME'.products DISABLE TRIGGER ALL;
+ALTER TABLE test.products DISABLE TRIGGER ALL;
 
 -- Clear any existing data (optional - for re-runs)
--- DELETE FROM :'SCHEMA_NAME'.products;
+-- DELETE FROM test.products;
 
-INSERT INTO :'SCHEMA_NAME'.products (sku, name, description, category, brand, tags, color, size, price)
+INSERT INTO test.products (sku, name, description, category, brand, tags, color, size, price)
 VALUES
 ('AUD-0001', 'Auriculares Inalámbricos X1', 'Auriculares Bluetooth con cancelación de ruido y 30h de batería.', 'Audio', 'SonicWave', '{audio,auriculares,bluetooth,cancelacion}', 'Negro', 'OneSize', 79.99),
 ('AUD-0002', 'NoiseBuds Pro', 'True wireless earbuds, touch control, dual mic for calls.', 'Audio', 'ClearSound', '{earbuds,wireless,truewireless}', 'White', 'OneSize', 129.99),
@@ -108,13 +108,13 @@ VALUES
 ('COMP-0090', 'Lenovo V15 Gen 4', 'AMD Ryzen 3 7320U, 8GB DDR4, 256GB SSD, 15.6" FHD TN, laptop económica uso básico.', 'Computación', 'Lenovo', '{laptop,v15,economica,basica}', 'Black', '15.6inch', 449.99);
 
 -- Re-enable triggers
-ALTER TABLE :'SCHEMA_NAME'.products ENABLE TRIGGER ALL;
+ALTER TABLE test.products ENABLE TRIGGER ALL;
 
 -- ============================================================================
 -- VERIFICATION
 -- ============================================================================
--- Expected: 90 products inserted into :SCHEMA_NAME.products table
+-- Expected: 90 products inserted into test.products table
 -- Run the following query to verify:
--- SELECT COUNT(*) as total_products, COUNT(DISTINCT category) as categories FROM :'SCHEMA_NAME'.products;
+-- SELECT COUNT(*) as total_products, COUNT(DISTINCT category) as categories FROM test.products;
 -- Should return: 90 products across 23 categories
 -- ============================================================================

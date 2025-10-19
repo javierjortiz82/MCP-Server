@@ -3,13 +3,13 @@
 -- ============================================================================
 -- Schema name from environment variable: SCHEMA_NAME (default: test)
 
-CREATE SCHEMA IF NOT EXISTS :SCHEMA_NAME;
+CREATE SCHEMA IF NOT EXISTS test;
 
 -- Set default search path
-ALTER DATABASE mcpdb SET search_path TO :SCHEMA_NAME, public;
+ALTER DATABASE mcpdb SET search_path TO test, public;
 
 -- Comment for documentation
-COMMENT ON SCHEMA :SCHEMA_NAME IS 'Main schema for MCP applications - Contains all tables for products, bookings, email, and memory systems';
+COMMENT ON SCHEMA test IS 'Main schema for MCP applications - Contains all tables for products, bookings, email, and memory systems';
 
 -- Verification
 DO $$

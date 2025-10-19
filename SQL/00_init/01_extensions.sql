@@ -15,6 +15,10 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 -- Vector similarity search (AI embeddings)
 CREATE EXTENSION IF NOT EXISTS "vector";
 
+-- Cryptographic functions (digest, hmac, encrypt/decrypt, etc.)
+-- NOTE: Currently installed but not actively used by application functions
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 -- Verification
 DO $$
 BEGIN
@@ -23,4 +27,5 @@ BEGIN
     RAISE NOTICE '   ✓ unaccent (Text search)';
     RAISE NOTICE '   ✓ pg_trgm (Fuzzy matching)';
     RAISE NOTICE '   ✓ vector (AI embeddings)';
+    RAISE NOTICE '   ✓ pgcrypto (Cryptographic functions)';
 END $$;
