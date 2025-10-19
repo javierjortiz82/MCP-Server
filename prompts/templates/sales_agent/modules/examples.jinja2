@@ -57,48 +57,78 @@ User: "necesito auriculares para trabajar" (or "I need wireless headphones")
 
 **INPUT:**
 ```
-User: "tienen artículos de cocina y algo que mejore el rendimiento de mi computadora"
-       ↑ Intent 1: Kitchen        ↑ Intent 2: Computer performance
+User: "busco algo para cocinar, juegos de mesa y una laptop"
+      ↑ Intent 1: Cocina     ↑ Intent 2: Juegos     ↑ Intent 3: Laptop
 ```
 
 **THINKING:**
-- Detect: 2 DISTINCT categories detected (conjunction "y")
-- Strategy: Make 2 separate tool calls in SAME iteration
-- Tool 1: search_products(query="cocina")
-- Tool 2: search_products(query="rendimiento computadora RAM SSD")
+- Detect: 3 DISTINCT categories (commas + conjunctions)
+- Strategy: Make 3 separate tool calls in SAME iteration
+- Tool 1: search_products(query="cocinar")
+- Tool 2: search_products(query="juegos de mesa")
+- Tool 3: search_products(query="laptop")
+- CRITICAL: Show ALL 3 categories in response (don't omit any)
 
-**OUTPUT:**
+**OUTPUT (CARD FORMAT - with ALL categories):**
 ```
-🔍 Encontré opciones para ambas categorías:
+🔍 Encontré opciones para tus 3 búsquedas:
 
-### 🍳 Artículos de Cocina
-1. 🔪 **Juego de Cuchillos Profesional** - $89.99 (SKU: KIT-301)
-   Set de 5 cuchillos de acero inoxidable para chef
-   ⭐ Perfectos para preparar comidas
+### 🍳 Artículos para Cocinar
+┌─────────────────────────────────────────────────────┐
+│ 1️⃣ 🔪 **Juego de Cuchillos Profesional**           │
+│ 🏷️ Brand: ChefPro | SKU: KIT-301                  │
+│ 💰 Price: $89.99 | 📦 Category: Cocina             │
+│ 📝 Set de 5 cuchillos de acero inoxidable          │
+│ ✨ Features: Professional • Durable • Sharp        │
+│ 🎨 Available: Silver                               │
+│ ⭐ Perfectos para preparar comidas profesionales    │
+└─────────────────────────────────────────────────────┘
 
-2. 🍳 **Sartén Antiadherente 28cm** - $45.50 (SKU: KIT-205)
-   Sartén con recubrimiento antiadherente
-   ⭐ Ideal para cocinar sin pegarse
+┌─────────────────────────────────────────────────────┐
+│ 2️⃣ 🍳 **Sartén Antiadherente 28cm**                │
+│ 🏷️ Brand: CookMaster | SKU: KIT-205                │
+│ 💰 Price: $45.50 | 📦 Category: Cocina             │
+│ 📝 Sartén con recubrimiento antiadherente premium   │
+│ ✨ Features: Non-stick • Heat-resistant • Durable   │
+│ 🎨 Available: Black, Red                            │
+│ ⭐ Ideal para cocinar sin que se pegue              │
+└─────────────────────────────────────────────────────┘
 
-### 💻 Mejora de Rendimiento
-1. 🎮 **Memoria RAM DDR4 16GB** - $75.00 (SKU: RAM-401)
-   DDR4 3200MHz para gaming
-   ⭐ Aumenta velocidad multitarea
+### 🎲 Juegos de Mesa
+┌─────────────────────────────────────────────────────┐
+│ 1️⃣ 🎲 **Juego Estrategia Épica**                   │
+│ 🏷️ Brand: GameMaster | SKU: GAME-401               │
+│ 💰 Price: $34.99 | 📦 Category: Juegos             │
+│ 📝 Juego de estrategia para 2-4 jugadores         │
+│ ✨ Features: Strategic • Competitive • Replayable  │
+│ 🎨 Available: Full Set                             │
+│ ⭐ Diversión garantizada para noches familiares     │
+└─────────────────────────────────────────────────────┘
 
-2. ⚡ **SSD NVMe 512GB** - $120.00 (SKU: SSD-202)
-   NVMe PCIe Gen3 alta velocidad
-   ⭐ Mejora velocidad arranque y carga
+### 💻 Laptops
+┌─────────────────────────────────────────────────────┐
+│ 1️⃣ 💻 **Laptop Ultralight 13"**                    │
+│ 🏷️ Brand: ThinBook | SKU: COMP-0009                │
+│ 💰 Price: $999.00 | 📦 Category: Computación       │
+│ 📝 Portátil ultraligera con 16GB RAM y SSD 512GB   │
+│ ✨ Features: Lightweight • Fast • Portable          │
+│ 🎨 Available: Grey, Silver                         │
+│ ⭐ Perfecta para trabajo y viajes                   │
+└─────────────────────────────────────────────────────┘
 
 ¿Te interesa alguna de estas opciones?
 ```
 
 **KEY POINTS:**
-- Detect multi-intent EARLY (conjunctions: "y", "and", commas)
-- Make SEPARATE searches per category (same iteration)
-- Group results by category with headers
-- Maintain consistent format within each category
-- End with question acknowledging BOTH needs
-- See display_rules.jinja2 for product formatting details
+- ✅ Detect multi-intent EARLY (conjunctions: "y", "and", commas)
+- ✅ Make SEPARATE searches per category (same iteration)
+- ✅ **SHOW ALL CATEGORIES** - customer asked for 3, show 3 (MANDATORY)
+- ✅ Group results by category with emoji headers
+- ✅ Use CARD FORMAT for consistency (matches display_rules)
+- ✅ Show up to {{ pagination_page_size }} products per category
+- ✅ End with question acknowledging ALL needs
+- ❌ DO NOT omit categories or reduce to just 1
+- See display_rules.jinja2 for detailed pagination rules per category
 
 ---
 
