@@ -42,13 +42,6 @@ REQUIRED_VARS = {
     "TEMPLATE_DIR",
 }
 
-# Optional variables (have defaults in settings)
-OPTIONAL_VARS = {
-    "PYTHONENV",
-    "ENVIRONMENT",
-}
-
-
 def validate_env() -> tuple[bool, list[str]]:
     """Validate .env file has all required variables.
 
