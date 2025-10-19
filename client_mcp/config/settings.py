@@ -83,6 +83,13 @@ class Settings(BaseSettings):
         description="MCP server port",
     )
 
+    MCP_HEALTH_CHECK_TIMEOUT: float = Field(
+        default=5.0,
+        gt=0,
+        le=60,
+        description="Health check timeout in seconds",
+    )
+
     @property
     def mcp_base_url(self) -> str:
         """Computed MCP base URL from host and port.
@@ -330,6 +337,11 @@ class Settings(BaseSettings):
         description="Enable PostgreSQL persistence for pagination contexts",
     )
 
+    PAGINATION_SCHEMA_NAME: str = Field(
+        default="public",
+        description="PostgreSQL schema for pagination contexts (must match database schema)",
+    )
+
     PAGINATION_DB_HOST: str = Field(
         default="localhost",
         description="PostgreSQL host for pagination persistence",
@@ -355,6 +367,20 @@ class Settings(BaseSettings):
     PAGINATION_DB_PASSWORD: str | None = Field(
         default=None,
         description="PostgreSQL password for pagination persistence",
+    )
+
+    PAGINATION_DB_POOL_MIN: int = Field(
+        default=1,
+        ge=1,
+        le=10,
+        description="Minimum database connections in pool",
+    )
+
+    PAGINATION_DB_POOL_MAX: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum database connections in pool",
     )
 
     PAGINATION_TTL_HOURS: int = Field(
@@ -410,9 +436,7 @@ class Settings(BaseSettings):
 
         if not self.GOOGLE_API_KEY:
             # Use getpass for masked input (prevents terminal history leakage)
-            self.GOOGLE_API_KEY = getpass.getpass(
-                "🔑 Introduce tu GOOGLE_API_KEY: "
-            ).strip()
+            self.GOOGLE_API_KEY = getpass.getpass("🔑 Introduce tu GOOGLE_API_KEY: ").strip()
 
             if not self.GOOGLE_API_KEY:
                 raise ValueError("❌ API key es requerida para continuar")
@@ -434,7 +458,6 @@ class Settings(BaseSettings):
             return True
         except ValueError:
             return False
-
 
     def get_retry_config(self) -> dict[str, float | int | bool]:
         """Get retry configuration as dictionary.

@@ -26,6 +26,9 @@ from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+# Constants - Context types must match SQL CHECK constraint
+PAGINATION_CONTEXT_TYPE_CUSTOM = "custom"
+
 
 class PaginationDB:
     """Database adapter for pagination context persistence.
@@ -37,17 +40,34 @@ class PaginationDB:
     Attributes:
         _pool: Connection pool for PostgreSQL connections.
         _enabled: Whether database persistence is enabled.
-        _schema: PostgreSQL schema name (default: 'test').
+        _schema: PostgreSQL schema name.
     """
 
     def __init__(self) -> None:
-        """Initialize the database adapter with connection pooling."""
+        """Initialize the database adapter with connection pooling.
+
+        Raises:
+            ValueError: If PAGINATION_SCHEMA_NAME is not configured when
+                      PAGINATION_PERSISTENCE_ENABLED is True.
+        """
         self._pool: pool.SimpleConnectionPool | None = None
         self._enabled: bool = settings.PAGINATION_PERSISTENCE_ENABLED
-        self._schema: str = getattr(settings, 'PAGINATION_SCHEMA_NAME', 'test')
 
-        if self._enabled:
-            self._initialize_pool()
+        if not self._enabled:
+            return
+
+        # Validate schema is configured before connecting
+        if not hasattr(settings, "PAGINATION_SCHEMA_NAME"):
+            logger.error(
+                "❌ PAGINATION_SCHEMA_NAME environment variable must be set "
+                "when PAGINATION_PERSISTENCE_ENABLED=True"
+            )
+            self._enabled = False
+            self._pool = None
+            return
+
+        self._schema: str = settings.PAGINATION_SCHEMA_NAME
+        self._initialize_pool()
 
     def _initialize_pool(self) -> None:
         """Initialize PostgreSQL connection pool.
@@ -57,20 +77,16 @@ class PaginationDB:
         """
         # Validate password when persistence is enabled
         if not settings.PAGINATION_DB_PASSWORD:
-            logger.error(
-                "❌ PAGINATION_DB_PASSWORD must be set when persistence is enabled"
-            )
-            logger.warning(
-                "⚠️  Pagination persistence disabled - password not configured"
-            )
+            logger.error("❌ PAGINATION_DB_PASSWORD must be set when persistence is enabled")
+            logger.warning("⚠️  Pagination persistence disabled - password not configured")
             self._enabled = False
             self._pool = None
             return
 
         try:
             self._pool = pool.SimpleConnectionPool(
-                minconn=1,
-                maxconn=5,
+                minconn=settings.PAGINATION_DB_POOL_MIN,
+                maxconn=settings.PAGINATION_DB_POOL_MAX,
                 host=settings.PAGINATION_DB_HOST,
                 port=settings.PAGINATION_DB_PORT,
                 database=settings.PAGINATION_DB_NAME,
@@ -183,7 +199,7 @@ class PaginationDB:
                     """,
                     (
                         context_name,
-                        "custom",  # context_type (use "custom" to satisfy CHECK constraint)
+                        PAGINATION_CONTEXT_TYPE_CUSTOM,
                         str(session_id),
                         last_offset,
                         page_size,  # last_limit
@@ -336,9 +352,7 @@ class PaginationDB:
                 deleted_count = cur.rowcount
 
                 if deleted_count > 0:
-                    logger.info(
-                        "🧹 Cleaned up %d expired pagination contexts", deleted_count
-                    )
+                    logger.info("🧹 Cleaned up %d expired pagination contexts", deleted_count)
                 return deleted_count
 
         except Exception as e:

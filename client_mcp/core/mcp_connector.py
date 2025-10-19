@@ -11,6 +11,8 @@ import httpx
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
+from config.settings import settings
+
 
 class MCPConnector:
     """MCP Connector - Official client using Anthropic SDK.
@@ -24,13 +26,13 @@ class MCPConnector:
             result = await connector.call_tool("search", {"query": "laptop"})
     """
 
-    def __init__(self, url: str = "http://localhost:8009/mcp"):
+    def __init__(self, url: str | None = None):
         """Initialize MCP connector.
 
         Args:
-            url: MCP server URL
+            url: MCP server URL (defaults to settings.mcp_base_url)
         """
-        self.url = url
+        self.url = url or settings.mcp_base_url
         self.session: ClientSession | None = None
         self.streams: Any = None  # Type from streamablehttp_client context manager
         self.session_ctx: Any = None  # Type from ClientSession context manager
@@ -64,7 +66,9 @@ class MCPConnector:
         health_url = f"{base_url}/health"
 
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(
+                timeout=settings.MCP_HEALTH_CHECK_TIMEOUT
+            ) as client:
                 response = await client.get(health_url)
                 return response.json()
         except httpx.RequestError as e:
@@ -229,9 +233,7 @@ class MCPConnector:
             for prompt in result.prompts
         ]
 
-    async def get_prompt(
-        self, name: str, arguments: dict[str, str] | None = None
-    ) -> Any:
+    async def get_prompt(self, name: str, arguments: dict[str, str] | None = None) -> Any:
         """Get an MCP prompt using official SDK.
 
         Args:
