@@ -327,6 +327,16 @@ class Settings(BaseSettings):
         description="Number of products to show per page (default: 4)",
     )
 
+    PAGINATION_KEYWORDS_ES: str = Field(
+        default="más,siguiente,muéstrame,opciones",
+        description="Spanish keywords for pagination requests (comma-separated)",
+    )
+
+    PAGINATION_KEYWORDS_EN: str = Field(
+        default="more,next,show,additional,options",
+        description="English keywords for pagination requests (comma-separated)",
+    )
+
     # ============================================================================
     # Multi-Agent System Configuration
     # ============================================================================

@@ -35,11 +35,27 @@ Version: 3.0 (Updated: Professional Text Format with Emoji Labels)
 - ❌ "🔍 Found {{ pagination_page_size }} laptops" (when tool returned 12)
 - ALWAYS show: "Found [TOTAL]. Here are the first [{{ pagination_page_size }}]:" (single) or "Found options for [N] categories:" (multiple)
 
-**Rule 3: Add Pagination Hint if More Available**
-- Formula: `remaining = total_found - {{ pagination_page_size }}`
-- SINGLE category: If remaining > 0 → "Interested in any? I have [remaining] more options if you'd like to see them."
-- MULTIPLE categories: If ANY category has remaining > 0 → "Interested in any? I can show you more options from any category."
-- If remaining = 0: No hint needed
+**Rule 3: Add Pagination Navigation (See pagination_navigation.jinja2)**
+
+ALWAYS show pagination information:
+
+- **Calculate total pages:** `total_pages = ceiling(total_found ÷ {{ pagination_page_size }})`
+- **Show page indicator:** "Page 1 of [total_pages]" (first page) or "Page [N] of [total_pages]" (subsequent)
+- **Calculate remaining:** `remaining = total_found - (current_page × {{ pagination_page_size }})`
+- **Show navigation buttons** based on position:
+  - **First page:** Show only "▶ Next Page ([remaining] more products)"
+  - **Middle pages:** Show "◀ Previous Page | ▶ Next Page ([remaining] more products)"
+  - **Last page:** Show only "◀ Previous Page" + "✅ End of results"
+
+SINGLE CATEGORY Example:
+```
+🔍 Found 20 laptops. Showing page 1 of 5:
+[4 products]
+--- Navigation ---
+▶ Next Page (16 more products available)
+```
+
+MULTIPLE CATEGORIES: Each category shows its own page counter and navigation independently
 
 **Examples:**
 

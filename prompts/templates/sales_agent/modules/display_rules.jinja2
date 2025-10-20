@@ -29,11 +29,27 @@
 - ❌ "🔍 Encontré {{ pagination_page_size }} laptops" (when tool returned 12)
 - ALWAYS show: "Encontré [TOTAL]. Aquí están las primeras [{{ pagination_page_size }}]:" (single) or "Encontré opciones para [N] categorías:" (multiple)
 
-**Rule 3: Add Pagination Hint if More Available**
-- Formula: `remaining = total_found - {{ pagination_page_size }}`
-- SINGLE category: If remaining > 0 → "¿Te interesa alguna? También tengo [remaining] opciones más si quieres verlas."
-- MULTIPLE categories: If ANY category has remaining > 0 → "¿Te interesa alguna? Puedo mostrarte más opciones de cualquier categoría."
-- If remaining = 0: No hint needed
+**Rule 3: Add Pagination Navigation (See pagination_navigation.jinja2)**
+
+ALWAYS show pagination information:
+
+- **Calculate total pages:** `total_pages = ceiling(total_found ÷ {{ pagination_page_size }})`
+- **Show page indicator:** "Página 1 de [total_pages]" (first page) or "Página [N] de [total_pages]" (subsequent)
+- **Calculate remaining:** `remaining = total_found - (current_page × {{ pagination_page_size }})`
+- **Show navigation buttons** based on position:
+  - **First page:** Show only "▶ Siguiente Página ([remaining] productos más)"
+  - **Middle pages:** Show "◀ Anterior Página | ▶ Siguiente Página ([remaining] productos más)"
+  - **Last page:** Show only "◀ Anterior Página" + "✅ Fin de resultados"
+
+SINGLE CATEGORY Example:
+```
+🔍 Encontré 20 laptops. Mostrando página 1 de 5:
+[4 products]
+--- Navegación ---
+▶ Siguiente Página (16 productos más disponibles)
+```
+
+MULTIPLE CATEGORIES: Each category shows its own page counter and navigation independently
 
 **Examples:**
 
