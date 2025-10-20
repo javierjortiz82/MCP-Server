@@ -48,35 +48,31 @@ User sees complete booking summary before confirming
 
 Display Format (MANDATORY):
 ```
-╔════════════════════════════════════════════════════════════╗
-║            📋 RESUMEN DE TU RESERVA                        ║
-╠════════════════════════════════════════════════════════════╣
-║                                                            ║
-║  👤 CLIENTE                                                ║
-║  ├─ Nombre: María García López                            ║
-║  ├─ Email: maria@gmail.com                                ║
-║  └─ Teléfono: +34-555-1234                                ║
-║                                                            ║
-║  🛠️  SERVICIO                                              ║
-║  ├─ Tipo: Consulta General                                ║
-║  ├─ Duración: 60 minutos                                  ║
-║  └─ Descripción: Asesoría personalizada                   ║
-║                                                            ║
-║  📅 FECHA Y HORA                                           ║
-║  ├─ Fecha: Miércoles, 22 de octubre de 2025              ║
-║  ├─ Hora: 10:00 - 11:00                                   ║
-║  └─ Zona horaria: Madrid (UTC+1)                          ║
-║                                                            ║
-║  💰 PRECIO (si aplica)                                     ║
-║  ├─ Tarifa: €45.00                                        ║
-║  ├─ Descuento: -€5.00 (cliente leal)                      ║
-║  └─ Total: €40.00                                         ║
-║                                                            ║
-║  📌 REFERENCIAS                                            ║
-║  ├─ Booking ID: #PENDING123                               ║
-║  └─ Confirmación: Se enviará por email                    ║
-║                                                            ║
-╚════════════════════════════════════════════════════════════╝
+📋 RESUMEN DE TU RESERVA
+
+👤 CLIENTE
+├─ Nombre: María García López
+├─ Email: maria@gmail.com
+└─ Teléfono: +34-555-1234
+
+🛠️  SERVICIO
+├─ Tipo: Consulta General
+├─ Duración: 60 minutos
+└─ Descripción: Asesoría personalizada
+
+📅 FECHA Y HORA
+├─ Fecha: Miércoles, 22 de octubre de 2025
+├─ Hora: 10:00 - 11:00
+└─ Zona horaria: Madrid (UTC+1)
+
+💰 PRECIO (si aplica)
+├─ Tarifa: €45.00
+├─ Descuento: -€5.00 (cliente leal)
+└─ Total: €40.00
+
+📌 REFERENCIAS
+├─ Booking ID: #PENDING123
+└─ Confirmación: Se enviará por email
 ```
 
 Content Requirements:
@@ -162,7 +158,7 @@ Progress Display:
 ```
 ⏳ Creando tu reserva...
 
-[████████░░]  50% completado
+[████████░░] 50% completado
 
 Etapa 1/3: Validando datos... ✅
 Etapa 2/3: Creando reserva... ⏳
@@ -351,9 +347,9 @@ Visual Indicators for Changes:
 Example:
 ```
 CLIENTE:
-  ▲ Nombre: Carlos Rodríguez (was: María García)
-  Email: maria@gmail.com (unchanged)
-  ✨ Teléfono: +34-666-7890 (nuevo)
+├─ ▲ Nombre: Carlos Rodríguez (was: María García)
+├─ Email: maria@gmail.com (unchanged)
+└─ ✨ Teléfono: +34-666-7890 (nuevo)
 ```
 
 Re-validation After Changes:
@@ -480,7 +476,7 @@ When implementing progressive confirmation flow:
 
 □ REVIEW STATE (Visual Summary):
   □ Display all 5 sections (customer, service, date/time, price, reference)
-  □ Format: Clear boxes with emojis and organized layout
+  □ Format: Clean organized layout with emojis and hierarchy
   □ Tier-specific display (show/hide based on customer tier)
   □ All relevant data visible at glance
 

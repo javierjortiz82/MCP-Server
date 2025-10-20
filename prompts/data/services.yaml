@@ -1,16 +1,40 @@
-# Services Configuration for Booking Agent
-# ==========================================
-# This file defines available services for booking/reservations.
+# Services Configuration for Booking Agent - DEPRECATED (2025-10-20)
+# ===================================================================
 #
-# IMPORTANT: This is a TEMPORARY static file.
-# In Fase 3, services will be loaded directly from database (test.service_types).
+# ⚠️  WARNING: THIS FILE IS NO LONGER USED BY BOOKINGEAGENT
+#
+# MIGRATION TIMELINE:
+# - v1.0 (2025-10-11): Services loaded from this static YAML file
+# - v2.0 (2025-10-20): Services loaded dynamically via get_services() MCP tool
+# - v3.0 (FUTURE):    This file will be removed
+#
+# CURRENT STATUS (v2.0+):
+# - Services.yaml is DEPRECATED
+# - BookingAgent uses 100% DYNAMIC service discovery
+# - Source: mcp_server/tools/bookings.py → get_services()
+# - Database: test.service_types table
+# - No hardcoding, no YAML dependency
+#
+# WHY THE CHANGE?
+# - services.yaml caused desynchronization with database
+# - Dual maintenance (YAML + DB) was error-prone
+# - MCP server is now single source of truth
+# - Real-time changes to DB reflect immediately in agent
+#
+# MAINTENANCE:
+# - DO NOT UPDATE this file (it is no longer used)
+# - Update services via: Database (test.service_types)
+# - Or via: BookingAgent prompt explicitly providing services list
+#
+# HISTORICAL CONTENT (kept for reference - DO NOT EDIT):
+# =====================================================
 #
 # Source: SQL/src/seed_booking_data.py
 # Database Table: test.service_types
 #
 # Author: Lab01-MCP Team
 # Created: 2025-10-11
-# Version: 1.0.0
+# Deprecated: 2025-10-20
 
 services:
   - name: consultation

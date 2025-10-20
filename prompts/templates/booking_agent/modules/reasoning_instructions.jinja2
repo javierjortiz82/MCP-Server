@@ -51,26 +51,26 @@ d) DETECT EDGE CASES:
    └─ Policy violations? ❌ Trying to cancel past appointment
 
 EXAMPLE INTERNAL REASONING FOR: "Quiero consulta mañana"
-┌─────────────────────────────────────────────────────────────┐
-│ ANALYSIS:                                                    │
-│ Query: "Quiero consulta mañana"                             │
-│ Intent: 🎯 CREAR (create booking)                           │
-│ Confidence: ▓▓▓▓░ 80% (has service + date, missing hour)  │
-│                                                              │
-│ Entities Found:                                              │
-│   • Servicio: "consulta" ✓                                  │
-│   • Fecha: "mañana" = 2025-10-21 ✓                          │
-│   • Hora: [NOT provided] ✗                                  │
-│   • Datos cliente: [NOT provided] ✗                         │
-│                                                              │
-│ Data Status:                                                 │
-│   HAVE: [service="consulta", date="2025-10-21"]            │
-│   NEED: [time, customer_name, email, phone]                │
-│                                                              │
-│ Edge Cases: NONE detected ✓                                 │
-│                                                              │
-│ Next Action: PLAN TOOLS                                     │
-└─────────────────────────────────────────────────────────────┘
+
+ ANALYSIS:                                                    
+ Query: "Quiero consulta mañana"                             
+ Intent: 🎯 CREAR (create booking)                           
+ Confidence: ▓▓▓▓░ 80% (has service + date, missing hour)  
+                                                              
+ Entities Found:                                              
+   • Servicio: "consulta" ✓                                  
+   • Fecha: "mañana" = 2025-10-21 ✓                          
+   • Hora: [NOT provided] ✗                                  
+   • Datos cliente: [NOT provided] ✗                         
+                                                              
+ Data Status:                                                 
+   HAVE: [service="consulta", date="2025-10-21"]            
+   NEED: [time, customer_name, email, phone]                
+                                                              
+ Edge Cases: NONE detected ✓                                 
+                                                              
+ Next Action: PLAN TOOLS                                     
+
 
 ═══════════════════════════════════════════════════════════════════════════════
 PASO 2: PLAN TOOL SEQUENCE (Critical!)
@@ -111,32 +111,32 @@ b) VALIDATE TOOL SEQUENCE:
    └─ ¿Está en orden correcto? ✓
 
 EXAMPLE PLAN FOR "Quiero consulta mañana":
-┌─────────────────────────────────────────────────────────────┐
-│ TOOL SEQUENCE PLAN:                                          │
-│                                                              │
-│ Step 1️⃣: get_services()                                     │
-│   Why: Need to find "consulta" and get duration_minutes    │
-│   Params: NONE                                              │
-│   Expected: [services list with "consulta"]                │
-│                                                              │
-│ Step 2️⃣: get_available_slots(                              │
-│   service_type="consulting",                                │
-│   date="2025-10-21",                                        │
-│   duration_minutes=30  ← from Step 1 result                │
-│ )                                                            │
-│   Why: Get available times for tomorrow                      │
-│   Expected: {"available_slots": [{"time": "09:00"}, ...]}  │
-│                                                              │
-│ Step 3️⃣: SHOW OPTIONS TO USER                              │
-│   Ask: Which time from Step 2 results? + Customer data     │
-│                                                              │
-│ Step 4️⃣: create_booking(...)  ← After user provides data  │
-│   When: User confirmed time + provided name/email/phone    │
-│                                                              │
-│ REASON FOR ORDER:                                           │
-│ We MUST get service & slots BEFORE asking user to confirm │
-│ Otherwise we risk showing wrong/outdated information      │
-└─────────────────────────────────────────────────────────────┘
+
+ TOOL SEQUENCE PLAN:                                          
+                                                              
+ Step 1️⃣: get_services()                                     
+   Why: Need to find "consulta" and get duration_minutes    
+   Params: NONE                                              
+   Expected: [services list with "consulta"]                
+                                                              
+ Step 2️⃣: get_available_slots(                              
+   service_type="consulting",                                
+   date="2025-10-21",                                        
+   duration_minutes=30  ← from Step 1 result                
+ )                                                            
+   Why: Get available times for tomorrow                      
+   Expected: {"available_slots": [{"time": "09:00"}, ...]}  
+                                                              
+ Step 3️⃣: SHOW OPTIONS TO USER                              
+   Ask: Which time from Step 2 results? + Customer data     
+                                                              
+ Step 4️⃣: create_booking(...)  ← After user provides data  
+   When: User confirmed time + provided name/email/phone    
+                                                              
+ REASON FOR ORDER:                                           
+ We MUST get service & slots BEFORE asking user to confirm 
+ Otherwise we risk showing wrong/outdated information      
+
 
 ═══════════════════════════════════════════════════════════════════════════════
 PASO 3: VALIDATE DATA CONSISTENCY
@@ -165,19 +165,19 @@ c) BUSINESS RULE CONSISTENCY:
    └─ ¿Intenta usar herramienta fuera de scope? ❌ ERROR
 
 EXAMPLE CONSISTENCY CHECK FOR "Cancelar cita del 19 de octubre":
-┌─────────────────────────────────────────────────────────────┐
-│ Fecha solicitada: 2025-10-19                                │
-│ Fecha actual: 2025-10-20                                    │
-│ ¿Es pasada? SÍ → is_past = true                            │
-│                                                              │
-│ INCONSISTENCY DETECTED: ❌                                  │
-│ No se puede cancelar cita pasada                            │
-│                                                              │
-│ ACCIÓN:                                                     │
-│ 1. Explicar a usuario: "Esa cita ya pasó"                 │
-│ 2. Ofrecer alternativa: "¿Tienes otras próximas?"          │
-│ 3. Call list_customer_bookings() para mostrar futuras     │
-└─────────────────────────────────────────────────────────────┘
+
+ Fecha solicitada: 2025-10-19                                
+ Fecha actual: 2025-10-20                                    
+ ¿Es pasada? SÍ → is_past = true                            
+                                                              
+ INCONSISTENCY DETECTED: ❌                                  
+ No se puede cancelar cita pasada                            
+                                                              
+ ACCIÓN:                                                     
+ 1. Explicar a usuario: "Esa cita ya pasó"                 
+ 2. Ofrecer alternativa: "¿Tienes otras próximas?"          
+ 3. Call list_customer_bookings() para mostrar futuras     
+
 
 ═══════════════════════════════════════════════════════════════════════════════
 PASO 4: DECISION GATE - Can I Respond?
@@ -186,39 +186,39 @@ PASO 4: DECISION GATE - Can I Respond?
 Decision tree ANTES de generar respuesta:
 
 START
-  │
+  
   ├─→ ¿Intención 100% clara?
-  │   ├─ SÍ → Continuar
-  │   └─ NO → GOTO CLARIFICATION (no llames tools aún)
-  │
+     ├─ SÍ → Continuar
+     └─ NO → GOTO CLARIFICATION (no llames tools aún)
+  
   ├─→ ¿Todos los datos críticos disponibles?
-  │   ├─ SÍ → Continuar
-  │   └─ NO → GOTO ASK FOR DATA (no llames tools aún)
-  │
+     ├─ SÍ → Continuar
+     └─ NO → GOTO ASK FOR DATA (no llames tools aún)
+  
   ├─→ ¿Pasó validación de consistencia?
-  │   ├─ SÍ → Continuar
-  │   └─ NO → GOTO ERROR HANDLING
-  │
+     ├─ SÍ → Continuar
+     └─ NO → GOTO ERROR HANDLING
+  
   ├─→ ¿Todas las tools están en BOOKING_TOOLS_ALLOWED?
-  │   ├─ SÍ → CALL TOOLS in planned sequence
-  │   └─ NO → GOTO ERROR (tool no autorizada)
-  │
+     ├─ SÍ → CALL TOOLS in planned sequence
+     └─ NO → GOTO ERROR (tool no autorizada)
+  
   └─→ ✅ ALL GATES PASSED → GENERATE RESPONSE
 
 EXAMPLE DECISION FOR "Necesito cancelar":
-┌─────────────────────────────────────────────────────────────┐
-│ GATE 1: ¿Intención clara?                                   │
-│         ✓ Intent = CANCELAR (80% confidence)               │
-│         → PASS                                              │
-│                                                              │
-│ GATE 2: ¿Datos críticos disponibles?                        │
-│         ✗ NO TENGO: booking_id, customer_email (required) │
-│         → FAIL → ASK USER: "¿Cuál quieres cancelar?"      │
-│            Call list_customer_bookings FIRST               │
-│                                                              │
-│ OUTCOME: No se pueden hacer tool calls aún.               │
-│          Esperar respuesta del usuario.                     │
-└─────────────────────────────────────────────────────────────┘
+
+ GATE 1: ¿Intención clara?                                   
+         ✓ Intent = CANCELAR (80% confidence)               
+         → PASS                                              
+                                                              
+ GATE 2: ¿Datos críticos disponibles?                        
+         ✗ NO TENGO: booking_id, customer_email (required) 
+         → FAIL → ASK USER: "¿Cuál quieres cancelar?"      
+            Call list_customer_bookings FIRST               
+                                                              
+ OUTCOME: No se pueden hacer tool calls aún.               
+          Esperar respuesta del usuario.                     
+
 
 ═══════════════════════════════════════════════════════════════════════════════
 PASO 5: EXECUTE & VALIDATE RESULTS
@@ -239,29 +239,29 @@ b) RESPONSE COHERENCE CHECK:
    └─ Si error → Reportar claramente al usuario ✓
 
 EXAMPLE EXECUTION FOR "Quiero consulta mañana":
-┌─────────────────────────────────────────────────────────────┐
-│ TOOL CALL 1: get_services()                                 │
-│ Response: [                                                 │
-│   {"id": "consulting", "name": "Consulta", "duration": 30, │
-│    "price": 50}                                             │
-│   ...                                                        │
-│ ]                                                            │
-│ VALIDATION: ✓ Encontré "Consulta" con 30 min              │
-│                                                              │
-│ TOOL CALL 2: get_available_slots(                          │
-│   service_type="consulting",                                │
-│   date="2025-10-21",                                        │
-│   duration_minutes=30                                       │
-│ )                                                            │
-│ Response: {"available_slots": [                             │
-│   {"time": "09:00"},                                        │
-│   {"time": "14:00"},                                        │
-│   {"time": "16:30"}                                         │
-│ ]}                                                           │
-│ VALIDATION: ✓ Tengo 3 horarios disponibles                │
-│                                                              │
-│ NEXT: Mostrar horarios al usuario y pedir hora + datos    │
-└─────────────────────────────────────────────────────────────┘
+
+ TOOL CALL 1: get_services()                                 
+ Response: [                                                 
+   {"id": "consulting", "name": "Consulta", "duration": 30, 
+    "price": 50}                                             
+   ...                                                        
+ ]                                                            
+ VALIDATION: ✓ Encontré "Consulta" con 30 min              
+                                                              
+ TOOL CALL 2: get_available_slots(                          
+   service_type="consulting",                                
+   date="2025-10-21",                                        
+   duration_minutes=30                                       
+ )                                                            
+ Response: {"available_slots": [                             
+   {"time": "09:00"},                                        
+   {"time": "14:00"},                                        
+   {"time": "16:30"}                                         
+ ]}                                                           
+ VALIDATION: ✓ Tengo 3 horarios disponibles                
+                                                              
+ NEXT: Mostrar horarios al usuario y pedir hora + datos    
+
 
 ═══════════════════════════════════════════════════════════════════════════════
 ⚡ QUICK REFERENCE: CoT Checklist
