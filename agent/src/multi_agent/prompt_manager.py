@@ -316,21 +316,31 @@ class PromptManager:
             version = version or self.config["active_versions"].get("booking", "v1.0")
             show_pre_confirmation_summary = show_pre_confirmation_summary or False
 
-        # Load services data if not provided
-        if services is None:
-            try:
-                services_data = self._load_data("services.yaml")
-                services = services_data.get("services", [])
-            except FileNotFoundError:
-                logger.warning("services.yaml not found, using empty list")
-                services = []
+        # Services are NO LONGER loaded from static YAML file
+        # (Deprecated 2025-10-20 - Now uses dynamic get_services() MCP tool)
+        #
+        # REASONING:
+        # - services.yaml created hardcoding and desync with database
+        # - MCP server (DB: test.service_types) is single source of truth
+        # - get_services() MCP tool provides real-time, dynamic service data
+        # - Booking templates instruct agent to ALWAYS call get_services() first
+        #
+        # If services provided explicitly, use it; otherwise pass None to template
+        # (template will handle dynamic loading via MCP tools)
+        if services is not None:
+            logger.info("✅ Using explicitly provided services (external source)")
+        else:
+            logger.info(
+                "🔄 Services will be loaded dynamically via get_services() MCP tool "
+                "(DEPRECATED: services.yaml is no longer used)"
+            )
 
         # Inject current date/time for relative date calculations
         now = datetime.now()
 
         context = {
             "version": version,
-            "services": services,
+            "services": services,  # None = dynamic loading via MCP tools
             "customer_email": customer_email,
             "show_pre_confirmation_summary": show_pre_confirmation_summary,
             # Date/time context for flexible date parsing

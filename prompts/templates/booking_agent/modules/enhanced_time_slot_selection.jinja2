@@ -47,72 +47,56 @@ DESIGN GOALS:
 Format with PERFECT visual hierarchy:
 
 ```
-╔═══════════════════════════════════════════════════════════════════════════╗
-║                     ✅ SELECCIONA TU HORARIO                             ║
-╠═══════════════════════════════════════════════════════════════════════════╣
-║                                                                           ║
-║  📅 Miércoles, 22 de octubre de 2025                                    ║
-║  🛠️  Consulta General (30 minutos)                                      ║
-║                                                                           ║
-╠═══════════════════════════════════════════════════════════════════════════╣
-║                                                                           ║
-║  🌅 MAÑANA (8:00 - 12:00)                                               ║
-║  ┌──────┬──────┬──────┬──────┐                                          ║
-║  │  A   │  B   │  C   │  D   │                                          ║
-║  │ 09:00│ 09:30│ 10:00│ 10:30│                                          ║
-║  │ 9am  │ 9:30am│10am │10:30am│                                         ║
-║  │ ✅ 2 │ ✅ 5 │ ✨ 8 │ ✅ 3 │  (números = disponibilidad)             ║
-║  └──────┴──────┴──────┴──────┘                                          ║
-║                                                                           ║
-║  ☀️ TARDE (12:00 - 17:00)                                               ║
-║  ┌──────┬──────┬──────┬──────┐                                          ║
-║  │  E   │  F   │  G   │  H   │                                          ║
-║  │ 13:00│ 13:30│ 14:00│ 14:30│                                          ║
-║  │ 1pm  │ 1:30pm│ 2pm │ 2:30pm│                                         ║
-║  │ ✅ 4 │ ✅ 6 │ ✅ 7 │ ✅ 3 │                                          ║
-║  └──────┴──────┴──────┴──────┘                                          ║
-║                                                                           ║
-║  🌙 NOCHE (17:00 - 20:00)                                               ║
-║  ┌──────┬──────┐                                                        ║
-║  │  I   │  J   │                                                        ║
-║  │ 17:00│ 18:00│                                                        ║
-║  │ 5pm  │ 6pm  │                                                        ║
-║  │ ✅ 2 │ ⚠️ 1  │  (⚠️ = pocas disponibilidades)                       ║
-║  └──────┴──────┘                                                        ║
-║                                                                           ║
-╠═══════════════════════════════════════════════════════════════════════════╣
-║                                                                           ║
-║  💡 CÓMO ELEGIR (elige UN opción):                                       ║
-║                                                                           ║
-║  ① Por LETRA (sin ambigüedad):                                           ║
-║     Responde: A, B, C, D, E, F, G, H, I, J                             ║
-║     Ejemplo: "C"                                                        ║
-║                                                                           ║
-║  ② Por HORA 24h (exacta):                                               ║
-║     Responde: 09:00, 10:00, 13:00, 14:00, 17:00, 18:00                 ║
-║     Ejemplo: "10:00"                                                    ║
-║                                                                           ║
-║  ③ Por HORA 12h (con am/pm):                                            ║
-║     Responde: 9am, 10:00am, 2pm, 5:30pm                                ║
-║     Ejemplo: "10am"                                                     ║
-║                                                                           ║
-║  ⚠️ IMPORTANTE: No responda SOLO números (ej: "5", "10")               ║
-║                 Eso es ambiguo. Use "C" o "10:00" o "10am"             ║
-║                                                                           ║
-╠═══════════════════════════════════════════════════════════════════════════╣
-║                                                                           ║
-║  ✨ RECOMENDADO PARA TI (basado en tu historial):                        ║
-║  📌 Opción C (10:00 / 10am) - Tu horario preferido                      ║
-║  "Es tu hora favorita. ¿La reservamos?"                                 ║
-║                                                                           ║
-╠═══════════════════════════════════════════════════════════════════════════╣
-║                                                                           ║
-║  Elige tu horario (letra, hora exacta, o hora con am/pm):               ║
-║  Tu respuesta: _________________________________                       ║
-║                                                                           ║
-║  [← Volver] [Continuar →]                                               ║
-║                                                                           ║
-╚═══════════════════════════════════════════════════════════════════════════╝
+✅ SELECCIONA TU HORARIO
+
+📅 Miércoles, 22 de octubre de 2025
+🛠️  Consulta General (30 minutos)
+
+🌅 MAÑANA (8:00 - 12:00)
+A) 09:00 | 9am  | ✅ 2 disponibles
+B) 09:30 | 9:30am | ✅ 5 disponibles
+C) 10:00 | 10am  | ✨ 8 disponibles (RECOMENDADO)
+D) 10:30 | 10:30am | ✅ 3 disponibles
+
+☀️ TARDE (12:00 - 17:00)
+E) 13:00 | 1pm  | ✅ 4 disponibles
+F) 13:30 | 1:30pm | ✅ 6 disponibles
+G) 14:00 | 2pm  | ✅ 7 disponibles
+H) 14:30 | 2:30pm | ✅ 3 disponibles
+
+🌙 NOCHE (17:00 - 20:00)
+I) 17:00 | 5pm  | ✅ 2 disponibles
+J) 18:00 | 6pm  | ⚠️ 1 disponible (pocas opciones)
+
+💡 CÓMO ELEGIR (elige UN opción):
+
+① Por LETRA (sin ambigüedad):
+   Responde: A, B, C, D, E, F, G, H, I, J
+   Ejemplo: "C"
+
+② Por HORA 24h (exacta):
+   Responde: 09:00, 10:00, 13:00, 14:00, 17:00, 18:00
+   Ejemplo: "10:00"
+
+③ Por HORA 12h (con am/pm):
+   Responde: 9am, 10:00am, 2pm, 5:30pm
+   Ejemplo: "10am"
+
+⚠️ IMPORTANTE: No responda SOLO números (ej: "5", "10")
+              Eso es ambiguo. Use "C" o "10:00" o "10am"
+
+✨ RECOMENDADO PARA TI (basado en tu historial):
+  📌 Opción C (10:00 / 10am) - Tu horario preferido                      
+  "Es tu hora favorita. ¿La reservamos?"                                 
+                                                                           
+
+                                                                           
+  Elige tu horario (letra, hora exacta, o hora con am/pm):               
+  Tu respuesta: _________________________________                       
+                                                                           
+  [← Volver] [Continuar →]                                               
+                                                                           
+
 ```
 
 Key Features of This Display:
@@ -133,36 +117,36 @@ Key Features of This Display:
 For mobile devices (< 600px width):
 
 ```
-╔════════════════════════════════════════╗
-║  ✅ SELECCIONA HORARIO                ║
-╠════════════════════════════════════════╣
-║  Miércoles, 22 Oct | Consulta (30min)  ║
-╠════════════════════════════════════════╣
-║                                        ║
-║  🌅 MAÑANA                             ║
-║  ┌─────┬─────┐                         ║
-║  │  A  │  B  │                         ║
-║  │ 09:00│ 09:30│                        ║
-║  │ 9am │9:30am│                        ║
-║  │ ✅ 2│ ✅ 5│                         ║
-║  └─────┴─────┘                         ║
-║                                        ║
-║  ☀️ TARDE                              ║
-║  ┌─────┬─────┐                         ║
-║  │  C  │  D  │                         ║
-║  │ 13:00│ 14:00│                        ║
-║  │ 1pm │ 2pm │                         ║
-║  │ ✅ 4│ ✅ 7│                         ║
-║  └─────┴─────┘                         ║
-║                                        ║
-║  💡 Elige: Letra (A-D)                 ║
-║          O Hora (09:00, 9am)          ║
-║                                        ║
-║  Tu respuesta: __________________    ║
-║                                        ║
-║  [Volver] [Continuar]                  ║
-║                                        ║
-╚════════════════════════════════════════╝
+
+  ✅ SELECCIONA HORARIO                
+
+  Miércoles, 22 Oct | Consulta (30min)  
+
+                                        
+  🌅 MAÑANA                             
+                           
+    A    B                           
+   09:00 09:30                        
+   9am 9:30am                        
+   ✅ 2 ✅ 5                         
+                           
+                                        
+  ☀️ TARDE                              
+                           
+    C    D                           
+   13:00 14:00                        
+   1pm  2pm                          
+   ✅ 4 ✅ 7                         
+                           
+                                        
+  💡 Elige: Letra (A-D)                 
+          O Hora (09:00, 9am)          
+                                        
+  Tu respuesta: __________________    
+                                        
+  [Volver] [Continuar]                  
+                                        
+
 ```
 
 
@@ -173,12 +157,12 @@ For mobile devices (< 600px width):
 Each time slot box shows 4 pieces of information:
 
 ```
-    ┌──────┐
-    │  A   │  ← LETTER (Primary identifier - never ambiguous)
-    │ 09:00│  ← HOUR 24h (Can be used for selection)
-    │ 9am  │  ← HOUR 12h (Can be used for selection)
-    │ ✅ 2 │  ← AVAILABILITY STATUS + COUNT
-    └──────┘
+    
+      A     ← LETTER (Primary identifier - never ambiguous)
+     09:00  ← HOUR 24h (Can be used for selection)
+     9am    ← HOUR 12h (Can be used for selection)
+     ✅ 2   ← AVAILABILITY STATUS + COUNT
+    
 ```
 
 Layout Details:
@@ -377,12 +361,12 @@ AS USER INTERACTS, provide immediate feedback:
 Show availability at multiple levels:
 
 Level 1: Individual Slot
-┌──────┐
-│  A   │
-│ 09:00│
-│ 9am  │
-│ ✅ 2 │  ← This slot has 2 spots
-└──────┘
+
+  A   
+ 09:00
+ 9am  
+ ✅ 2   ← This slot has 2 spots
+
 
 Level 2: Day Summary (before showing slots)
 "📅 Miércoles, 22 Oct: 12 horarios disponibles
