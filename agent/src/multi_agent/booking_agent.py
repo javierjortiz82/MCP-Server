@@ -37,6 +37,7 @@ from typing import Any
 
 from gemini_agent.base_agent import BaseAgent
 from gemini_agent.config.booking_agent_settings import booking_agent_settings
+from gemini_agent.utils.language_detector import detect_user_language
 from google.genai import types
 from multi_agent.prompt_manager import PromptManager
 
@@ -369,14 +370,24 @@ class BookingAgent(BaseAgent):
         try:
             self.logger.info(f"Generating response for: '{query[:100]}...'")
 
-            # Update agent language if provided in kwargs (allows orchestrator to change language per-query)
+            # Auto-detect or use provided language for consistent context
             if "language" in kwargs:
+                # Priority 1: Explicit language parameter from caller
                 new_language = kwargs["language"]
                 if new_language != self.language:
                     self.logger.info(
-                        f"🌐 Updating agent language: {self.language} → {new_language}"
+                        f"🌐 Updating agent language (explicit): {self.language} → {new_language}"
                     )
                     self.language = new_language
+            else:
+                # Priority 2: Auto-detect language from user query
+                detected_language = detect_user_language(query)
+                if detected_language != self.language:
+                    self.logger.info(
+                        f"🌐 Auto-detected language: {self.language} → {detected_language}"
+                    )
+                    self.language = detected_language
+                kwargs["language"] = detected_language
 
             # Build conversation contents (uses template method pattern)
             contents = self._build_contents(query, include_history, **kwargs)
