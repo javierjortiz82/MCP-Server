@@ -124,109 +124,109 @@ Version: {{ version|default('v2.8') }}
 {# ================================================================ #}
 {# PHASE 1: CORE IDENTITY & ROLE                                   #}
 {# ================================================================ #}
-{% include 'booking_agent/base.jinja2' %}
+{% include 'base/booking_agent/base.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 1.5: SCOPE GUARDRAILS (NEW - Gemini 2.5 Best Practice)    #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/scope_guardrails.jinja2' %}
+{% include 'base/booking_agent/modules/scope_guardrails.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 2: DYNAMIC CONTEXT ENRICHMENT (No Hardcoding!)            #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/context_enrichment.jinja2' %}
+{% include 'base/booking_agent/modules/context_enrichment.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 2.5: CUSTOMER CONTEXT ENRICHMENT (DISABLED - SIMPLIFIED)  #}
 {# (Removed to maintain consistent format for all customers)       #}
 {# ================================================================ #}
-{# {% include 'booking_agent/modules/customer_context_enrichment.jinja2' %} #}
+{# {% include 'base/booking_agent/modules/customer_context_enrichment.jinja2' %} #}
 
 {# ================================================================ #}
 {# PHASE 3: SMART GREETING & INITIAL INTERACTION                   #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/smart_greeting.jinja2' %}
+{% include 'base/booking_agent/modules/smart_greeting.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 4: INTENT DETECTION FOR SMART ROUTING                     #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/intent_detection.jinja2' %}
+{% include 'base/booking_agent/modules/intent_detection.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 4.5: UX CONVERSATIONAL FLOWS (NEW - Jinja2 Conditional)   #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/ux_conversational.jinja2' %}
+{% include 'base/booking_agent/modules/ux_conversational.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 4.7: ENHANCED TIME SLOT SELECTION (Improved v2 - Premium UX) #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/enhanced_time_slot_selection.jinja2' %}
+{% include 'base/booking_agent/modules/enhanced_time_slot_selection.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 4.8: DISAMBIGUATION RULES (NEW - Decision Matrix)         #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/disambiguation_rules.jinja2' %}
+{% include 'base/booking_agent/modules/disambiguation_rules.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 5: TOOL USAGE RULES (Critical)                            #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/tool_usage_rules.jinja2' %}
+{% include 'base/booking_agent/modules/tool_usage_rules.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 6: CONFIRMATION FLOW (Workflow)                           #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/confirmation_flow.jinja2' %}
+{% include 'base/booking_agent/modules/confirmation_flow.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 6.5: INTELLIGENT RECOMMENDATIONS (NEW - TIER 2)           #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/intelligent_recommendations.jinja2' %}
+{% include 'base/booking_agent/modules/intelligent_recommendations.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 7: DATA REQUIREMENTS & VALIDATION                         #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/data_requirements.jinja2' %}
+{% include 'base/booking_agent/modules/data_requirements.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 7.5: DATA VALIDATION (NEW - TIER 1 Critical)              #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/data_validation.jinja2' %}
+{% include 'base/booking_agent/modules/data_validation.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 7.6: DUPLICATE BOOKING PREVENTION (NEW - TIER 1)          #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/duplicate_booking_prevention.jinja2' %}
+{% include 'base/booking_agent/modules/duplicate_booking_prevention.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 7.7: PROGRESSIVE CONFIRMATION FLOW (DISABLED - SIMPLIFIED) #}
 {# (Removed to maintain consistent format for all customers)        #}
 {# ================================================================ #}
-{# {% include 'booking_agent/modules/progressive_confirmation_flow.jinja2' %} #}
+{# {% include 'base/booking_agent/modules/progressive_confirmation_flow.jinja2' %} #}
 
 {# ================================================================ #}
 {# PHASE 8: FLEXIBLE DATE PARSING (Relative Dates)                 #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/flexible_dates.jinja2' %}
+{% include 'base/booking_agent/modules/flexible_dates.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 8.5: TIMEZONE HANDLING (NEW - TIER 2 Global Support)      #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/timezone_handling.jinja2' %}
+{% include 'base/booking_agent/modules/timezone_handling.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 8.7: REMINDER PROTOCOLS (NEW - TIER 2 Engagement)         #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/reminder_protocols.jinja2' %}
+{% include 'base/booking_agent/modules/reminder_protocols.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 9: FEW-SHOT EXAMPLES (Pattern Learning)                   #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/examples.jinja2' %}
+{% include 'base/booking_agent/modules/examples.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 10: UX BEST PRACTICES (Error Handling)                    #}
 {# ================================================================ #}
-{% include 'booking_agent/modules/ux_best_practices.jinja2' %}
+{% include 'base/booking_agent/modules/ux_best_practices.jinja2' %}
 
 {# ================================================================ #}
 {# SUMMARY OF EXECUTION ORDER                                       #}

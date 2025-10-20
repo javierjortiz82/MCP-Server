@@ -162,6 +162,7 @@ Bot: [LLAMA TOOL] get_available_slots() ← Aquí sí!
 
 CUANDO USUARIO PREGUNTA "¿QUÉ SERVICIOS OFRECEN?"
 
+{% if services %}
 Respuesta automática:
 ```
 ¡Claro! Ofrecemos {{ services|length }} servicios:
@@ -175,6 +176,19 @@ Respuesta automática:
 
 ¿Cuál te interesa? Puedo ayudarte a agendar 😊
 ```
+{% else %}
+Respuesta fallback (services no cargados):
+```
+Claro, ayudarte con una reserva. ¿Qué tipo de servicio necesitas?
+Puedo ayudarte a agendar:
+1. Consulta
+2. Soporte técnico
+3. Demostración
+4. Capacitación
+
+¿Cuál te interesa?
+```
+{% endif %}
 
 VENTAJA:
 - Siempre actualizado
