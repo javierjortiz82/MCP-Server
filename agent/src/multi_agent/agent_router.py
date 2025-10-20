@@ -64,6 +64,7 @@ from enum import Enum
 from typing import Any
 
 from gemini_agent.config import settings
+from gemini_agent.utils.language_detector import detect_user_language
 from gemini_agent.utils.logger import setup_logging
 from google import genai
 from google.genai import types
@@ -156,6 +157,47 @@ RESPONDE ÚNICAMENTE con una de estas tres palabras: sales, booking, general
 
 NO agregues explicaciones ni puntuación adicional."""
 
+    def _get_classification_prompt_with_language(
+        self, user_lang: str = "es", use_template: bool = True
+    ) -> str:
+        """Get classification prompt using PromptManager with detected language.
+
+        This method ensures the classification prompt respects the user's language,
+        preventing language context loss (e.g., English input → Spanish output).
+
+        Args:
+            user_lang: Detected user language ("en" or "es", default: "es").
+            use_template: Whether to use PromptManager templates (True) or legacy prompt (False).
+
+        Returns:
+            Classification prompt text for router in the specified language.
+
+        Example:
+            >>> prompt = agent_router._get_classification_prompt_with_language("en")
+        """
+        try:
+            if use_template:
+                # Initialize PromptManager if not already done
+                if self.__class__._prompt_manager is None:
+                    logger.debug("Initializing PromptManager for AgentRouter")
+                    self.__class__._prompt_manager = PromptManager()
+
+                # Get prompt from PromptManager with detected language
+                prompt = self.__class__._prompt_manager.get_router_prompt(user_lang=user_lang)
+                logger.debug(
+                    f"Loaded router prompt from PromptManager (lang={user_lang}, {len(prompt)} chars)"
+                )
+                return prompt
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to load prompt from PromptManager (lang={user_lang}): {e}. Using legacy prompt."
+            )
+
+        # Fallback to legacy prompt
+        logger.debug(f"Using legacy CLASSIFICATION_PROMPT (lang={user_lang})")
+        return self.__class__.CLASSIFICATION_PROMPT
+
     @classmethod
     def get_classification_prompt(cls, use_template: bool = True) -> str:
         """Get classification prompt using PromptManager.
@@ -176,7 +218,7 @@ NO agregues explicaciones ni puntuación adicional."""
                     logger.debug("Initializing PromptManager for AgentRouter")
                     cls._prompt_manager = PromptManager()
 
-                # Get prompt from PromptManager
+                # Get prompt from PromptManager (no language specified - will use default "es")
                 prompt = cls._prompt_manager.get_router_prompt()
                 logger.debug(f"Loaded router prompt from PromptManager ({len(prompt)} chars)")
                 return prompt
@@ -457,8 +499,14 @@ NO agregues explicaciones ni puntuación adicional."""
         try:
             logger.info(f"Classifying query: '{query[:100]}...'")
 
-            # Get classification prompt using PromptManager
-            classification_prompt = self.get_classification_prompt(use_template=True)
+            # Auto-detect user language from query to maintain language context
+            detected_language = detect_user_language(query)
+            logger.info(f"🌐 Auto-detected language: {detected_language}")
+
+            # Get classification prompt using PromptManager with detected language
+            classification_prompt = self._get_classification_prompt_with_language(
+                detected_language, use_template=True
+            )
 
             # Build query text with context if available
             query_text = f"Consulta: {query}"
