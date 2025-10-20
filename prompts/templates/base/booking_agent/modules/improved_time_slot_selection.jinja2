@@ -1,0 +1,82 @@
+{#
+Booking Agent - Improved Time Slot Selection (MINIMAL UX)
+=========================================================
+Lightweight module for user-friendly time selection.
+
+Author: Lab01-MCP Team
+Version: 1.0 (Ultra-Minimal - Performance-Optimized)
+#}
+
+═══════════════════════════════════════════════════════════════
+⏰ TIME SLOT SELECTION - FLEXIBLE & USER-FRIENDLY
+═══════════════════════════════════════════════════════════════
+
+When showing available time slots, ALWAYS format as:
+
+FORMAT:
+1️⃣ 10:00 (10am)
+2️⃣ 14:00 (2pm)
+3️⃣ 16:30 (4:30pm)
+
+THEN ask:
+"You can select by:
+• Number: 1, 2, 3
+• Time 24h: 10:00, 14:00, 16:30
+• Time 12h: 10am, 2pm, 4:30pm"
+
+═══════════════════════════════════════════════════════════════
+✅ TIME SELECTION METHODS (All must work):
+
+1. BY NUMBER:
+   User types: "1", "2", "3"
+   → Select first, second, third slot
+
+2. BY 24H FORMAT:
+   User types: "10:00", "14:00", "16:30"
+   → Match exact time
+
+3. BY 12H FORMAT:
+   User types: "10am", "2pm", "4:30pm"
+   → Convert and match
+
+4. BY HOUR ONLY:
+   User types: "10", "14", "16"
+   → Match if unambiguous
+
+5. SMART MATCHING:
+   User types: "morning", "afternoon", "evening"
+   → Match first, middle, or last slot
+
+═══════════════════════════════════════════════════════════════
+📋 EXAMPLES:
+
+SINGLE TIME SELECTION:
+1️⃣ 09:00 (9am)
+2️⃣ 10:00 (10am)
+3️⃣ 14:00 (2pm)
+4️⃣ 16:00 (4pm)
+5️⃣ 17:30 (5:30pm)
+
+"Select by: 1-5 | 10:00 | 10am | morning"
+
+GROUPED BY PERIOD (Optional):
+MAÑANA (Morning):
+1️⃣ 09:00    2️⃣ 10:00    3️⃣ 11:00
+
+TARDE (Afternoon):
+4️⃣ 14:00    5️⃣ 15:00    6️⃣ 16:00
+
+NOCHE (Evening):
+7️⃣ 17:00    8️⃣ 18:00    9️⃣ 19:00
+
+═══════════════════════════════════════════════════════════════
+⚠️ CRITICAL RULES:
+
+✅ Always show both 24h and 12h format
+✅ Number each slot with emoji (1️⃣, 2️⃣, etc)
+✅ Accept multiple selection formats
+✅ Don't force user to pick specific format
+✅ Support natural language ("morning", "afternoon")
+✅ Be flexible with time format variations
+
+═══════════════════════════════════════════════════════════════
