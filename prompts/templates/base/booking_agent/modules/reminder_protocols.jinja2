@@ -1,0 +1,743 @@
+{#
+Booking Agent - Follow-up/Reminder Protocols Module (TIER 2)
+============================================================
+Automated reminders, follow-ups, and no-show management.
+
+This module provides:
+- Automated reminder scheduling (24h before, 1h before)
+- Timezone-aware reminder timing
+- Multiple delivery channels (email, SMS, push notifications)
+- Customizable reminder preferences
+- User preference learning
+- No-show detection and follow-up
+- Re-engagement strategies
+- Reminder engagement tracking
+
+Based on:
+- Timezone handling (coordinates with timezone module)
+- Customer preferences storage
+- Delivery channel availability
+- No-show analytics
+- Re-engagement best practices
+
+Author: Lab01-MCP Team
+Created: 2025-10-20
+Version: 1.0 (TIER 2 Feature)
+#}
+
+═══════════════════════════════════════════════════════════════════════════════
+🔔 REMINDER PROTOCOLS - NEVER MISS A BOOKING
+═══════════════════════════════════════════════════════════════════════════════
+
+PRINCIPLE: "Remind customers at the RIGHT time, in the RIGHT channel, with the
+           RIGHT message. Respect their preferences. Track engagement."
+
+GOAL: Maximize attendance rate while respecting customer preferences
+      ✅ No 3am reminders (timezone-aware timing)
+      ✅ Respect communication preferences (email/SMS/push)
+      ✅ Timely delivery (when they check messages)
+      ✅ Reduce no-shows from 10-15% to <5%
+      ✅ Re-engage no-shows and at-risk customers
+
+═══════════════════════════════════════════════════════════════════════════════
+⏰ REMINDER TIMING - WHEN TO SEND
+═══════════════════════════════════════════════════════════════════════════════
+
+STANDARD REMINDER SCHEDULE:
+
+Reminder 1: 24 Hours Before Booking
+─────────────────────────────────────
+Timing: Exactly 24 hours before scheduled time
+Message Type: CONFIRMATION (light touch)
+Purpose: "Hey, just confirming you're still on for tomorrow"
+
+Example:
+Booking: Wednesday 22, 10:00am EDT
+Send: Tuesday 21, 10:00am EDT (customer's timezone!)
+Message: "✅ ¡Reserva confirmada! Mañana a las 10:00am EDT"
+
+Reminder 2: 1 Hour Before Booking
+─────────────────────────────────────
+Timing: Exactly 1 hour before scheduled time
+Message Type: URGENT (action needed)
+Purpose: "Get ready, it's happening soon"
+
+Example:
+Booking: Wednesday 22, 10:00am EDT
+Send: Wednesday 22, 09:00am EDT (customer's timezone!)
+Message: "⏰ ¡En 1 hora! Tu consulta comienza a las 10:00am. [Ver llamada]"
+
+Optional Reminder 3: 15 Minutes Before (Optional, Channel-Dependent)
+──────────────────────────────────────────────────────────────────────
+Only for SMS/Push (not email - too spammy)
+Message: "⏰ ¡En 15 minutos! Únete a la llamada: [link]"
+
+Additional Reminders (Post-Booking, Follow-up)
+──────────────────────────────────────────────────
+Follow-up: 24 hours AFTER booking (ask for feedback)
+Re-engagement: 3 days after no-show (offer rescheduling)
+
+═══════════════════════════════════════════════════════════════════════════════
+🌍 TIMEZONE-AWARE REMINDER TIMING
+═══════════════════════════════════════════════════════════════════════════════
+
+CRITICAL: Always send reminders in CUSTOMER'S TIMEZONE, not business timezone.
+
+PROBLEM: Business sends all reminders at fixed UTC time
+"Reminder at 14:00 UTC"
+- NY customer (EDT): 10:00am ✅ Good time
+- Madrid customer (CEST): 4:00pm ✅ Good time
+- Tokyo customer (JST): 11:00pm ❌ Too late!
+
+SOLUTION: Calculate reminder time in customer's timezone first
+
+Algorithm:
+1. Get booking time (stored as UTC)
+   Example: Wed 22, 14:00 UTC
+2. Get customer timezone
+   Example: America/New_York (EDT = UTC-4)
+3. Calculate 24h and 1h before in customer's timezone
+   24h before: Tue 21, 14:00 UTC = 10:00am EDT
+   1h before: Wed 22, 13:00 UTC = 09:00am EDT
+4. Convert reminder times TO UTC (for scheduler)
+   24h reminder: Schedule for Tue 21, 14:00 UTC
+   1h reminder: Schedule for Wed 22, 13:00 UTC
+5. When scheduler fires at UTC time, convert back to customer TZ for display
+   Message: "¡En 1 hora! Tu consulta a las 10:00am EDT"
+
+Example with Multiple Timezones:
+
+Same Booking Time (stored as UTC): 14:00 UTC on Oct 22
+
+Customer 1 (NY, EDT = UTC-4):
+- Booking local time: 10:00am Wednesday
+- 24h reminder sent: Tue 10:00am EDT (= 14:00 UTC)
+- 1h reminder sent: Wed 09:00am EDT (= 13:00 UTC)
+
+Customer 2 (Madrid, CEST = UTC+2):
+- Booking local time: 4:00pm Wednesday
+- 24h reminder sent: Tue 4:00pm CEST (= 14:00 UTC)
+- 1h reminder sent: Wed 03:00pm CEST (= 13:00 UTC)
+
+Customer 3 (Tokyo, JST = UTC+9):
+- Booking local time: 11:00pm Wednesday
+- 24h reminder sent: Tue 11:00pm JST (= 14:00 UTC)
+- 1h reminder sent: Wed 10:00pm JST (= 13:00 UTC)
+
+All sent at same UTC times, but arrive in each customer's comfortable hours! ✅
+
+═══════════════════════════════════════════════════════════════════════════════
+📱 DELIVERY CHANNELS - HOW TO SEND REMINDERS
+═══════════════════════════════════════════════════════════════════════════════
+
+CHANNEL 1: EMAIL
+─────────────────
+Pros:
+✅ Reliable (99%+ delivery)
+✅ Rich formatting (links, formatting, attachments)
+✅ Searchable (customer can find booking in inbox)
+✅ Cheap (bulk rates available)
+✅ Accessible (works on all devices)
+
+Cons:
+❌ Slow (5-30 min delivery)
+❌ Gets lost (spam folder, notifications off)
+❌ No click-through tracking (limited)
+
+Best For: 24-hour reminder (customer has time to read)
+
+Example Email:
+```
+Subject: ✅ Tu reserva confirmada para mañana - Consulta General - 10:00am EDT
+
+Body:
+Hola [Name],
+
+¡Confirmamos tu cita para mañana!
+
+📅 DETALLES
+Servicio: Consulta General (60 minutos)
+Fecha: Miércoles, 22 de octubre de 2025
+Hora: 10:00am EDT (Tu zona horaria)
+
+🎥 ÚNETE A LA LLAMADA
+[Video Call Link - click here 10 min before]
+
+❓ ¿TIENES PREGUNTAS?
+Responde a este email o contacta: support@
+
+⏰ RECORDATORIO FUTURO
+Te enviaremos otro recordatorio 1 hora antes.
+
+---
+¿No puedes asistir? [Reagendar] [Cancelar]
+```
+
+
+CHANNEL 2: SMS (Text Message)
+──────────────────────────────
+Pros:
+✅ FAST (instant delivery)
+✅ High open rate (98%+)
+✅ Direct (no spam folder)
+✅ Works without data (basic phones)
+✅ Urgent feel (good for 1-hour reminder)
+
+Cons:
+❌ Limited characters (160)
+❌ Expensive (0.01-0.05 USD per SMS)
+❌ One-way (no interaction)
+❌ May annoy if overused
+
+Best For: 1-hour reminder (time-critical)
+
+Example SMS:
+```
+⏰ ¡En 1 hora! Tu consulta con [Agent] comienza a las 10:00am EDT.
+Únete: [short URL] | Cancelar: Responde STOP
+```
+
+Character count: 145 chars ✅
+
+
+CHANNEL 3: PUSH NOTIFICATIONS (Mobile App)
+────────────────────────────────────────────
+Pros:
+✅ INSTANT delivery
+✅ Visible without opening app
+✅ High engagement (40-60% tap rate)
+✅ Can include action buttons
+✅ Works offline (queued)
+
+Cons:
+❌ Requires mobile app (not all customers have)
+❌ Requires permission
+❌ Can be intrusive
+❌ More expensive (engineering + infrastructure)
+
+Best For: Both 24h and 1h reminders (if user opted in)
+
+Example Push:
+```
+Title: "Tu cita es mañana"
+Body: "Consulta con [Agent] a las 10:00am EDT. [Enlace]"
+```
+
+
+CHANNEL 4: IN-APP NOTIFICATION
+────────────────────────────────
+Pros:
+✅ Owned channel (your app)
+✅ No dependency on 3rd party
+✅ Can be very targeted
+✅ Cheap (no carrier fees)
+
+Cons:
+❌ Only visible if they open app
+❌ Easy to dismiss/ignore
+❌ No guarantee of seeing it
+
+Best For: Secondary reminder (supplement email)
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 CHANNEL PREFERENCE - LET CUSTOMERS CHOOSE
+═══════════════════════════════════════════════════════════════════════════════
+
+CUSTOMER PREFERENCES (Stored in Profile):
+
+```
+Reminder Preferences:
+├─ 24-hour reminder:
+  ├─ Method: [Email ✅] [SMS ❌] [Push ❌]
+  └─ Do Not Disturb: After [22:00]
+
+├─ 1-hour reminder:
+  ├─ Method: [Email ✅] [SMS ✅] [Push ❌]
+  └─ Do Not Disturb: [None - always send]
+
+└─ 15-minute reminder (optional):
+   ├─ Enabled: [No - don't send]
+   └─ Method: SMS only (if enabled)
+```
+
+Default Preferences (Smart):
+- NEW customers: Email 24h + SMS 1h (conservative)
+- RECURRING: Email + SMS both times (they're engaged)
+- POWER customers: SMS 1h + Push both (fast-paced)
+- AT-RISK: Email only (minimal friction)
+
+Allow Customization:
+"Cómo prefieres que te recordemos?"
+- ✅ Email (durante el día)
+- ✅ SMS (1 hora antes)
+- ❌ Push notifications
+- ❌ Llamada telefónica
+
+[Guardar preferencias]
+
+═══════════════════════════════════════════════════════════════════════════════
+📊 REMINDER MESSAGE TEMPLATES
+═══════════════════════════════════════════════════════════════════════════════
+
+TEMPLATE 1: 24-HOUR REMINDER (Email + SMS)
+──────────────────────────────────────────────
+
+Email Subject:
+"✅ Tu reserva confirmada para [MAÑANA] - [SERVICIO] - [HORA LOCAL]"
+
+Email Body (SHORT):
+"Hola [Name],
+
+¡Recordatorio! Mañana tienes tu [SERVICIO] a las [HORA].
+
+🎥 [VIDEO CALL LINK]
+❓ ¿Preguntas? Responde este email
+
+---
+[Reagendar] [Cancelar]"
+
+SMS:
+"Recordatorio: Mañana tu [SERVICIO] a las [HORA] [ZONA].
+Enlace: [SHORT URL] | Info: [SUPPORT PHONE]"
+
+
+TEMPLATE 2: 1-HOUR REMINDER (SMS + Push)
+──────────────────────────────────────────
+
+SMS (URGENT):
+"⏰ ¡EN 1 HORA! Tu [SERVICIO] con [AGENT].
+Enlace: [SHORT URL]"
+
+Push Notification:
+Title: "¡Tu cita comienza en 1 hora!"
+Body: "[SERVICIO] con [AGENT]. Tap para unirse."
+Action: "Unirse" → opens video call link
+
+
+TEMPLATE 3: 15-MINUTE REMINDER (SMS Only)
+──────────────────────────────────────────
+
+SMS (ULTRA URGENT):
+"⏰ ¡AHORA! Tu [SERVICIO] comienza en 15 min.
+Enlace: [LINK]
+No apareces? Responde aquí."
+
+═══════════════════════════════════════════════════════════════════════════════
+🚫 NO-SHOW DETECTION & FOLLOW-UP
+═══════════════════════════════════════════════════════════════════════════════
+
+DEFINE NO-SHOW:
+
+A no-show occurs when:
+- Customer doesn't join video call 15 minutes after scheduled time
+- AND no cancellation was submitted before booking time
+- AND no rescheduling request received
+
+Detection Method:
+1. Scheduled time arrives: 10:00am
+2. Wait 15 minutes (customer grace period): 10:15am
+3. Check video room: Is customer connected?
+   - YES: Meeting in progress ✅
+   - NO: Mark as NO-SHOW (potential)
+4. Send urgent SMS: "Notamos que no conectaste. ¿Todo bien?"
+   - Responds "No, cancelar": Mark as CANCELLED
+   - Responds with reschedule: Mark as RESCHEDULED
+   - No response after 2 hours: Mark as NO-SHOW ✅
+
+NO-SHOW TRACKING:
+
+```
+Customer Profile:
+├─ Total bookings: 15
+├─ No-shows: 2
+├─ No-show rate: 13% (concerning)
+├─ Last no-show: Oct 15, 2025
+└─ Trend: Increasing (was 5% in Q3)
+```
+
+NO-SHOW IMPACT:
+
+TIER 3+ (Power customers):
+- 1st no-show: Friendly reminder
+- 2nd no-show: Phone call + re-engagement offer
+- 3rd no-show: Booking deposit required ($25)
+
+TIER 1-2 (Regular customers):
+- 1st no-show: Friendly follow-up + reschedule offer
+- 2nd no-show: Move to AT-RISK tier
+
+AT-RISK (Already problematic):
+- Any no-show: Special attention + phone call
+
+═══════════════════════════════════════════════════════════════════════════════
+📞 FOLLOW-UP SEQUENCE AFTER NO-SHOW
+═══════════════════════════════════════════════════════════════════════════════
+
+IMMEDIATE (within 2 hours):
+
+Step 1: Urgent SMS (ATTEMPT 1)
+"Notamos que no conectaste a tu cita de hoy a las 10:00am.
+¿Todo está bien? ¿Quieres reagendar?
+[Sí, reagendar] [No, cancelar] [Llamarme]"
+
+Step 2: Wait 30 minutes for response
+- If responds "Sí, reagendar": Show availability immediately
+- If responds "No, cancelar": Mark as cancelled
+- If responds "Llamarme": Agent calls within 1 hour
+- If NO RESPONSE: Continue to Step 3
+
+Step 3: Email (within 2 hours of no-show)
+Subject: "❓ ¿Qué pasó con tu reserva de hoy?"
+
+Body:
+"Hola [Name],
+
+Notamos que no conectaste a tu cita de hoy a las 10:00am EDT.
+
+¿Todo está bien? 😟
+
+Si hubo un problema:
+- [Reagendar fácilmente]
+- [Llamarme para hablar]
+- [Cancelar sin cargo]
+
+Estamos aquí si necesitas ayuda.
+
+[Support contact info]"
+
+FOLLOW-UP (24 hours later, if no response to Step 3):
+
+Step 4: Phone Call Attempt (Agent outreach)
+"Hola [Name], soy [Agent] de [Company].
+Te llamaba para ver qué pasó ayer con tu reserva.
+¿Podemos reagendar? Te ofrecemos descuento..."
+
+DELAYED FOLLOW-UP (3 days after no-show):
+
+Step 5: Re-engagement Offer (Email)
+Subject: "🎁 Descuento para reagendar tu reserva"
+
+Body:
+"Hola [Name],
+
+Nos gustaría ayudarte a reagendar tu cita.
+
+🎁 OFERTA ESPECIAL: 20% descuento si bookas esta semana
+   Código: REAGENDAR20
+
+✅ Nuevos horarios disponibles:
+   - Jueves 23, 2:00pm
+   - Viernes 24, 10:00am
+   - Lunes 27, 3:00pm
+
+[Ver disponibilidad]
+
+Si tienes dudas, llámanos: [PHONE]"
+
+LONG-TERM (7+ days after no-show):
+
+Step 6: Win-Back Campaign (if still no response)
+- Remove from regular mailing list (respect wishes)
+- Add to "inactive" segment
+- Send monthly win-back email (low frequency)
+- Offer special incentive if they rebook
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ REMINDER ENGAGEMENT TRACKING
+═══════════════════════════════════════════════════════════════════════════════
+
+WHAT TO TRACK:
+
+For Each Reminder Sent:
+├─ Delivery Status
+  ├─ Queued: Waiting to send
+  ├─ Sent: Successfully delivered
+  ├─ Bounced: Failed delivery
+  ├─ Opened: Customer opened (email)
+  └─ Clicked: Customer clicked link
+
+├─ Engagement Metrics
+  ├─ Click timestamp (if email)
+  ├─ Video call join time (vs scheduled)
+  ├─ Early/late arrival
+  └─ Duration in call
+
+└─ Outcome
+   ├─ Attended: Showed up
+   ├─ No-show: Didn't show up
+   ├─ Cancelled: Cancelled before
+   └─ Rescheduled: Moved to different time
+
+ANALYTICS DASHBOARD:
+
+Reminder Performance:
+```
+Metric                          Target    Actual   Status
+─────────────────────────────────────────────────────────
+Email delivery rate             99%       98.5%    ⚠️
+Email open rate                 45%       42%      ⚠️
+SMS delivery rate               99%       99.2%    ✅
+SMS read rate (inferred)        80%       78%      ✅
+Push notification open rate     40%       38%      ⚠️
+Video call join time            <5min     3.2min   ✅
+No-show rate (before reminder)  12%       3.8%     ✅ MASSIVE WIN
+Attendance rate (after reminder)88%       96.2%    ✅ EXCELLENT
+```
+
+Customer Tier Analysis:
+```
+TIER          No-Show   Attendance   Preferred Channel
+─────────────────────────────────────────────────────
+NEW           8%        92%          Email + SMS
+RECURRING     2%        98%          SMS + Push
+POWER         1%        99%          Push notifications
+AT-RISK       15%       85%          Phone call
+```
+
+═══════════════════════════════════════════════════════════════════════════════
+📧 EMAIL REMINDER EXAMPLES (Full Format)
+═══════════════════════════════════════════════════════════════════════════════
+
+EXAMPLE 1: 24-HOUR REMINDER EMAIL
+
+From: reminders@bookingservice.com
+Subject: ✅ Tu reserva confirmada para mañana - Consulta General - 10:00am EDT
+
+---
+
+Hola María,
+
+¡Te confirmamos tu cita para mañana! 🎉
+
+📋 DETALLES DE TU RESERVA
+Servicio:   Consulta General (60 min)
+Fecha:      Miércoles, 22 de octubre
+Hora:       10:00am EDT
+Agente:     Dr. Carlos Rodriguez
+Ubicación:  Video Llamada
+Ref #:      BK-2025-10-22-001
+
+🎥 ÚNETE A LA LLAMADA
+[Click here 10 minutes before start time]
+https://videocall.booking.com/k8d9j2d9
+
+📝 PREPARE PARA LA CITA
+- Ten a mano tu documento de identidad
+- Conecta a internet 5 minutos antes
+- En lugar tranquilo (sin ruido)
+- Cámara y micrófono funcionando
+
+❓ PREGUNTAS ANTES DE LA CITA?
+Responde a este email - normalmente respondemos en <1 hora
+
+⏰ SIGUIENTE RECORDATORIO
+Te enviaremos un recordatorio por SMS 1 hora antes de la cita
+
+🔗 IMPORTANTE: AGREGA A TU CALENDARIO
+[Add to Google Calendar] [Add to Outlook] [Add to Apple Calendar]
+(Con tu zona horaria automática)
+
+─────────────────────────────────────────
+
+¿NECESITAS CAMBIAR TU CITA?
+[Reagendar] [Cancelar] [Contactar soporte]
+
+─────────────────────────────────────────
+© 2025 Booking Service
+support@bookingservice.com | +1-555-BOOKING
+
+
+EXAMPLE 2: 1-HOUR REMINDER EMAIL
+
+From: urgent@bookingservice.com
+Subject: ⏰ ¡Tu cita comienza en 1 hora! - Consulta - 10:00am EDT
+
+---
+
+Hola María,
+
+⏰ ¡Tu cita comienza en 1 HORA! ⏰
+
+📍 UNIRSE AHORA
+[JOIN VIDEO CALL - Click here]
+https://videocall.booking.com/k8d9j2d9
+
+📅 Detalles Rápidos:
+- Hora: 10:00am EDT (en 1 hora)
+- Agente: Dr. Carlos Rodriguez
+- Duración: 60 minutos
+
+💡 TIPS:
+✓ Únete 5-10 minutos antes
+✓ Asegúrate que tu cámara funciona
+✓ Ten tu documento a mano
+
+🆘 ¿PROBLEMAS?
+Responde a este email - estamos monitoreando
+
+─────────────────────────────────────────
+Booking Service | Emergency: +1-555-BOOKING
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📱 SMS REMINDER EXAMPLES
+═══════════════════════════════════════════════════════════════════════════════
+
+EXAMPLE 1: 24-HOUR REMINDER SMS
+
+"✅ Recordatorio: Mañana tu Consulta con Dr. Rodriguez a las 10:00am EDT.
+Enlace: https://booking.co/call/abc123
+Info: +1-555-BOOKING | Cancelar: Responde STOP"
+
+[157 chars - fits in 1 SMS]
+
+
+EXAMPLE 2: 1-HOUR REMINDER SMS
+
+"⏰ ¡EN 1 HORA! Tu Consulta con Dr. Rodriguez comienza.
+Únete: https://booking.co/call/abc123
+No puedo: Responde aquí"
+
+[145 chars - fits in 1 SMS]
+
+
+EXAMPLE 3: 15-MINUTE REMINDER SMS
+
+"⏰ ¡AHORA! Tu Consulta comienza en 15 min.
+Enlace: https://booking.co/call/abc123"
+
+[105 chars - fits in 1 SMS]
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 TIER-BASED REMINDER PERSONALIZATION
+═══════════════════════════════════════════════════════════════════════════════
+
+TIER 1 (NEW CUSTOMERS):
+├─ Strategy: CONSERVATIVE (don't overwhelm)
+├─ 24h reminder: Email only (safe, no channel preference known)
+├─ 1h reminder: Email only (consistent)
+├─ 15m reminder: None (too aggressive for new)
+├─ No-show follow-up: Friendly, no penalty
+└─ Message tone: Helpful, reassuring ("we're here to help")
+
+Example Email Tone:
+"Hola! Solo te recordamos que mañana tienes tu consulta.
+Si tienes dudas, ¡escríbeme! Estoy aquí para ayudarte."
+
+TIER 2 (RECURRING CUSTOMERS):
+├─ Strategy: BALANCED (they know the drill)
+├─ 24h reminder: Email + SMS (more engagement)
+├─ 1h reminder: Email + SMS (critical reminder)
+├─ 15m reminder: SMS only (optional)
+├─ No-show follow-up: Slight concern ("hey, everything ok?")
+└─ Message tone: Friendly, familiar ("hey, just confirming...")
+
+Example SMS Tone:
+"¡Hola de nuevo! Mañana a las 10:00am. Nos vemos online 😊"
+
+TIER 3 (POWER CUSTOMERS):
+├─ Strategy: AGGRESSIVE (they want efficiency)
+├─ 24h reminder: SMS + Push only (no email clutter)
+├─ 1h reminder: SMS + Push (they're busy)
+├─ 15m reminder: Push only (heads up)
+├─ No-show follow-up: Quick escalation (deposit required?)
+└─ Message tone: Concise, professional ("confirmed: tomorrow 10am")
+
+Example SMS Tone:
+"Confirmed: Tomorrow 10am EDT. Link: [SHORT]. Questions? Call."
+
+TIER 4 (AT-RISK CUSTOMERS):
+├─ Strategy: MINIMAL (reduce friction, build trust)
+├─ 24h reminder: Email only (least intrusive)
+├─ 1h reminder: Email only (respect their space)
+├─ 15m reminder: None (too much)
+├─ No-show follow-up: PHONE CALL (personal touch)
+└─ Message tone: Warm, personal ("we'd love to see you")
+
+Example Email Tone:
+"Hola! Espero que todo esté bien. Solo confirmando que mañana...
+Si hay algún problema, no dudes en llamarme personalmente."
+
+═══════════════════════════════════════════════════════════════════════════════
+🔧 TECHNICAL IMPLEMENTATION GUIDELINES
+═══════════════════════════════════════════════════════════════════════════════
+
+REMINDER SCHEDULER REQUIREMENTS:
+
+1. TIMEZONE-AWARE SCHEDULING
+   - Store booking time in UTC
+   - When scheduling reminder, convert to customer TZ
+   - Convert back to UTC for scheduler
+   - Include timezone offset in reminder record for debugging
+
+2. DELIVERY CHANNEL MANAGEMENT
+   - Query customer profile for preferred channels
+   - Apply "Do Not Disturb" rules (e.g., no SMS after 10pm)
+   - Retry failed deliveries (max 3 attempts)
+   - Track delivery status in database
+
+3. IDEMPOTENCY (No Duplicate Reminders)
+   - Use unique key: reminder_id = booking_id + reminder_type
+   - Check if reminder already sent before queuing
+   - Set idempotency key in delivery calls
+
+4. FAILURE HANDLING
+   - Email bounces: Don't retry, mark as invalid, ask customer to confirm
+   - SMS delivery fails: Try again after 15 minutes
+   - Push notification fails: Silently fail (app might be deleted)
+
+5. AUDIT TRAIL
+   - Log every reminder sent/failed/opened/clicked
+   - Store customer interaction data
+   - Use for analytics and debugging
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ IMPLEMENTATION CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+□ SCHEDULING:
+  □ 24-hour reminder scheduling (in UTC, display in customer TZ)
+  □ 1-hour reminder scheduling
+  □ 15-minute reminder (optional, configurable)
+  □ Timezone-aware timing for global customers
+  □ No reminders during "Do Not Disturb" windows
+
+□ DELIVERY CHANNELS:
+  □ Email service integration (reliable provider)
+  □ SMS service integration (Twilio, Nexmo, etc)
+  □ Push notification service (Firebase, etc)
+  □ Fallback channel if primary fails
+  □ Channel availability per customer
+
+□ PERSONALIZATION:
+  □ Tier-based default preferences
+  □ User preference storage + editing
+  □ Message template customization
+  □ Tone adjustment by tier
+
+□ NO-SHOW MANAGEMENT:
+  □ Detect no-shows 15 minutes after scheduled time
+  □ Send urgent SMS (attempt to reach customer)
+  □ Email follow-up within 2 hours
+  □ Agent phone call within 24 hours
+  □ Re-engagement offer at 3 days
+
+□ TRACKING & ANALYTICS:
+  □ Track delivery status (sent/bounced/failed)
+  □ Track engagement (opened/clicked)
+  □ Track attendance (showed up/no-show)
+  □ Calculate reminder effectiveness
+  □ Dashboard showing key metrics
+  □ No-show trend analysis by tier
+
+□ TESTING:
+  □ Test timezone conversions (multiple timezones)
+  □ Test delivery channels (real messages)
+  □ Test preference handling
+  □ Test no-show workflow
+  □ Load test (bulk reminders at same UTC time)
+  □ A/B test message content/timing
+
+═══════════════════════════════════════════════════════════════════════════════
+

@@ -1,13 +1,13 @@
 {#
-Booking Agent - Flexible Date Formats Module (English)
-======================================================
+Booking Agent - Flexible Date Formats Module
+=============================================
 Comprehensive date parsing instructions for natural language support.
 
 This module enables the booking agent to accept dates in multiple formats:
 - ISO format (YYYY-MM-DD)
 - DD/MM/YYYY and DD/MM/YY formats
-- Relative dates (tomorrow, next Monday)
-- Natural language (October 14)
+- Relative dates (mañana, próximo lunes)
+- Natural language (14 de octubre)
 
 The LLM converts all formats to YYYY-MM-DD before calling MCP tools.
 
@@ -15,39 +15,39 @@ Author: Lab01-MCP Team
 Created: 2025-10-13
 Version: 1.0
 #}
-FLEXIBLE DATE HANDLING (IMPORTANT):
-Customers can provide dates in ANY natural format. Your job is to interpret them and convert to YYYY-MM-DD format for the tools.
+MANEJO FLEXIBLE DE FECHAS (IMPORTANTE):
+Los clientes pueden proporcionar fechas en CUALQUIER formato natural. Tu trabajo es interpretarlas y convertirlas a formato YYYY-MM-DD para los tools.
 
-Today's date: {{ current_date }}
-Day of the week: {{ current_day_en }}
+Fecha de HOY: {{ current_date }}
+Día de la semana: {{ current_day_es }}
 
-Accepted formats and how to process them:
-1. **ISO format**: "2025-10-14", "2025/10/14" → Use directly
-2. **DD/MM/YYYY format**: "14/10/2025", "14-10-2025" → Convert to "2025-10-14"
-3. **DD/MM/YY format**: "14/10/25" → Interpret as "2025-10-14"
-4. **Simple relative**:
-   - "tomorrow" → Calculate tomorrow's date in YYYY-MM-DD format
-   - "day after tomorrow" → Calculate +2 days
-   - "today" → Use current date
-5. **Relative with day**:
-   - "Monday", "next Tuesday" → Calculate the next mentioned day of week
-   - "this Friday" → This week's Friday
-6. **Relative with week/month**:
-   - "next week" → Ask what specific day
-   - "next week Tuesday" → Calculate that week's Tuesday
-   - "in 3 days" → Calculate corresponding date
+Formatos aceptados y cómo procesarlos:
+1. **Formato ISO**: "2025-10-14", "2025/10/14" → Úsalo directamente
+2. **Formato DD/MM/YYYY**: "14/10/2025", "14-10-2025" → Convierte a "2025-10-14"
+3. **Formato DD/MM/YY**: "14/10/25" → Interpreta como "2025-10-14"
+4. **Relativo simple**:
+   - "mañana" → Calcula fecha de mañana en formato YYYY-MM-DD
+   - "pasado mañana" → Calcula +2 días
+   - "hoy" → Usa fecha actual
+5. **Relativo con día**:
+   - "el lunes", "próximo martes" → Calcula el próximo día de semana mencionado
+   - "este viernes" → El viernes de esta semana
+6. **Relativo con semana/mes**:
+   - "próxima semana" → Pregunta qué día específico
+   - "la próxima semana el martes" → Calcula el martes de la próxima semana
+   - "en 3 días" → Calcula fecha correspondiente
 
-CONVERSION EXAMPLES (Today is {{ current_date }}):
-- User: "14/10/2025" → Tool: "2025-10-14" ✅
-- User: "14/10/25" → Tool: "2025-10-14" ✅
-- User: "tomorrow" → Calculate +1 day from {{ current_date }} ✅
-- User: "next Monday" → Calculate next Monday from {{ current_date }} ✅
-- User: "October 14" → Tool: "2025-10-14" ✅
+EJEMPLOS DE CONVERSIÓN (Hoy es {{ current_date }}):
+- Usuario: "14/10/2025" → Tool: "2025-10-14" ✅
+- Usuario: "14/10/25" → Tool: "2025-10-14" ✅
+- Usuario: "mañana" → Calcula +1 día desde {{ current_date }} ✅
+- Usuario: "el próximo lunes" → Calcula próximo lunes desde {{ current_date }} ✅
+- Usuario: "14 de octubre" → Tool: "2025-10-14" ✅
 
-PROCESS:
-1. Customer provides date in any format
-2. YOU interpret and calculate the date in YYYY-MM-DD format
-3. Confirm with customer: "Perfect, so for [readable day], [date mm/dd/yyyy]"
-4. Call tool with YYYY-MM-DD format
+PROCESO:
+1. El cliente dice la fecha en cualquier formato
+2. TÚ interpretas y calculas la fecha en formato YYYY-MM-DD
+3. Confirmas con el cliente: "Perfecto, entonces para el [día legible], [fecha dd/mm/yyyy]"
+4. Llamas el tool con formato YYYY-MM-DD
 
-⚠️ NEVER ask the customer to change the date format. Accept what they say and convert it yourself.
+⚠️ NUNCA pidas al cliente que cambie el formato de fecha. Acepta lo que diga y conviértelo tú.
