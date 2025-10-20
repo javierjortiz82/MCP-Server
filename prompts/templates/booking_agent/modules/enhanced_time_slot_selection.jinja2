@@ -1,0 +1,507 @@
+{#
+Booking Agent - Enhanced Time Slot Selection Module (Premium UX)
+================================================================
+Advanced time slot selection interface with zero ambiguity design.
+
+This module provides:
+- Visual grid layout (not scrolling list)
+- Day period grouping (Morning, Afternoon, Evening)
+- Letter identifiers (A-Z) for non-ambiguous selection
+- Multiple input formats (letters, 24h, 12h with am/pm)
+- Color coding by activity level (available, busy, recommended)
+- Smart suggestions (preferred times based on customer tier)
+- Real-time validation (immediate feedback on selection)
+- Mobile-friendly layout (responsive grid)
+- Accessibility (keyboard navigation, screen reader support)
+
+Based on:
+- Google Material Design principles
+- UX best practices for time selection
+- Human factors research (reducing cognitive load)
+- Accessibility guidelines (WCAG 2.1)
+
+Author: Lab01-MCP Team
+Created: 2025-10-20
+Version: 2.0 (Enhanced Premium UX)
+#}
+
+═══════════════════════════════════════════════════════════════════════════════
+🎨 ENHANCED TIME SLOT SELECTION - PREMIUM UX
+═══════════════════════════════════════════════════════════════════════════════
+
+PRINCIPLE: "Make selection effortless. Eliminate confusion. Guide with visuals."
+
+DESIGN GOALS:
+✅ Zero ambiguity (letters are primary, never ambiguous)
+✅ Visual hierarchy (see available times at glance)
+✅ Multiple input methods (letters, 24h, 12h - user choice)
+✅ Smart defaults (suggest best options for tier)
+✅ Real-time feedback (immediate validation)
+✅ Mobile-friendly (responsive, touch-friendly)
+✅ Accessible (keyboard, screen readers, high contrast)
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 DISPLAY FORMAT 1: ENHANCED GRID LAYOUT (RECOMMENDED)
+═══════════════════════════════════════════════════════════════════════════════
+
+Format with PERFECT visual hierarchy:
+
+```
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                     ✅ SELECCIONA TU HORARIO                             ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║                                                                           ║
+║  📅 Miércoles, 22 de octubre de 2025                                    ║
+║  🛠️  Consulta General (30 minutos)                                      ║
+║                                                                           ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║                                                                           ║
+║  🌅 MAÑANA (8:00 - 12:00)                                               ║
+║  ┌──────┬──────┬──────┬──────┐                                          ║
+║  │  A   │  B   │  C   │  D   │                                          ║
+║  │ 09:00│ 09:30│ 10:00│ 10:30│                                          ║
+║  │ 9am  │ 9:30am│10am │10:30am│                                         ║
+║  │ ✅ 2 │ ✅ 5 │ ✨ 8 │ ✅ 3 │  (números = disponibilidad)             ║
+║  └──────┴──────┴──────┴──────┘                                          ║
+║                                                                           ║
+║  ☀️ TARDE (12:00 - 17:00)                                               ║
+║  ┌──────┬──────┬──────┬──────┐                                          ║
+║  │  E   │  F   │  G   │  H   │                                          ║
+║  │ 13:00│ 13:30│ 14:00│ 14:30│                                          ║
+║  │ 1pm  │ 1:30pm│ 2pm │ 2:30pm│                                         ║
+║  │ ✅ 4 │ ✅ 6 │ ✅ 7 │ ✅ 3 │                                          ║
+║  └──────┴──────┴──────┴──────┘                                          ║
+║                                                                           ║
+║  🌙 NOCHE (17:00 - 20:00)                                               ║
+║  ┌──────┬──────┐                                                        ║
+║  │  I   │  J   │                                                        ║
+║  │ 17:00│ 18:00│                                                        ║
+║  │ 5pm  │ 6pm  │                                                        ║
+║  │ ✅ 2 │ ⚠️ 1  │  (⚠️ = pocas disponibilidades)                       ║
+║  └──────┴──────┘                                                        ║
+║                                                                           ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║                                                                           ║
+║  💡 CÓMO ELEGIR (elige UN opción):                                       ║
+║                                                                           ║
+║  ① Por LETRA (sin ambigüedad):                                           ║
+║     Responde: A, B, C, D, E, F, G, H, I, J                             ║
+║     Ejemplo: "C"                                                        ║
+║                                                                           ║
+║  ② Por HORA 24h (exacta):                                               ║
+║     Responde: 09:00, 10:00, 13:00, 14:00, 17:00, 18:00                 ║
+║     Ejemplo: "10:00"                                                    ║
+║                                                                           ║
+║  ③ Por HORA 12h (con am/pm):                                            ║
+║     Responde: 9am, 10:00am, 2pm, 5:30pm                                ║
+║     Ejemplo: "10am"                                                     ║
+║                                                                           ║
+║  ⚠️ IMPORTANTE: No responda SOLO números (ej: "5", "10")               ║
+║                 Eso es ambiguo. Use "C" o "10:00" o "10am"             ║
+║                                                                           ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║                                                                           ║
+║  ✨ RECOMENDADO PARA TI (basado en tu historial):                        ║
+║  📌 Opción C (10:00 / 10am) - Tu horario preferido                      ║
+║  "Es tu hora favorita. ¿La reservamos?"                                 ║
+║                                                                           ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║                                                                           ║
+║  Elige tu horario (letra, hora exacta, o hora con am/pm):               ║
+║  Tu respuesta: _________________________________                       ║
+║                                                                           ║
+║  [← Volver] [Continuar →]                                               ║
+║                                                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+```
+
+Key Features of This Display:
+✅ Visual grid (not boring list)
+✅ Letters A-Z primary identifiers (never ambiguous)
+✅ Day periods grouped (Morning/Afternoon/Evening - cognitive chunking)
+✅ 3 input formats shown for each slot (letter, 24h, 12h)
+✅ Availability indicator (✅, ⚠️, ❌ with slot count)
+✅ Tier-based recommendation ("Recomendado para ti")
+✅ Crystal clear instructions (separate section, not mixed)
+✅ Call to action at bottom (clear next step)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📦 DISPLAY FORMAT 2: COMPACT GRID (FOR NARROW SCREENS)
+═══════════════════════════════════════════════════════════════════════════════
+
+For mobile devices (< 600px width):
+
+```
+╔════════════════════════════════════════╗
+║  ✅ SELECCIONA HORARIO                ║
+╠════════════════════════════════════════╣
+║  Miércoles, 22 Oct | Consulta (30min)  ║
+╠════════════════════════════════════════╣
+║                                        ║
+║  🌅 MAÑANA                             ║
+║  ┌─────┬─────┐                         ║
+║  │  A  │  B  │                         ║
+║  │ 09:00│ 09:30│                        ║
+║  │ 9am │9:30am│                        ║
+║  │ ✅ 2│ ✅ 5│                         ║
+║  └─────┴─────┘                         ║
+║                                        ║
+║  ☀️ TARDE                              ║
+║  ┌─────┬─────┐                         ║
+║  │  C  │  D  │                         ║
+║  │ 13:00│ 14:00│                        ║
+║  │ 1pm │ 2pm │                         ║
+║  │ ✅ 4│ ✅ 7│                         ║
+║  └─────┴─────┘                         ║
+║                                        ║
+║  💡 Elige: Letra (A-D)                 ║
+║          O Hora (09:00, 9am)          ║
+║                                        ║
+║  Tu respuesta: __________________    ║
+║                                        ║
+║  [Volver] [Continuar]                  ║
+║                                        ║
+╚════════════════════════════════════════╝
+```
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 SLOT INFORMATION DETAILS - WHAT EACH BOX CONTAINS
+═══════════════════════════════════════════════════════════════════════════════
+
+Each time slot box shows 4 pieces of information:
+
+```
+    ┌──────┐
+    │  A   │  ← LETTER (Primary identifier - never ambiguous)
+    │ 09:00│  ← HOUR 24h (Can be used for selection)
+    │ 9am  │  ← HOUR 12h (Can be used for selection)
+    │ ✅ 2 │  ← AVAILABILITY STATUS + COUNT
+    └──────┘
+```
+
+Layout Details:
+- Line 1: Letter (A-Z) - Primary non-ambiguous identifier
+- Line 2: Time in 24h format (HH:MM)
+- Line 3: Time in 12h format (h:MM am/pm)
+- Line 4: Status + availability count
+
+Status Indicators:
+- ✅ Available (show count: ✅ 2 means 2 spots left)
+- ⚠️ Limited (⚠️ 1 means only 1 spot left)
+- ❌ Full (slot is full, not selectable)
+- ✨ Recommended (special indicator for tier-suggested time)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🕒 GROUPING LOGIC - BY TIME OF DAY
+═══════════════════════════════════════════════════════════════════════════════
+
+Organize slots by time period (cognitive chunking = easier scanning):
+
+MORNING (🌅):      08:00 - 11:59
+AFTERNOON (☀️):    12:00 - 16:59
+EVENING (🌙):      17:00 - 20:59
+
+Benefits:
+✅ Users scan visually by period (not random list)
+✅ Natural thinking pattern (morning person, afternoon, etc.)
+✅ Respects business psychology (energy levels peak different times)
+✅ Reduces cognitive load (grouped = easier memory)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🎨 COLOR & SYMBOL CODING
+═══════════════════════════════════════════════════════════════════════════════
+
+Color Coding (for visual differentiation):
+
+🟢 GREEN BACKGROUND (or ✅ emoji):
+   - Full availability (many spots open)
+   - User's tier preferred time (if applicable)
+   - Normal selection
+
+🟡 YELLOW BACKGROUND (or ⚠️ emoji):
+   - Limited availability (1-2 spots left)
+   - Getting full soon
+   - Still selectable but shows scarcity
+
+🔴 RED BACKGROUND (or ❌ emoji):
+   - Full (no availability)
+   - Not selectable
+   - Grayed out or dimmed
+
+⭐ STAR ICON (✨ or ⭐):
+   - Recommended for this customer (based on tier/history)
+   - Personalization signal
+   - First suggestion to try
+
+
+Symbols Used:
+🌅 = Morning (8am - noon)
+☀️ = Afternoon (noon - 5pm)
+🌙 = Evening (5pm - 8pm)
+✅ = Available with indicator
+⚠️ = Limited availability
+❌ = Full/Unavailable
+✨ = Recommended/Special
+📌 = Pinned/Suggested option
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📱 RESPONSIVE DESIGN - ADAPT TO SCREEN SIZE
+═══════════════════════════════════════════════════════════════════════════════
+
+Desktop (≥ 1200px):
+├─ 4 columns per row
+├─ Full information visible
+└─ All details on screen
+
+Tablet (768px - 1199px):
+├─ 3 columns per row
+├─ Maybe needs slight scroll
+└─ Still comfortable to use
+
+Mobile (< 768px):
+├─ 2 columns per row
+├─ Compact format
+├─ Touch-friendly (larger tap targets)
+└─ Stacked vertically
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 INPUT VALIDATION - ZERO AMBIGUITY
+═══════════════════════════════════════════════════════════════════════════════
+
+RULE 1: Single Letter (A-Z)
+INPUT: "A", "B", "C", ..., "Z"
+✅ ACCEPT: Direct match to slot letter
+FEEDBACK: "✅ Perfecto, elegiste las 09:00 (9am). ¿Confirmar?"
+
+RULE 2: Hour 24h Format (HH:MM)
+INPUT: "09:00", "13:30", "17:00"
+✅ ACCEPT: Find matching slot by time
+FEEDBACK: "✅ Perfecto, elegiste las 09:00 (9am). ¿Confirmar?"
+
+RULE 3: Hour 24h Number (13-23)
+INPUT: "13", "17", "18" (numbers > 12 always 24h)
+✅ ACCEPT: Convert to HH:00 and find slot
+FEEDBACK: "✅ Perfecto, elegiste las 13:00 (1pm). ¿Confirmar?"
+
+RULE 4: Hour 12h with am/pm
+INPUT: "9am", "1:30pm", "5pm" (any format with am/pm)
+✅ ACCEPT: Parse and find matching slot
+FEEDBACK: "✅ Perfecto, elegiste las 09:00 (9am). ¿Confirmar?"
+
+RULE 5: Ambiguous Number (1-12 without am/pm)
+INPUT: "5", "10", "2" (number without context)
+❌ REJECT: Ambiguous (could be am/pm/letter)
+FEEDBACK: "⚠️ Necesito confirmar:
+          A) Opción C (09:00)
+          B) 5am (05:00)
+          C) 5pm (17:00)?
+          Responde A, B, o C"
+
+RULE 6: Invalid Input
+INPUT: "xyz", "mañana", "no sé"
+❌ REJECT: Not recognized format
+FEEDBACK: "No entendí. Por favor elige:
+          • Letra: A, B, C...
+          • Hora: 09:00, 9am, 17:00
+          [Mostrar opciones nuevamente]"
+
+
+═══════════════════════════════════════════════════════════════════════════════
+✨ TIER-BASED RECOMMENDATIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+TIER 1 (New Customer):
+- No recommendation (no history)
+- Show all options equally
+- Neutral: "Elige el horario que mejor te venga"
+
+TIER 2 (Recurring Customer):
+- Suggest preferred time (if clear pattern)
+- Highlight: "📌 Tu horario favorito: Opción C (10:00)"
+- Pre-select option (visual highlight, not auto-select)
+
+TIER 3 (Power Customer):
+- Strong recommendation with confidence
+- Highlight + bold: "✨ RECOMENDADO: Opción C (10:00) - 92% match"
+- Maybe offer one-click: "[✅ Aceptar] [Cambiar]"
+
+
+═══════════════════════════════════════════════════════════════════════════════
+⌨️ KEYBOARD NAVIGATION (Accessibility)
+═══════════════════════════════════════════════════════════════════════════════
+
+Users can navigate entirely by keyboard:
+
+↑ ↓ ← → = Navigate between slots
+ENTER = Select highlighted slot
+TAB = Move to next section
+SHIFT+TAB = Move to previous section
+ESC = Go back / Cancel
+
+Benefits:
+✅ Accessible for motor disability users
+✅ Power users can navigate faster
+✅ Screen reader compatible
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🔄 REAL-TIME FEEDBACK LOOP
+═══════════════════════════════════════════════════════════════════════════════
+
+AS USER INTERACTS, provide immediate feedback:
+
+1. HOVER/FOCUS on slot:
+   "Opción A: 09:00 (9am) - 2 disponibilidades"
+
+2. SELECTED:
+   "✓ Seleccionaste A (09:00 / 9am)"
+
+3. CONFIRM NEEDED:
+   "¿Confirmar esta hora? [✅ Sí] [❌ Cambiar]"
+
+4. CONFIRMED:
+   "✅ Perfecto! Hora seleccionada: 09:00"
+   Proceed to next step
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📊 AVAILABILITY DISPLAY - SMART INDICATORS
+═══════════════════════════════════════════════════════════════════════════════
+
+Show availability at multiple levels:
+
+Level 1: Individual Slot
+┌──────┐
+│  A   │
+│ 09:00│
+│ 9am  │
+│ ✅ 2 │  ← This slot has 2 spots
+└──────┘
+
+Level 2: Day Summary (before showing slots)
+"📅 Miércoles, 22 Oct: 12 horarios disponibles
+ 🌅 Mañana: 4 | ☀️ Tarde: 5 | 🌙 Noche: 3"
+
+Level 3: Scarcity Alert (if getting full)
+"⚠️ Solo 3 horarios disponibles para esta fecha.
+ Te recomendamos reservar pronto."
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🎓 ERROR PREVENTION BEST PRACTICES
+═══════════════════════════════════════════════════════════════════════════════
+
+1. CLEAR INSTRUCTIONS
+   - Separate instructions from choices
+   - Use numbered list, not prose
+   - Provide examples for each method
+
+2. NO AMBIGUOUS INPUTS
+   - Letters are never ambiguous (A-Z are distinct)
+   - 24h times never ambiguous (09:00 is exact)
+   - Require am/pm for 12h format
+
+3. CONFIRMATION GATE
+   - Always confirm BEFORE committing
+   - Show selected time clearly
+   - "¿Confirmar las 09:00?" (not just "¿Confirmar?")
+
+4. VISUAL HIERARCHY
+   - Primary action is obvious (large, contrast)
+   - Secondary actions are visible but less prominent
+   - Instructions are clear (not hidden)
+
+5. SMART DEFAULTS
+   - If customer has preferred time, highlight it
+   - If slot is getting full, show warning
+   - If time is peak hours, show availability
+
+6. UNDO CAPABILITY
+   - Can go back and change without losing data
+   - Can restart if needed
+   - No accidental commits
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 IMPLEMENTATION CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+When implementing enhanced time slot selection:
+
+□ LAYOUT:
+  □ Grid format (not scrolling list)
+  □ Day periods grouped (Morning/Afternoon/Evening)
+  □ 3-4 columns on desktop, 2 on mobile
+  □ Responsive and touch-friendly
+
+□ SLOT INFORMATION:
+  □ Letter identifier (A-Z)
+  □ Time 24h format
+  □ Time 12h format
+  □ Availability status (✅/⚠️/❌ + count)
+
+□ INSTRUCTIONS:
+  □ Separate instruction section (not mixed)
+  □ Show 3 methods (letter, 24h, 12h)
+  □ Provide examples
+  □ Warn against ambiguous numbers
+
+□ VALIDATION:
+  □ Accept single letters (A-Z)
+  □ Accept 24h format (HH:MM)
+  □ Accept 24h numbers (13-23)
+  □ Accept 12h with am/pm
+  □ Reject ambiguous numbers (1-12 alone)
+  □ Reject invalid formats
+
+□ FEEDBACK:
+  □ Immediate feedback on input
+  □ Confirmation before commit
+  □ Clear error messages
+  □ Suggest corrections
+
+□ PERSONALIZATION:
+  □ Recommend tier-based preferred time
+  □ Highlight if slot getting full
+  □ Show scarcity if needed
+
+□ ACCESSIBILITY:
+  □ Keyboard navigation
+  □ Screen reader compatible
+  □ High contrast mode
+  □ Large touch targets (mobile)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ COMPLETE BOOKING FLOW WITH ENHANCED TIME SELECTION
+═══════════════════════════════════════════════════════════════════════════════
+
+1. User selects service
+   "¿Qué servicio necesitas? [Consulta] [Soporte] [Demo]"
+
+2. User selects date
+   "¿Para cuándo? [Calendario]"
+
+3. USER SEES ENHANCED TIME GRID (this module)
+   Show beautiful grid with A-Z letters, clear instructions
+
+4. User selects time (letter, 24h, or 12h+am/pm)
+   "Elige tu horario"
+
+5. System validates instantly (no ambiguity)
+   "✓ Seleccionaste 09:00 (opción A)"
+
+6. User confirms
+   "¿Confirmar las 09:00? [✅ Sí] [❌ Cambiar]"
+
+7. Proceed to summary & final confirmation
+   (Uses progressive_confirmation_flow module)
+
+
+═══════════════════════════════════════════════════════════════════════════════
