@@ -1,13 +1,16 @@
 # ============================================================================
-# Gemini Agent - Python Dependencies (Production)
+# Gemini Agent - Python Dependencies (All)
 # ============================================================================
-# Production dependencies for the Google Gemini AI Agent Library
+# Complete dependency list for the Google Gemini AI Agent Library
+# Includes both production and development dependencies
 #
 # Installation:
 #   pip install -r requirements.txt
 #
-# Development installation (includes dev tools):
-#   pip install -r requirements.txt -r requirements-dev.txt
+# ============================================================================
+
+# ============================================================================
+# PRODUCTION DEPENDENCIES (Required for deployment)
 # ============================================================================
 
 # Core AI
@@ -18,6 +21,26 @@ pydantic>=2.11.0                   # Data validation and settings management (v2
 pydantic-settings>=2.11.0          # Settings management from environment variables
 python-dotenv>=1.0.0               # Load environment variables from .env file
 
-# Template Engine and Data Formats (REQUIRED for Jinja2-based prompt system)
-jinja2>=3.1.0                      # REQUIRED: Template engine for prompt management (now mandatory)
+# Template Engine and Data Formats
+jinja2>=3.1.0                      # Template engine for prompt management
 pyyaml>=6.0.0                      # YAML parser for configuration data
+
+# ============================================================================
+# DEVELOPMENT DEPENDENCIES (For development, testing, and quality tools)
+# ============================================================================
+
+# Testing Framework
+pytest>=8.3.0                      # Testing framework
+pytest-asyncio>=0.24.0             # Async support for pytest
+pytest-cov>=6.0.0                  # Code coverage reporting
+pytest-mock>=3.14.0                # Mocking support for pytest
+
+# Code Quality and Linting
+ruff>=0.7.0                        # Fast Python linter and formatter
+mypy>=1.13.0                       # Static type checker
+pre-commit>=4.0.0                  # Git hooks for code quality
+
+# Type Stubs
+types-psutil>=6.0.0                # Type stubs for psutil
+
+# ============================================================================
