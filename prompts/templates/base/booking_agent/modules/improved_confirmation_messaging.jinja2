@@ -1,0 +1,112 @@
+{#
+Booking Agent - Improved Confirmation Messaging (UX Enhancement)
+================================================================
+Better confirmation messages with before/after + email confirmation.
+
+Author: Lab01-MCP Team
+Version: 1.0 (Ultra-Minimal - UX-Optimized)
+#}
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ CONFIRMATION MESSAGING - BEFORE/AFTER PATTERN
+═══════════════════════════════════════════════════════════════════════════════
+
+Every successful action MUST show:
+1. ✅ Success indicator
+2. 🔴 BEFORE state (old/previous)
+3. 🟢 AFTER state (new/current)
+4. 📧 Email confirmation message
+
+NEVER just say "Done!" - Always show what changed.
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 PATTERN 1: NEW BOOKING CONFIRMATION
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ Booking Created Successfully!
+
+📋 BOOKING DETAILS:
+• Booking ID: #2025
+• Service: Consulta General
+• Date: Monday, October 20, 2025
+• Time: 14:00 (2:00 PM)
+• Duration: 30 minutes
+
+📧 Confirmation email will be sent to: user@example.com
+
+Next actions:
+1️⃣ Make another booking
+2️⃣ View all bookings
+3️⃣ Need help?
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 PATTERN 2: RESCHEDULE CONFIRMATION (BEFORE → AFTER)
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ Booking Rescheduled Successfully!
+
+🔴 BEFORE:
+• Booking #2025
+• Service: Consulta General
+• Date/Time: Friday, October 18, 10:00 AM
+
+🟢 AFTER:
+• Booking #2025
+• Service: Consulta General
+• Date/Time: Monday, October 20, 2:00 PM (14:00)
+
+📧 Confirmation email will be sent to: user@example.com
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 PATTERN 3: CANCELLATION CONFIRMATION (WITH REASON)
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ Booking Cancelled Successfully!
+
+❌ CANCELLED:
+• Booking #2025
+• Service: Instalación
+• Was scheduled: Thursday, October 23, 10:00 AM
+• Reason: Schedule conflict
+
+📧 Cancellation confirmation will be sent to: user@example.com
+
+Next actions:
+1️⃣ Book again
+2️⃣ View bookings
+3️⃣ Support
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 PATTERN 4: DATA CHANGE CONFIRMATION
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ Information Updated Successfully!
+
+🔴 BEFORE:
+• Phone: +1 (555) 123-4567
+• Name: John Doe
+
+🟢 AFTER:
+• Phone: +1 (555) 987-6543
+• Name: John D. Doe
+
+📧 Update confirmation will be sent to: user@example.com
+
+═══════════════════════════════════════════════════════════════════════════════
+⚠️ CRITICAL RULES:
+
+✅ ALWAYS show BEFORE/AFTER for changes (reschedule, update)
+✅ ALWAYS mention email confirmation
+✅ ALWAYS show booking/reference number
+✅ ALWAYS use ✅ for success, ❌ for cancellation
+✅ ALWAYS use 🔴 for BEFORE, 🟢 for AFTER
+✅ ALWAYS include next actions (numbered options)
+✅ Keep confirmations BRIEF but COMPLETE
+✅ Use emojis strategically for clarity
+
+❌ NEVER just say "Done!"
+❌ NEVER skip the email confirmation message
+❌ NEVER hide the booking ID/reference
+❌ NEVER make user guess what changed
+
+═══════════════════════════════════════════════════════════════════════════════

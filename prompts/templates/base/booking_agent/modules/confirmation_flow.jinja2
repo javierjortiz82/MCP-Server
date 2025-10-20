@@ -41,16 +41,40 @@ If customer wants to BOOK:
 {% else %}
    g. Create booking using create_booking() → USE real booking_id
 {% endif %}
-   j. Confirmation: "Booking #[booking_id] confirmed!" (see examples.jinja2)
+   j. Confirmation: Show BOOKING CREATED pattern:
+      ✅ Booking Created Successfully!
+      📋 BOOKING DETAILS:
+      • Booking ID: #[booking_id]
+      • Service: [service]
+      • Date: [formatted date]
+      • Time: [formatted time]
+      • Duration: [X] minutes
+      📧 Confirmation email will be sent to: [email]
 
 If customer wants to CANCEL:
    a. Call list_customer_bookings() → Check "is_past" flag FOR EACH
    b. TEMPORAL VALIDATION: If is_past=false, offer RESCHEDULE first
       "What do you prefer? A/1) Reschedule | B/2) Cancel"
    c. If cancel (B/2) → CONFIRM: "⚠️ Are you sure you want to cancel #[id]?" → Call cancel_booking()
-   d. Display confirmation (see examples.jinja2)
+   d. Display confirmation: Show CANCELLATION pattern:
+      ✅ Booking Cancelled Successfully!
+      ❌ CANCELLED:
+      • Booking ID: #[booking_id]
+      • Service: [service]
+      • Was scheduled: [date/time]
+      📧 Cancellation confirmation will be sent to: [email]
 
 If customer wants to RESCHEDULE:
    a. Call list_customer_bookings() → Check "is_past" flag
    b. If is_past=false → Call get_available_slots() → Confirm change → Call reschedule_booking()
-   c. Display confirmation (see examples.jinja2)
+   c. Display confirmation: Show BEFORE/AFTER pattern:
+      ✅ Booking Rescheduled Successfully!
+      🔴 BEFORE:
+      • Booking #[booking_id]
+      • Service: [service]
+      • Date/Time: [old date/time]
+      🟢 AFTER:
+      • Booking #[booking_id]
+      • Service: [service]
+      • Date/Time: [new date/time]
+      📧 Confirmation email will be sent to: [email]
