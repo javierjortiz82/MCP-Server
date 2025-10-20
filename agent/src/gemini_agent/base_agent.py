@@ -41,6 +41,7 @@ from datetime import UTC
 from typing import Any, TypedDict
 
 from gemini_agent.config import settings
+from gemini_agent.utils.language_detector import detect_user_language
 from gemini_agent.utils.logger import setup_logging
 from google import genai
 from google.genai import types
@@ -728,14 +729,24 @@ class BaseAgent(ABC):
         try:
             self.logger.info(f"Generating response for: '{query[:100]}...'")
 
-            # Update agent language if provided in kwargs (allows orchestrator to change language per-query)
+            # Auto-detect or use provided language for consistent context (prevents language switching)
             if "language" in kwargs:
+                # Priority 1: Explicit language parameter from caller
                 new_language = kwargs["language"]
                 if new_language != self.language:
                     self.logger.info(
-                        f"🌐 Updating agent language: {self.language} → {new_language}"
+                        f"🌐 Updating agent language (explicit): {self.language} → {new_language}"
                     )
                     self.language = new_language
+            else:
+                # Priority 2: Auto-detect language from user query (prevents English input → Spanish output)
+                detected_language = detect_user_language(query)
+                if detected_language != self.language:
+                    self.logger.info(
+                        f"🌐 Auto-detected language: {self.language} → {detected_language}"
+                    )
+                    self.language = detected_language
+                kwargs["language"] = detected_language
 
             # Build conversation contents (uses template method pattern)
             contents = self._build_contents(query, include_history, **kwargs)

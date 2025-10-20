@@ -25,6 +25,9 @@ python-dotenv>=1.0.0               # Load environment variables from .env file
 jinja2>=3.1.0                      # Template engine for prompt management
 pyyaml>=6.0.0                      # YAML parser for configuration data
 
+# Language Detection
+langdetect>=1.0.11                 # Automatic language detection for multi-language support
+
 # ============================================================================
 # DEVELOPMENT DEPENDENCIES (For development, testing, and quality tools)
 # ============================================================================
