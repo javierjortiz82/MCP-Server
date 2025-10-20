@@ -414,13 +414,21 @@ class BookingAgent(BaseAgent):
                 "system_instruction": system_prompt,
             }
 
-            # Add structured output schema (Gemini 2.5 Best Practice)
-            # This ensures JSON-compliant responses with automatic intent detection
-            # Feature: responseSchema (Google Gemini, July 2025)
-            config_dict["response_schema"] = BOOKING_RESPONSE_SCHEMA
-            self.logger.info(
-                "✅ Structured output enabled: BOOKING_RESPONSE_SCHEMA with intent detection"
-            )
+            # CRITICAL FIX: Only add response_schema if NO tools are available
+            # When tools are present, response_schema conflicts with function_calling:
+            # - response_schema forces Gemini to return structured JSON
+            # - function_calling expects Gemini to return function_call parts
+            # - These are mutually exclusive → response.parts becomes None
+            # Solution: Use response_schema ONLY for text-only responses (no tools)
+            if not self.mcp_tools:
+                config_dict["response_schema"] = BOOKING_RESPONSE_SCHEMA
+                self.logger.info(
+                    "✅ Structured output enabled: BOOKING_RESPONSE_SCHEMA with intent detection"
+                )
+            else:
+                self.logger.info(
+                    "⏭️ Skipping response_schema (tools present): Let Gemini choose function calls naturally"
+                )
 
             # Add tools and tool config if available
             # Implements Gemini 2.5 Function Calling Best Practices
