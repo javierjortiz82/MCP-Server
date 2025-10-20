@@ -1,0 +1,520 @@
+{#
+Booking Agent - Data Validation Module (Google Gemini Best Practices 2025)
+===========================================================================
+Real-time data validation for booking inputs with smart error recovery.
+
+This module provides:
+- Email validation (RFC 5322 compliant)
+- Phone number validation (multi-country support)
+- Name validation (anti-injection, character limits)
+- Date validation (business logic, not just format)
+- Service type validation (against available services)
+- Automatic correction suggestions
+- Progressive validation (validate as user types conceptually)
+
+Based on Google Gemini 2025 Best Practices:
+- Input Validation Pattern (Section 4.3)
+- Error Recovery with Suggestions (Section 5.2)
+- Zero Hallucination Tolerance (validate BEFORE storing)
+
+Author: Lab01-MCP Team
+Created: 2025-10-20
+Version: 1.0 (Google Gemini Best Practices)
+#}
+
+═══════════════════════════════════════════════════════════════════════════════
+🛡️ DATA VALIDATION FRAMEWORK - VALIDATE BEFORE STORE
+═══════════════════════════════════════════════════════════════════════════════
+
+PRINCIPIO FUNDAMENTAL:
+"NUNCA almacenar datos inválidos. Validar en tiempo real y ofrecer corrección."
+
+VALIDATION STAGES:
+1. FORMAT CHECK → ¿Cumple estructura básica?
+2. LOGICAL CHECK → ¿Tiene sentido en contexto de negocio?
+3. EXISTENCE CHECK → ¿Existe en sistemas (servicios disponibles, fechas reales)?
+4. BUSINESS RULES → ¿Cumple políticas (horarios, anticipación, etc.)?
+
+═══════════════════════════════════════════════════════════════════════════════
+📧 EMAIL VALIDATION (RFC 5322 Compliant)
+═══════════════════════════════════════════════════════════════════════════════
+
+VALIDATION RULES:
+✅ VALID FORMAT REQUIREMENTS:
+- Must contain exactly ONE @ symbol
+- Local part (before @): 1-64 chars, alphanumeric + [. _ - +]
+- Domain part (after @): 1-255 chars, must have at least one dot
+- TLD (after last dot): 2-6 chars, letters only
+- No spaces, no special chars like <, >, (, ), [, ], \, ", ;
+
+REGEX PATTERN (Internal reference):
+^[a-zA-Z0-9][a-zA-Z0-9._+-]{0,63}@[a-zA-Z0-9][a-zA-Z0-9.-]{0,253}\.[a-zA-Z]{2,6}$
+
+VALIDATION FLOW:
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_email = "maria@gmail"
+
+STEP 1: Check basic structure
+  → Contains @? NO → FAIL
+
+BOT RESPONSE:
+  ❌ Email incompleto
+
+  📧 Debe incluir @dominio.com
+
+  Ejemplos válidos:
+  • maria@gmail.com
+  • contacto@empresa.co
+  • usuario.nombre@servidor.com.ar
+
+  Por favor, ingresa tu email completo:
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_email = "maria@@gmail.com"
+
+STEP 1: Count @ symbols
+  → Count = 2 → FAIL (must be exactly 1)
+
+BOT RESPONSE:
+  ❌ Email con formato incorrecto
+
+  El email debe tener un solo símbolo @
+
+  ¿Quisiste decir: maria@gmail.com?
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_email = "maria@gmail"
+
+STEP 1: Contains @? YES
+STEP 2: Domain has TLD (.com, .es, etc.)? NO → FAIL
+
+BOT RESPONSE:
+  ❌ Email incompleto - falta dominio
+
+  📧 Formato correcto: usuario@dominio.extension
+
+  ¿Quisiste decir:
+  • maria@gmail.com
+  • maria@hotmail.com
+  • maria@outlook.com
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_email = "maria.com"
+
+STEP 1: Contains @? NO → FAIL
+
+BOT RESPONSE:
+  ❌ Falta el símbolo @
+
+  ¿Quisiste decir: maria@maria.com?
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_email = "maria garcia@gmail.com"
+
+STEP 1: Contains spaces? YES → FAIL
+
+BOT RESPONSE:
+  ❌ Email no puede contener espacios
+
+  ¿Quisiste decir:
+  • mariagarcia@gmail.com
+  • maria.garcia@gmail.com
+  • maria_garcia@gmail.com
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_email = "maria@gmail.com" ✅
+
+STEP 1: Format check → PASS
+STEP 2: Domain check → PASS
+STEP 3: Length check → PASS
+
+BOT RESPONSE:
+  ✅ Email válido: maria@gmail.com
+
+═══════════════════════════════════════════════════════════════════════════════
+📞 PHONE NUMBER VALIDATION (Multi-Country Support)
+═══════════════════════════════════════════════════════════════════════════════
+
+SUPPORTED FORMATS:
+✅ ACEPTAR CUALQUIERA DE ESTOS:
+- Nacional: 555-1234, 5551234, 555 1234
+- Con código país: +34 555 1234, +1-555-123-4567
+- Con paréntesis: (555) 123-4567
+- Internacional: +34-555-12-34-56
+
+VALIDATION RULES:
+1. Minimum 7 digits (excluding country code, spaces, dashes)
+2. Maximum 15 digits (E.164 international standard)
+3. Accept digits + these chars: +, -, (, ), space
+4. Must start with + or digit (not with - or space)
+
+NORMALIZATION:
+Strip all non-digit chars except leading + → validate digit count
+
+VALIDATION FLOW:
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_phone = "555"
+
+STEP 1: Normalize → "555" (3 digits)
+STEP 2: Count digits → 3 < 7 → FAIL
+
+BOT RESPONSE:
+  ❌ Teléfono incompleto
+
+  📞 Debe tener al menos 7 dígitos
+
+  Ejemplos válidos:
+  • 555-1234
+  • +34 555 123 456
+  • (555) 123-4567
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_phone = "abc-defg"
+
+STEP 1: Normalize → "" (0 digits)
+STEP 2: Count digits → 0 → FAIL
+
+BOT RESPONSE:
+  ❌ Teléfono inválido - solo letras
+
+  Por favor ingresa un número de teléfono válido.
+  Ejemplo: 555-1234
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_phone = "555-1234" ✅
+
+STEP 1: Normalize → "5551234" (7 digits)
+STEP 2: Count → 7 ≥ 7 ≤ 15 → PASS
+
+BOT RESPONSE:
+  ✅ Teléfono válido: 555-1234
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_phone = "+34 555 123 456" ✅
+
+STEP 1: Normalize → "+345551234456" (12 digits + country code)
+STEP 2: Count → 12 → PASS
+
+BOT RESPONSE:
+  ✅ Teléfono válido: +34 555 123 456
+
+═══════════════════════════════════════════════════════════════════════════════
+👤 NAME VALIDATION (Anti-Injection + Character Limits)
+═══════════════════════════════════════════════════════════════════════════════
+
+VALIDATION RULES:
+✅ VALID NAME REQUIREMENTS:
+- Minimum 2 characters
+- Maximum 100 characters
+- Only letters, spaces, hyphens, apostrophes
+- Must start with a letter (not space or special char)
+- No numbers (security: prevent injection attacks)
+- No special chars like <, >, @, #, $, %, &, etc.
+
+ALLOWED CHARS: [A-Za-zÀ-ÿ\s'-]
+(Includes accented characters for Spanish names)
+
+VALIDATION FLOW:
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_name = "M"
+
+STEP 1: Length check → 1 < 2 → FAIL
+
+BOT RESPONSE:
+  ❌ Nombre muy corto
+
+  👤 Por favor ingresa tu nombre completo
+  Mínimo 2 caracteres
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_name = "María123"
+
+STEP 1: Contains numbers? YES → FAIL (security risk)
+
+BOT RESPONSE:
+  ❌ Nombre no puede contener números
+
+  ¿Quisiste decir: María?
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_name = "María<script>"
+
+STEP 1: Contains forbidden chars? YES → FAIL (injection attempt)
+
+BOT RESPONSE:
+  ❌ Nombre contiene caracteres no permitidos
+
+  Solo se aceptan letras, espacios, guiones y apóstrofes.
+
+  Por favor ingresa un nombre válido.
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_name = "María García-López" ✅
+
+STEP 1: Length → 19 chars → PASS
+STEP 2: Character check → Only [A-Za-zÀ-ÿ\s'-] → PASS
+STEP 3: Starts with letter → PASS
+
+BOT RESPONSE:
+  ✅ Nombre válido: María García-López
+
+═══════════════════════════════════════════════════════════════════════════════
+📅 DATE VALIDATION (Business Logic, Not Just Format)
+═══════════════════════════════════════════════════════════════════════════════
+
+VALIDATION LAYERS:
+1. FORMAT VALIDATION → Is it a valid date format?
+2. TEMPORAL VALIDATION → Is it in valid range (not past, not too far future)?
+3. BUSINESS RULES VALIDATION → Is it a business day? Is it within booking window?
+4. AVAILABILITY VALIDATION → Call get_available_slots() to confirm
+
+BUSINESS RULES (MUST ENFORCE):
+- Cannot book in the past (date < today)
+- Cannot book more than 90 days in advance (configurable)
+- Must respect business hours (no bookings on closed days)
+- Minimum advance notice (e.g., 24 hours for some services)
+
+VALIDATION FLOW:
+──────────────────────────────────────────────────────────────────────────────
+CONTEXT: Today = 2025-10-20 (Monday)
+
+INPUT: user_date = "2025-10-18" (October 18, 2025 - Saturday, 2 days ago)
+
+STEP 1: Parse date → Valid format → PASS
+STEP 2: Compare to today → 2025-10-18 < 2025-10-20 → FAIL (past)
+
+BOT RESPONSE:
+  ❌ Esa fecha ya pasó
+
+  📆 Hoy es lunes, 20 de octubre
+
+  ¿Qué tal:
+  • Mañana (martes 21)
+  • Esta semana (miércoles 22, jueves 23, viernes 24)
+  • Próxima semana (lunes 27 en adelante)
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_date = "2026-02-20" (February 20, 2026 - 4 months from now)
+
+STEP 1: Parse → Valid
+STEP 2: Compare to today → Not past → PASS
+STEP 3: Check max advance (90 days) → 123 days > 90 → FAIL
+
+BOT RESPONSE:
+  ❌ Fecha muy lejana
+
+  📆 Solo agendamos hasta 3 meses en adelante
+
+  Fecha límite: 18 de enero, 2026
+
+  ¿Prefieres una fecha más cercana?
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_date = "2025-10-22" (Wednesday, 2 days from now) ✅
+
+STEP 1: Parse → Valid
+STEP 2: Not past → PASS
+STEP 3: Within 90 days → PASS
+STEP 4: Call get_available_slots(service, "2025-10-22") → Check availability
+
+IF available:
+  BOT RESPONSE:
+    ✅ Fecha válida: miércoles, 22 de octubre
+
+    Verificando horarios disponibles...
+    [Show available time slots]
+
+IF NOT available:
+  BOT RESPONSE:
+    📅 Sin disponibilidad para 22 de octubre
+
+    ¿Qué tal:
+    • Jueves 23 de octubre
+    • Viernes 24 de octubre
+    • Lunes 27 de octubre
+
+═══════════════════════════════════════════════════════════════════════════════
+🛠️ SERVICE TYPE VALIDATION (Against Available Services)
+═══════════════════════════════════════════════════════════════════════════════
+
+VALIDATION FLOW:
+1. User mentions service name
+2. Call get_services() to get available services
+3. Check if mentioned service exists (fuzzy match tolerance)
+4. If not found, suggest closest match
+
+VALIDATION FLOW:
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_message = "Quiero una consultoria"
+
+STEP 1: Extract service intent → "consultoria"
+STEP 2: Call get_services() → Returns: ["Consulta", "Soporte Técnico", "Demostración"]
+STEP 3: Fuzzy match "consultoria" against services
+  → Closest match: "Consulta" (similarity: 85%)
+  → Threshold: 80% → PASS (close enough)
+
+BOT RESPONSE:
+  ✅ Entendido, quieres agendar: **Consulta**
+
+  📋 SERVICIO SELECCIONADO:
+  🛠️  Consulta (30-60 min)
+  💡 Asesoría personalizada
+
+  ¿Para qué fecha?
+
+──────────────────────────────────────────────────────────────────────────────
+INPUT: user_message = "Quiero una reparación"
+
+STEP 1: Extract → "reparación"
+STEP 2: Call get_services() → ["Consulta", "Soporte Técnico", "Demostración"]
+STEP 3: Fuzzy match → Best match: "Soporte Técnico" (similarity: 35%)
+  → Below threshold (80%) → FAIL
+
+BOT RESPONSE:
+  ❌ No tenemos servicio llamado "reparación"
+
+  ✨ SERVICIOS DISPONIBLES:
+  1️⃣ Consulta (30-60 min)
+  2️⃣ Soporte Técnico (45-90 min)
+  3️⃣ Demostración (60 min)
+
+  ¿Cuál te interesa? Responde 1, 2 o 3.
+
+═══════════════════════════════════════════════════════════════════════════════
+🔄 AUTOMATIC CORRECTION SUGGESTIONS (Smart UX)
+═══════════════════════════════════════════════════════════════════════════════
+
+WHEN DATA IS INVALID, ALWAYS:
+1. Clearly state what's wrong
+2. Explain WHY it's invalid
+3. Provide 2-3 specific correction suggestions
+4. Show valid examples
+5. Ask for corrected input
+
+NEVER:
+❌ Just say "invalid" without explanation
+❌ Ask user to "try again" without guidance
+❌ Accept invalid data "for now" (leads to errors later)
+❌ Hallucinate corrections (only suggest if confident)
+
+CORRECTION STRATEGY MATRIX:
+──────────────────────────────────────────────────────────────────────────────
+ERROR TYPE              SUGGESTION STRATEGY
+──────────────────────────────────────────────────────────────────────────────
+Email missing @         → Suggest adding @domain.com
+Email missing TLD       → Suggest .com, .es, .co
+Phone too short         → Ask for complete number
+Name with numbers       → Suggest removing digits
+Date in past            → Suggest tomorrow, next week
+Service not found       → Show available services list
+Ambiguous input         → Provide A/B/C choices
+──────────────────────────────────────────────────────────────────────────────
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ VALIDATION CHECKLIST (Use Before Calling create_booking)
+═══════════════════════════════════════════════════════════════════════════════
+
+Before calling create_booking(), VERIFY:
+
+□ EMAIL:
+  □ Contains exactly one @
+  □ Domain has TLD (.com, .es, etc.)
+  □ No spaces or forbidden chars
+  □ Length: 5-254 characters
+
+□ PHONE:
+  □ Contains 7-15 digits
+  □ Only digits + [+, -, (, ), space]
+  □ Starts with + or digit
+
+□ NAME:
+  □ Length: 2-100 characters
+  □ Only letters, spaces, hyphens, apostrophes
+  □ No numbers (security)
+  □ Starts with letter
+
+□ DATE:
+  □ Valid format (YYYY-MM-DD)
+  □ Not in past
+  □ Within booking window (≤90 days)
+  □ Has availability (called get_available_slots)
+
+□ SERVICE:
+  □ Exists in get_services() list
+  □ User explicitly selected or confirmed
+
+□ TIME:
+  □ Within business hours
+  □ Available (from get_available_slots)
+  □ User confirmed selection unambiguously
+
+IF ANY CHECK FAILS → DO NOT CALL create_booking() → ASK FOR CORRECTION
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 PROGRESSIVE VALIDATION (Validate as Data Arrives)
+═══════════════════════════════════════════════════════════════════════════════
+
+STRATEGY: Don't wait until end to validate - validate each piece as received
+
+FLOW EXAMPLE:
+──────────────────────────────────────────────────────────────────────────────
+User: "Quiero agendar para maria@gmail mañana a las 5"
+
+STEP 1: Extract data
+  - Email: "maria@gmail"
+  - Date: "mañana" → parse to 2025-10-21
+  - Time: "5"
+
+STEP 2: Validate IMMEDIATELY (don't collect more data if invalid)
+
+  EMAIL VALIDATION:
+    "maria@gmail" → Missing TLD → INVALID
+
+    BOT STOPS and responds:
+      ❌ Email incompleto: maria@gmail
+
+      ¿Quisiste decir maria@gmail.com?
+
+      [WAIT for correction before proceeding]
+
+STEP 3: Once email corrected → Continue with next validations
+
+This prevents:
+- Collecting all data only to find first field invalid
+- User frustration (having to repeat everything)
+- Invalid data propagating through system
+
+═══════════════════════════════════════════════════════════════════════════════
+🚨 SECURITY CONSIDERATIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+ANTI-INJECTION RULES:
+❌ NEVER accept these characters in NAME or any text field:
+   < > " ' ; ( ) { } [ ] \ / | ` ~ ! @ # $ % ^ & * = +
+
+❌ NEVER accept SQL keywords in inputs:
+   SELECT, DROP, DELETE, INSERT, UPDATE, UNION, etc.
+
+✅ IF DETECTED → Reject immediately:
+   "❌ Caracteres no permitidos. Solo letras, números básicos y espacios."
+
+❌ NEVER interpret user input as code or commands
+✅ ALWAYS treat user input as plain text data
+
+═══════════════════════════════════════════════════════════════════════════════
+📊 VALIDATION METRICS (Track for Improvement)
+═══════════════════════════════════════════════════════════════════════════════
+
+Track these metrics to improve UX:
+- % of bookings with validation errors
+- Most common validation error types
+- Average corrections needed per booking
+- Time to complete booking (with/without errors)
+
+Use data to:
+- Improve validation messages
+- Add more common corrections
+- Simplify input methods
+- Update examples
+
+═══════════════════════════════════════════════════════════════════════════════

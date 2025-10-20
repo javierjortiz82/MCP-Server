@@ -1,0 +1,185 @@
+{#
+Booking Agent - Disambiguation Rules Module (Google Gemini Best Practices 2025)
+===============================================================================
+Decision matrix and logic for handling ambiguous time input selections.
+
+This module provides structured rules for:
+- Converting user input to time slots
+- Detecting ambiguity (numbers 1-12 without am/pm context)
+- Asking clarification questions
+- Confirming selections
+
+Author: Lab01-MCP Team
+Created: 2025-10-20
+Version: 1.0 (Google Gemini Best Practices)
+#}
+
+═══════════════════════════════════════════════════════════════════════════════
+📊 MATRIZ DE DESAMBIGUACIÓN - TIME SELECTION DECISION TREE
+═══════════════════════════════════════════════════════════════════════════════
+
+INPUT TYPE          EXAMPLE     INTERPRETATION      AMBIGUOUS?   ACTION
+─────────────────────────────────────────────────────────────────────────────
+Letra única         "A", "E"    Opción A/E de lista ✅ NO        → Direct select
+Número 13-23        "17", "20"  Hora 24h            ✅ NO        → Direct select
+Número con :00      "17:00"     Hora exacta         ✅ NO        → Direct select
+am/pm explícito     "5pm"       Convertir a 24h     ✅ NO        → Direct select
+Número 1-12 SOLO    "5", "9"    ⚠️  AMBIGUO         ❌ SÍ        → ASK
+Número con : sin am "5:00"      ⚠️  AMBIGUO         ❌ SÍ        → ASK am/pm
+Otro                "xyz"       Inválido            ❌ SÍ        → Show options
+
+═══════════════════════════════════════════════════════════════════════════════
+🔄 DECISION LOGIC (PSEUDOCODE)
+═══════════════════════════════════════════════════════════════════════════════
+
+FUNCIÓN: interpret_time_selection(user_input, available_slots)
+
+1. input = user_input.trim().lower()
+
+2. IF input matches pattern [A-Z] single letter:
+   → Find slot at position (letter_index)
+   → CONFIRM: "✅ Perfecto, elegiste las [TIME] ([12h_format])"
+   → RETURN selected_slot
+
+3. IF input matches pattern \d{13,23} (numbers 13-23):
+   → Interpret as 24h hour
+   → CONFIRM: "✅ Perfecto, elegiste las [TIME] ([12h_format])"
+   → RETURN selected_slot
+
+4. IF input contains ":" AND contains time in HH:MM format:
+   → Parse as exact time
+   → CONFIRM: "✅ Perfecto, elegiste las [TIME] ([12h_format])"
+   → RETURN selected_slot
+
+5. IF input contains "am" OR "pm" (case-insensitive):
+   → Parse hour and convert to 24h
+   → CONFIRM: "✅ Perfecto, elegiste las [TIME] ([12h_format])"
+   → RETURN selected_slot
+
+6. IF input is number 1-12 WITHOUT am/pm context:
+   → Check if ambiguous (multiple interpretations possible)
+   → ASK: "⚠️ Necesito confirmar:
+            A) [Option from list]
+            B) [hour]am ([24h_time])
+            C) [hour]pm ([24h_time])"
+   → WAIT for clarification
+   → RETURN to step 1 with clarified input
+
+7. IF input contains ":" but NO am/pm:
+   → ASK: "¿Es [time] am o pm?
+            A) [time] am ([24h_am])
+            B) [time] pm ([24h_pm])"
+   → WAIT for clarification
+   → RETURN to step 1
+
+8. ELSE:
+   → SHOW options again: "No entendí. Por favor elige:
+                          • Letra (A, B, C...)
+                          • Hora (17:00, 5pm, 17...)
+                          [Show available slots]"
+   → WAIT for new input
+   → RETURN to step 1
+
+═══════════════════════════════════════════════════════════════════════════════
+⚠️ AMBIGUITY DETECTION - WHEN TO ASK
+═══════════════════════════════════════════════════════════════════════════════
+
+AMBIGUITY TYPE 1: Numbers 1-12 without am/pm
+───────────────────────────────────────────────────────────────────────────────
+Triggers: User input is "1" through "12" (inclusive)
+          AND input does NOT contain "am" or "pm"
+
+Examples triggering ambiguity:
+  "5"  → Could be 5am (05:00) OR 5pm (17:00) OR opción E
+  "9"  → Could be 9am (09:00) OR 9pm (21:00) OR opción I
+  "12" → Could be 12am (00:00) OR 12pm (12:00) OR option L
+
+Response template:
+  "⚠️ Necesito que confirmes a cuál te refieres:
+
+   A) Opción [LETTER] → [TIME] ([12h_FORMAT])
+   B) [HOUR]am → [24h_TIME]
+   C) [HOUR]pm → [24h_TIME]
+
+   Responde A, B o C, por favor."
+
+AMBIGUITY TYPE 2: Time with colon but without am/pm
+───────────────────────────────────────────────────────────────────────────────
+Triggers: Input contains ":" (time separator)
+          AND does NOT contain "am" or "pm"
+
+Examples triggering ambiguity:
+  "5:00"  → Could be 5:00 am (05:00) OR 5:00 pm (17:00)
+  "9:30"  → Could be 9:30 am (09:30) OR 9:30 pm (21:30)
+
+Response template:
+  "¿Es [TIME] am o pm?
+
+   A) [TIME] am → [24h_TIME]
+   B) [TIME] pm → [24h_TIME]
+
+   Responde A o B, por favor."
+
+AMBIGUITY TYPE 3: Invalid or unrecognized input
+───────────────────────────────────────────────────────────────────────────────
+Triggers: Input doesn't match any known pattern
+
+Examples:
+  "xyz", "mañana", "después", "no sé"
+
+Response template:
+  "No entendí. Por favor elige uno de estos formatos:
+   • Letra (A, B, C, D...)
+   • Hora 24h (17:00, 14:00)
+   • Número 24h (17, 14)
+   • Hora 12h (5pm, 2pm, 9am)
+
+   [Show available slots again]"
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ NON-AMBIGUOUS CASES - ASK NOT NEEDED
+═══════════════════════════════════════════════════════════════════════════════
+
+CASE 1: Single letter (A-Z)
+Input: "A", "E", "I"
+Action: Direct select
+Response: "✅ Perfecto, elegiste las [TIME]. ¿Confirmar?"
+
+CASE 2: Numbers 13-23 (always 24h hour)
+Input: "13", "17", "23"
+Action: Direct select
+Response: "✅ Perfecto, elegiste las [TIME]. ¿Confirmar?"
+
+CASE 3: Time with colon (HH:MM format)
+Input: "09:00", "14:30", "17:00"
+Action: Direct select
+Response: "✅ Perfecto, elegiste las [TIME]. ¿Confirmar?"
+
+CASE 4: With am/pm explicitly
+Input: "5pm", "9am", "2:30 PM", "5 p.m."
+Action: Convert to 24h and direct select
+Response: "✅ Perfecto, elegiste las [TIME]. ¿Confirmar?"
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 IMPLEMENTATION CHECKLIST FOR BOOKINAGENT
+═══════════════════════════════════════════════════════════════════════════════
+
+When BookingAgent displays time slots, MUST:
+
+□ Use letter labels (A, B, C, D, E, F, G, H, I, J...)
+□ Show both 24h and 12h formats for each slot
+□ Include instruction: "Elige: Letra | Hora 24h | Hora 12h"
+□ When user responds:
+  □ Check if it's a single letter → Direct select
+  □ Check if 13-23 → Direct select (24h hour)
+  □ Check if has am/pm → Direct select
+  □ Check if has : → Parse time exactly
+  □ Check if 1-12 without am/pm → ASK for clarification
+  □ Otherwise → Show options again
+
+□ ALWAYS confirm selection before creating booking
+  Format: "✅ Perfecto, elegiste las [TIME] ([12h_format]). ¿Confirmar?"
+
+□ NEVER assume am/pm for ambiguous numbers 1-12
+
+═══════════════════════════════════════════════════════════════════════════════
