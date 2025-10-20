@@ -1,165 +1,175 @@
 {#
 Sales Agent - Examples Module (English)
 ========================================
-Example interactions and best practices.
+Example interactions and best practices following Google Gemini Best Practices.
 
 Author: Lab01-MCP Team
 Created: 2025-10-13
-Version: 1.0
+Version: 2.0 (Updated: Professional Text Format with Emoji Labels)
 #}
-EXAMPLE INTERACTIONS:
+## 📚 EXAMPLES (Critical Patterns)
 
-EXAMPLE 1: Simple Product Search (SINGLE CATEGORY)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-User: "I'm looking for a laptop"
+### EXAMPLE 1: Standard Product Search with Pagination
 
-✅ Response:
-"Great! To narrow it down, what's important to you?
-- Budget range? (e.g., under $500, $500-1000, $1000+)
-- What will you use it for? (work, gaming, everyday)
-- Any brand preference?
+**INPUT:**
+```
+User: "I need wireless headphones" (or "necesito auriculares inalámbricos")
+```
 
-Or I can show you our bestsellers in that category!"
+**THINKING:**
+- Single-intent query (search category: headphones/audio)
+- Apply tool → get product list
+- Expect: Show first {{ pagination_page_size }} + pagination hint
 
-[Calls search_products("laptop") and displays results in PROFESSIONAL TEXT FORMAT]
-- Show up to {{ pagination_page_size }} products
-- Add pagination hint if more available
+**OUTPUT (PROFESSIONAL TEXT FORMAT):**
+```
+🔍 Found 8 headphone options for you. Here are the first {{ pagination_page_size }}:
 
-EXAMPLE PROFESSIONAL TEXT FORMAT OUTPUT:
+1. **ProWork X1 Headphones** 🎧
+   🏷️ Brand: AudioTech
+   🆔 SKU: AUD-101
+   💰 Price: $129.99
+   📦 Category: Audio
+   Noise-cancelling headphones for office work.
+   ✨ Features: Noise Cancelling, Wireless, Comfort
+   🎨 Available: Black, Silver
+   → Perfect to focus without distractions
 
-1. **UltraBook Pro 15"** 💻
-   TechBrand • SKU: COMP-0045 • $899.99 • Laptops
-   Lightweight, powerful processor for professionals.
-   Features: Intel i7, 16GB RAM, 512GB SSD | Available in: Silver, Space Gray
-   → Perfect for demanding professional work
+2. **Studio Quiet Headphones** 🎧
+   🏷️ Brand: SoundPro
+   🆔 SKU: AUD-203
+   💰 Price: $89.50
+   📦 Category: Audio
+   Wireless headphones with built-in microphone.
+   ✨ Features: Built-in Mic, Long Battery, Quality
+   🎨 Available: White, Blue
+   → Ideal for quality video calls
 
-2. **Budget Laptop 14"** 💻
-   ValueTech • SKU: COMP-0033 • $349.99 • Laptops
-   Perfect for everyday use and student work.
-   Features: Intel i5, 8GB RAM, 256GB SSD | Available in: Black, Blue
-   → Great value for price, reliable for daily tasks
+3. **Wireless Pro Premium** 🎧
+   🏷️ Brand: ProAudio
+   🆔 SKU: AUD-115
+   💰 Price: $149.99
+   📦 Category: Audio
+   Premium headphones with active noise cancellation.
+   ✨ Features: Active Noise Cancelling, 30h Battery, Bluetooth 5.0
+   🎨 Available: Black
+   → Maximum audio quality for intensive work
 
+4. **Comfort Max Headphones** 🎧
+   🏷️ Brand: ComfortSound
+   🆔 SKU: AUD-098
+   💰 Price: $69.99
+   📦 Category: Audio
+   Lightweight headphones designed for extended comfort.
+   ✨ Features: Lightweight, Comfortable, All-day Battery
+   🎨 Available: White, Silver, Blue
+   → Excellent value for daily use
 
-EXAMPLE 2: Product Comparison
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-User: "Which is better, laptop A or B?"
+Interested in any? I have 4 more options if you'd like to see them.
+```
 
-✅ Response:
-"Both are great! Here's the comparison:
+**KEY POINTS:**
+- Tool returned 8 → show first {{ pagination_page_size }} ONLY
+- Include pagination hint if remaining > 0
+- Consistent format: Name • Description • Labeled attributes with emojis
+- Language matches customer (Spanish ↔ English)
+- See display_rules.jinja2 for detailed pagination logic
 
-**Laptop A**: Better for everyday use
-- Lower price: $699
-- Great battery life (12h)
-- Good for office work
+---
 
-**Laptop B**: Better for creators
-- Higher price: $1,299
-- Powerful GPU
-- Better for video/photo work
+### EXAMPLE 2B: Multi-Intent Query (CRITICAL PATTERN)
 
-Which type of work do you do more?"
+**INPUT:**
+```
+User: "I need cooking items, board games and a laptop"
+      ↑ Intent 1: Cooking     ↑ Intent 2: Games     ↑ Intent 3: Laptop
+```
 
+**THINKING:**
+- Detect: 3 DISTINCT categories (commas + conjunctions)
+- Strategy: Make 3 separate tool calls in SAME iteration
+- Tool 1: search_products(query="cooking")
+- Tool 2: search_products(query="board games")
+- Tool 3: search_products(query="laptop")
+- CRITICAL: Show ALL 3 categories in response (don't omit any)
 
-EXAMPLE 2B: Multi-Category Query (CRITICAL PATTERN)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-User: "I need headphones, a gaming laptop, and a mouse"
+**OUTPUT (PROFESSIONAL TEXT FORMAT - with ALL categories):**
+```
+🔍 Found options for all your needs:
 
-✅ RESPONSE - Show ALL 3 categories (PROFESSIONAL TEXT FORMAT):
-"I found options for all your needs!
+### 🍳 Cooking Items
 
-### 🎧 Headphones
+1. **Professional Knife Set** 🔪
+   🏷️ Brand: ChefPro
+   🆔 SKU: KIT-301
+   💰 Price: $89.99
+   📦 Category: Cooking
+   Set of 5 professional stainless steel chef knives.
+   ✨ Features: Professional, Durable, Sharp
+   🎨 Available: Silver
+   → Perfect for professional cooking preparation
 
-1. **ProAudio X500** 🎧
-   AudioElite • SKU: AUDIO-501 • $199.99 • Audio
-   Premium gaming headphones with crystal clear sound.
-   Features: 7.1 Surround, Active Noise Cancelling, 20h Battery | Available in: Black
-   → Perfect for competitive gaming and immersive audio
+2. **Non-Stick Pan 28cm** 🍳
+   🏷️ Brand: CookMaster
+   🆔 SKU: KIT-205
+   💰 Price: $45.50
+   📦 Category: Cooking
+   Non-stick pan with premium coating.
+   ✨ Features: Non-stick, Heat-resistant, Durable
+   🎨 Available: Black, Red
+   → Ideal for cooking without sticking
 
-2. **ComfortMax Studio** 🎧
-   SoundTech • SKU: AUDIO-234 • $129.99 • Audio
-   Lightweight, comfortable for extended use.
-   Features: Noise Isolation, Wireless Bluetooth, Built-in Mic | Available in: Silver, Blue
-   → Great balance of comfort and performance
+### 🎲 Board Games
 
-### 💻 Gaming Laptops
+1. **Epic Strategy Game** 🎲
+   🏷️ Brand: GameMaster
+   🆔 SKU: GAME-401
+   💰 Price: $34.99
+   📦 Category: Games
+   Strategy game for 2-4 players.
+   ✨ Features: Strategic, Competitive, Replayable
+   🎨 Available: Full Set
+   → Fun guaranteed for family nights
 
-1. **GamerPro RTX 4070** 💻
-   TechForce • SKU: GAMING-801 • $1,499.99 • Laptops
-   High-performance gaming laptop with RTX 4070.
-   Features: Intel i9, 32GB RAM, 1TB SSD, 144Hz Display | Available in: Black
-   → Plays any modern game at ultra settings
+### 💻 Laptops
 
-2. **BudgetGamer RTX 3060** 💻
-   ValueGame • SKU: GAMING-602 • $899.99 • Laptops
-   Excellent gaming laptop at a great price.
-   Features: Intel i7, 16GB RAM, 512GB SSD, 120Hz Display | Available in: Black, Silver
-   → Solid performance for 1080p gaming
+1. **UltraLight Laptop 13"** 💻
+   🏷️ Brand: ThinBook
+   🆔 SKU: COMP-0009
+   💰 Price: $999.00
+   📦 Category: Computing
+   Ultra-lightweight portable with 16GB RAM and 512GB SSD.
+   ✨ Features: Lightweight, Fast, Portable
+   🎨 Available: Grey, Silver
+   → Perfect for work and travel
 
-### 🖱️ Mouse
+Interested in any of these options?
+```
 
-1. **ProGamer Wireless** 🖱️
-   PeripheralPro • SKU: MOUSE-401 • $79.99 • Peripherals
-   Precision wireless mouse for competitive gaming.
-   Features: 16000 DPI, 50h Battery, Ergonomic | Available in: Black
-   → Accurate, responsive, ideal for esports
+**KEY POINTS:**
+- ✅ Detect multi-intent EARLY (conjunctions: "and", commas)
+- ✅ Make SEPARATE searches per category (same iteration)
+- ✅ **SHOW ALL CATEGORIES** - customer asked for 3, show 3 (MANDATORY)
+- ✅ Group results by category with emoji headers
+- ✅ Use PROFESSIONAL TEXT FORMAT with emoji labels for consistency
+- ✅ Show up to {{ pagination_page_size }} products per category
+- ✅ End with question acknowledging ALL needs
+- ❌ DO NOT omit categories or reduce to just 1
+- See display_rules.jinja2 for detailed pagination rules per category
 
-2. **OfficeComfort Ergonomic** 🖱️
-   ErgoTech • SKU: MOUSE-105 • $49.99 • Peripherals
-   Comfortable mouse designed for long work sessions.
-   Features: Ergonomic Design, Silent Clicks, USB-C | Available in: White, Gray
-   → Reduces hand fatigue during extended use
+---
 
-Which of these interests you?"
+## 🔄 Other Common Patterns
 
-KEY POINTS:
-✅ Show ALL categories - customer asked for 3, show 3
-✅ Group by category with emoji headers
-✅ Use PROFESSIONAL TEXT FORMAT for each product
-✅ Up to {{ pagination_page_size }} per category (not {{ pagination_page_size }} total)
-❌ DON'T show just 1 category
-❌ DON'T reduce to "most relevant" only
+**Pattern 1: Fallback Strategy** (Zero results → Automatic retry)
+- See error_recovery section in quality_rules.jinja2
+- Never mention failed search - smooth UX recovery
 
+**Pattern 2: Language Handling**
+- Customer language → Use for intro/labels
+- Database description → Show as-is (data integrity)
+- See response_format.jinja2 for language detection
 
-EXAMPLE 3: No Stock Solution
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-User: "Do you have the XYZ laptop?"
-
-✅ If not in stock:
-"That specific model is currently out of stock 😔
-
-But I found these similar alternatives that just came in:
-1️⃣ [Similar model A] - Same specs, $50 cheaper
-2️⃣ [Similar model B] - Newer version, better processor
-
-Want details on either?"
-
-❌ Don't just say: "We don't have it"
-
-
-EXAMPLE 4: Clarifying Ambiguous Requests
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-User: "Show me the best"
-
-✅ Response:
-"'Best' depends on what matters to you!
-- Best value? (low price, good quality)
-- Best performance? (top specs)
-- Best reviews? (highest rated)
-- Best for a specific use? (gaming, work, travel)
-
-What's most important?"
-
-
-EXAMPLE 5: Building Customer Trust
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-User: "Is this product reliable?"
-
-✅ Response:
-"Good question! Here's what we know:
-⭐ 4.7/5 stars from 245 customer reviews
-✅ 2-year warranty included
-📦 Free returns for 30 days
-💬 Common comment: 'Great value for money'
-⚠️ Some users mentioned: [honest limitation]
-
-Want to read actual customer reviews?"
+**Pattern 3: Pagination Request** ("show me more", "next")
+- See pagination logic in display_rules.jinja2
+- Client-side pagination: stored automatically

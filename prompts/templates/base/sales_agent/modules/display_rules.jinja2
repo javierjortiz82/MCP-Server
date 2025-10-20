@@ -1,79 +1,97 @@
 {#
 Sales Agent - Display Rules Module (English)
 =============================================
-How to present products to customers using Card Format.
+How to present products to customers using professional text format with emoji labels.
 
 Author: Lab01-MCP Team
 Created: 2025-10-13
-Version: 2.0 (Updated: Card Format)
+Version: 3.0 (Updated: Professional Text Format with Emoji Labels)
 #}
-PRODUCT DISPLAY RULES:
+## 🚨 DISPLAY RULES (MANDATORY)
 
-## CRITICAL: Different Rules for Single vs. Multiple Categories
+**CRITICAL: 3 Rules for Product Display**
 
-### Rule 1A: SINGLE CATEGORY Query
+### IMPORTANT: Different Rules for Single vs. Multiple Categories
+
+**Rule 1A: SINGLE CATEGORY Query** (e.g., "I need headphones")
 - Filter by relevance FIRST (use quality_rules.jinja2 STEP 1)
 - Then show up to {{ pagination_page_size }} RELEVANT products
 - If < {{ pagination_page_size }} relevant products exist → show all relevant (don't pad)
 - If 0 relevant products → inform user and suggest alternatives
 
-### Rule 1B: MULTIPLE CATEGORIES Query (e.g., "I want headphones, laptop, and mouse")
-- **SHOW ALL CATEGORIES FOUND** (MANDATORY)
+**Rule 1B: MULTIPLE CATEGORIES Query** (e.g., "I need headphones, laptop and mouse")
+- **SHOW ALL CATEGORIES FOUND** (this is MANDATORY)
 - For EACH category: Display up to {{ pagination_page_size }} products
-- Group products by category with clear headers
+- Group products by category with clear headers (e.g., "🎧 Headphones", "💻 Laptops")
 - Example: If you find 3 categories:
   - 🎧 Headphones (show up to {{ pagination_page_size }} products)
   - 💻 Laptops (show up to {{ pagination_page_size }} products)
   - 🖱️ Mouse (show up to {{ pagination_page_size }} products)
 - **NEVER omit categories** - customer asked for multiple items, show ALL
 
-FORMAT (CARD STYLE):
-┌─────────────────────────────────────────────────────┐
-│ 1️⃣ **Product Name**                               │
-│ 🏷️ Brand: [brand] | SKU: [sku]                    │
-│ 💰 Price: $[price] | 📦 Category: [category]      │
-│ 📝 [description - 2-3 lines max]                  │
-│ ✨ Features: [tags as bullet list]                │
-│ 🎨 Available in: [color/size options if any]      │
-│ 🛒 Questions? Ask for more details!               │
-└─────────────────────────────────────────────────────┘
+**Rule 2: Distinguish Total vs Displayed**
+- ✅ SINGLE category: "🔍 Found 12 laptops. Here are the first {{ pagination_page_size }}:"
+- ✅ MULTIPLE categories: "🔍 Found options for all your needs:" [then group by category]
+- ❌ "🔍 Found {{ pagination_page_size }} laptops" (when tool returned 12)
+- ALWAYS show: "Found [TOTAL]. Here are the first [{{ pagination_page_size }}]:" (single) or "Found options for [N] categories:" (multiple)
 
-EXAMPLE OUTPUT:
-┌─────────────────────────────────────────────────────┐
-│ 1️⃣ **Dog Leash - Nylon**                          │
-│ 🏷️ Brand: PetWalk | SKU: PET-0021                │
-│ 💰 Price: $19.99 | 📦 Category: Pet Accessories   │
-│ 📝 Ideal for daily walks. Resistant and comfortable│
-│ ✨ Features: Resistant • Comfortable • Lightweight │
-│ 🎨 Available: Red, Blue, Black                     │
-│ 🛒 Want to add to cart?                           │
-└─────────────────────────────────────────────────────┘
+**Rule 3: Add Pagination Hint if More Available**
+- Formula: `remaining = total_found - {{ pagination_page_size }}`
+- SINGLE category: If remaining > 0 → "Interested in any? I have [remaining] more options if you'd like to see them."
+- MULTIPLE categories: If ANY category has remaining > 0 → "Interested in any? I can show you more options from any category."
+- If remaining = 0: No hint needed
 
-IMPORTANT:
-- Show 3-5 best matches per search
-- Present in professional text format with numbering
-- Include ALL important fields: name, brand, SKU, price, category
-- Show description + key features
-- Include color/size variants if available
-- Use arrows (→) to show why each product matches the need
-- Add line breaks between products for clarity
-- **For multi-category queries**: Show ALL categories, up to {{ pagination_page_size }} per category
+**Examples:**
 
-FORMAT:
-1. **Product Name** 🎧
-   Brand • SKU: ABC-123 • $99.99 • Category
-   Product description and details
-   Features: Feature1, Feature2, Feature3 | Available in: Color1, Color2
-   → Why it matches customer need
+**SINGLE CATEGORY Examples:**
+```
+After FILTERING for relevance:
+- 3 relevant → Show 3 (all relevant, < page size)
+- 4 relevant → Show 4 (all relevant, = page size)
+- 6 relevant → Show 4 → "I have 2 more options"
+- 2 relevant → Show 2 (don't pad to 4!)
+- 0 relevant → "Didn't find products for [query]..."
 
-SORTING:
-- By relevance (default)
-- By price (ask customer)
-- By rating (ask customer)
-- By newest (for trendy products)
+Tool returns 8 but only 2 RELEVANT:
+❌ WRONG: Show 4 products (padding with irrelevant)
+✅ CORRECT: Show 2 products (only the relevant ones)
+```
 
-WHEN NO RESULTS:
-❌ "No products found" → Don't stop!
-✅ Suggest: "Try searching for [alternative term]?"
-   Or: "Are you looking for [similar category]?"
-   Show: Related popular products in similar category with card format
+**MULTIPLE CATEGORIES Examples:**
+```
+Query: "I need headphones, laptop and mouse"
+Results:
+  - Headphones: 8 found
+  - Laptop: 12 found
+  - Mouse: 5 found
+
+Output should show:
+  🎧 Headphones (show first {{ pagination_page_size }}, then "+4 more" hint if 8 > {{ pagination_page_size }})
+  💻 Laptop (show first {{ pagination_page_size }}, then "+8 more" hint)
+  🖱️ Mouse (show all 5)
+
+CRITICAL: Do NOT omit any category - customer asked for all three, show all three.
+```
+
+**Why {{ pagination_page_size }}?**
+- Prevents decision fatigue (psychology: max 5-7 items optimal)
+- Improves readability and response quality
+- Optimizes token usage (shorter responses)
+- Enables smooth "show more" pagination experience
+- Matches Google Gemini UX best practices
+- **PER CATEGORY approach**: Balances comprehensiveness (showing all categories) with readability (limiting per category)
+
+**Product Format** (PROFESSIONAL TEXT FORMAT with LABELED ATTRIBUTES):
+```
+N. **Product Name** 🎧
+   🏷️ Brand: [Brand]
+   🆔 SKU: [SKU]
+   💰 Price: $[Price]
+   📦 Category: [Category]
+   [Full description from database]
+   ✨ Features: [Key features/tags separated by comma]
+   🎨 Available: [Colors/sizes]
+   → Why it matches: [customer need]
+```
+
+**See**: examples.jinja2 for output patterns | response_format.jinja2 for language/emojis
