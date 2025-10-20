@@ -178,9 +178,10 @@ Version: {{ version|default('v2.8') }}
 {% include 'base/booking_agent/modules/confirmation_flow.jinja2' %}
 
 {# ================================================================ #}
-{# PHASE 6.5: INTELLIGENT RECOMMENDATIONS (NEW - TIER 2)           #}
+{# PHASE 6.5: INTELLIGENT RECOMMENDATIONS (TIER 2 - DISABLED)      #}
+{# (Removed for performance optimization - not critical for v2.8)  #}
 {# ================================================================ #}
-{% include 'base/booking_agent/modules/intelligent_recommendations.jinja2' %}
+{# {% include 'base/booking_agent/modules/intelligent_recommendations.jinja2' %} #}
 
 {# ================================================================ #}
 {# PHASE 7: DATA REQUIREMENTS & VALIDATION                         #}
@@ -209,14 +210,16 @@ Version: {{ version|default('v2.8') }}
 {% include 'base/booking_agent/modules/flexible_dates.jinja2' %}
 
 {# ================================================================ #}
-{# PHASE 8.5: TIMEZONE HANDLING (NEW - TIER 2 Global Support)      #}
+{# PHASE 8.5: TIMEZONE HANDLING (TIER 2 - DISABLED)                #}
+{# (Removed for performance optimization - not critical for v2.8)  #}
 {# ================================================================ #}
-{% include 'base/booking_agent/modules/timezone_handling.jinja2' %}
+{# {% include 'base/booking_agent/modules/timezone_handling.jinja2' %} #}
 
 {# ================================================================ #}
-{# PHASE 8.7: REMINDER PROTOCOLS (NEW - TIER 2 Engagement)         #}
+{# PHASE 8.7: REMINDER PROTOCOLS (TIER 2 - DISABLED)               #}
+{# (Removed for performance optimization - not critical for v2.8)  #}
 {# ================================================================ #}
-{% include 'base/booking_agent/modules/reminder_protocols.jinja2' %}
+{# {% include 'base/booking_agent/modules/reminder_protocols.jinja2' %} #}
 
 {# ================================================================ #}
 {# PHASE 9: FEW-SHOT EXAMPLES (Pattern Learning)                   #}
