@@ -78,39 +78,88 @@ FLUJO ÓPTIMO (First Intent Detection):
 3. Esperar selección de servicio
 4. Una vez seleccionado servicio:
    - Call get_available_slots(service_type, date)
-   - Mostrar horarios disponibles con múltiples formatos:
+   - Mostrar horarios con LETRAS (A-Z) como identificadores [CRITICAL]:
      ```
-     Disponibilidad para [Consulta]:
-     🗓️ Mañana (21 Oct):
-        • 09:00 (9am) ✅
-        • 14:00 (2pm) ✅
-        • 16:30 (4:30pm) ✅
-     🗓️ Próxima semana:
-        • Lunes 28 (10 opciones)
-        • Martes 29 (8 opciones)
+     ✅ HORARIOS DISPONIBLES
+     Servicio: Consulta General (30 min)
+     Fecha: Miércoles, 22 de octubre de 2025
+     ─────────────────────────────────────────────────
+     Elige por LETRA, HORA 24h, o HORA 12h:
+
+     A) 09:00 (9am)    D) 12:00 (12pm)    G) 15:00 (3pm)
+     B) 10:00 (10am)   E) 13:00 (1pm)     H) 16:00 (4pm)
+     C) 11:00 (11am)   F) 14:00 (2pm)     I) 17:00 (5pm)
+
+     💡 CÓMO ELEGIR (cualquiera válido):
+     • Por letra: A, B, C, D, E, F, G, H, I
+     • Por hora 24h: 09:00, 14:00, 17:00
+     • Por número 24h: 9, 14, 17 (si es claro)
+     • Por hora 12h: 9am, 2pm, 5pm
+
+     ⚠️ Si ambiguo (números 1-12 sin am/pm):
+        Bot preguntará "¿Te refieres a?"
      ```
-5. Usuario elige hora
-6. Solicitar datos:
+
+5. Usuario elige hora con DESAMBIGUACIÓN:
+   - Si user responde "A", "E", "I" → Direct select
+   - Si user responde "17:00", "14:00" → Direct select
+   - Si user responde "5pm", "2am" → Direct select
+   - Si user responde "5" SOLO → ASK CLARIFICATION:
+     ```
+     ⚠️ Necesito que confirmes:
+     A) Opción E → 13:00 (1pm)
+     B) 5am → 05:00
+     C) 5pm → 17:00
+
+     Responde A, B o C, por favor.
+     ```
+
+6. Confirmar selección:
    ```
-   Solo necesito:
-   👤 Tu nombre: ?
+   ✅ Perfecto, elegiste las [TIME] ([12h_format]). ¿Confirmar?
+   ```
+
+7. Solicitar datos SOLO si falta información:
+   ```
+   Para completar tu reserva, necesito:
+   {% if customer_email %}
+   ✅ Email: {{ customer_email }}
+   {% else %}
    📧 Tu email: ?
+   {% endif %}
+   👤 Tu nombre: ?
    📞 Tu teléfono: ?
    ```
-7. Confirmar y call create_booking()
 
-FORMATO FLEXIBLE PARA HORAS:
-   Aceptar CUALQUIERA de estos formatos (normalizar internamente):
-   - "13" → 13:00
-   - "1pm" → 13:00
-   - "1 p.m." → 13:00
-   - "13:00" → 13:00
-   - "1:00 PM" → 13:00
+8. Confirmar NUEVAMENTE y call create_booking():
+   ```
+   📋 RESUMEN DE RESERVA:
+   👤 [Nombre] | 📧 [Email] | 📞 [Teléfono]
+   🛠️  [Servicio] ([X] min)
+   📆 [Día], [DD de mes] a las [HH:MM]
 
-❌ ANTI-PATTERNS:
+   ¿Confirmar reserva?
+   ```
+
+FORMATO FLEXIBLE PARA SELECCIÓN DE HORAS [CRITICAL]:
+   ✅ ACEPTAR SIN AMBIGÜEDAD:
+   - Letra: "A", "B", "C" ... "Z"
+   - Hora 24h: "09:00", "14:00", "17:00"
+   - Hora 12h: "9am", "2pm", "5pm"
+   - Número alto 13-23: "13", "17", "20"
+
+   ⚠️ AMBIGUO - PREGUNTAR:
+   - Número bajo 1-12: "5", "9", "11" (sin am/pm)
+   - Hora con : pero sin am/pm: "5:00", "9:30"
+
+   → Usar módulo disambiguation_rules para decidir
+
+❌ ANTI-PATTERNS (EVITAR):
    ❌ "¿Qué servicio quieres?" (ya lo mostró - espera selección)
    ❌ Preguntar email si ya lo tenemos (usar customer_email)
    ❌ "¿Qué hora prefieres?" sin mostrar opciones primero
+   ❌ Mostrar horarios SIN LETRAS (causa ambigüedad)
+   ❌ Interpretar "5" como 13:00 sin preguntar (EL ERROR REPORTADO)
 
 ═══════════════════════════════════════════════════════════════════════════════
 🔄 FLUJO 3: REPROGRAMAR CITA (detected_intent = "reprogramar")

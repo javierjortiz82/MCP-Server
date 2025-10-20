@@ -1,20 +1,30 @@
 {#
-Booking Agent System Prompt - Modular Template (v2.0)
+Booking Agent System Prompt - Modular Template (v2.8)
 ======================================================
 Master template that orchestrates all booking agent modules with
 enhanced UX, intent detection, and dynamic context.
 
-MODULAR ARCHITECTURE:
+MODULAR ARCHITECTURE (22 modules, 3 tiers):
 ├─ base.jinja2: Identity and role definition
-├─ modules/scope_guardrails.jinja2: [NEW] Strict scope boundaries (Gemini 2.5 best practice)
+├─ modules/scope_guardrails.jinja2: [TIER 0] Strict scope boundaries (Gemini 2.5 best practice)
+├─ modules/context_enrichment.jinja2: Dynamic services and availability
+├─ modules/customer_context_enrichment.jinja2: [TIER 1] Advanced profiling + personalization
 ├─ modules/smart_greeting.jinja2: Proactive initial greeting with menu
 ├─ modules/intent_detection.jinja2: Automatic intent classification
-├─ modules/ux_conversational.jinja2: [NEW] Conditional UX flows (Jinja2 logic)
-├─ modules/context_enrichment.jinja2: Dynamic services and availability
+├─ modules/ux_conversational.jinja2: [TIER 0] Conditional UX flows (Jinja2 logic)
 ├─ modules/tool_usage_rules.jinja2: Function calling guidelines
 ├─ modules/confirmation_flow.jinja2: Booking workflow (A/B testable, anti-redundancy)
 ├─ modules/data_requirements.jinja2: Required data for operations
+├─ modules/data_validation.jinja2: [TIER 1] Real-time validation (email, phone, name, dates)
+├─ modules/duplicate_booking_prevention.jinja2: [TIER 1] Conflict detection + resolution
+├─ modules/progressive_confirmation_flow.jinja2: [TIER 1] Visual summary + edit + undo
 ├─ modules/flexible_dates.jinja2: Date parsing and relative dates
+├─ modules/enhanced_time_slot_selection.jinja2: [TIER 0] Premium UX slot selection (A-Z, no ambiguity)
+├─ modules/disambiguation_rules.jinja2: [TIER 0] Decision matrix for ambiguous input
+├─ modules/intelligent_recommendations.jinja2: [TIER 2] Smart upsells & cross-sells
+├─ modules/rescheduling_intelligence.jinja2: [TIER 2] Smart alternatives for rescheduling
+├─ modules/timezone_handling.jinja2: [TIER 2] Global timezone support (300+ timezones, DST)
+├─ modules/reminder_protocols.jinja2: [TIER 2] Automated reminders & no-show follow-up
 ├─ modules/examples.jinja2: Few-shot examples and formatting
 └─ modules/ux_best_practices.jinja2: Error handling and UX patterns
 
@@ -32,6 +42,61 @@ VERSION HISTORY:
     - [IMPROVED] Anti-redundancy in confirmation flows
     - [IMPROVED] Out-of-scope detection with redirection protocol
     - [IMPROVED] Stricter scope boundaries in base module
+  v2.2 (2025-10-20): TIER 1 Critical Features Phase 1 - Data Validation
+    - [NEW] Data validation module (RFC 5322 email, multi-country phone, name injection)
+    - [NEW] Real-time progressive validation (validate as data arrives)
+    - [NEW] Automatic correction suggestions for invalid inputs
+    - [NEW] Business logic validation (date ranges, availability checks)
+    - [NEW] Security hardening (anti-injection, safe character sets)
+  v2.3 (2025-10-20): TIER 1 Critical Features Phase 2 - Customer Context Enrichment
+    - [NEW] Advanced customer context enrichment module (behavioral profiling)
+    - [NEW] Customer tier detection (NEW, RECURRING, POWER, AT-RISK)
+    - [NEW] Personalized greeting and suggestions based on tier
+    - [NEW] Auto-completion of customer data (email, name, phone)
+    - [NEW] Service preference learning (most booked, patterns)
+    - [NEW] Time preference analysis (preferred days/times)
+    - [NEW] Re-engagement strategies for at-risk customers
+  v2.4 (2025-10-20): TIER 1 Critical Features Phase 3 - Duplicate Booking Prevention
+    - [NEW] Duplicate booking prevention module (conflict detection)
+    - [NEW] 5 conflict types detection (exact duplicate, service dup, time overlap, capacity, business rules)
+    - [NEW] Smart conflict resolution strategies (offer alternatives)
+    - [NEW] Time overlap detection (double-booking prevention)
+    - [NEW] Business rule validation (advance notice, frequency limits)
+    - [NEW] Preventive strategies (warn before submission)
+    - [NEW] Customer-friendly communication (explain conflicts, offer options)
+  v2.5 (2025-10-20): TIER 1 Critical Features Phase 4 - Progressive Confirmation Flow [COMPLETE]
+    - [NEW] Progressive confirmation flow module (visual summary + edit + undo)
+    - [NEW] 5-state confirmation flow (Review → Edit → Confirm → Confirming → Completed)
+    - [NEW] Tier-specific UX (express for TIER 3, detailed for TIER 1)
+    - [NEW] Visual booking summary (all details before confirming)
+    - [NEW] Edit capability (change any field before final confirm)
+    - [NEW] Undo/back functionality (return without losing progress)
+    - [NEW] Pre-confirmation validation checklist (final safety checks)
+    - [NEW] Post-confirmation communication (email, SMS, next steps)
+  v2.6 (2025-10-20): TIER 2 Critical Features Phase 1 - Smart Recommendations
+    - [NEW] Intelligent recommendations module (upsell, cross-sell, bundle strategies)
+    - [NEW] Recommendation scoring algorithm (Relevance × Confidence × Value)
+    - [NEW] Timing strategies (show at right moment in booking flow)
+    - [NEW] Tier-based personalization (TIER 1-4 specific messaging)
+    - [NEW] A/B testing framework for recommendations
+    - [NEW] Business metrics tracking (CTR, acceptance rate, AOV impact)
+  v2.7 (2025-10-20): TIER 2 Critical Features Phase 2 & 3 - Rescheduling & Timezone
+    - [NEW] Rescheduling intelligence module (smart alternatives when unavailable)
+    - [NEW] Scoring algorithm for alternatives (Time×0.4 + Date×0.3 + Availability×0.3)
+    - [NEW] Scenario handling (same day, next day, different times, date changes)
+    - [NEW] Timezone handling module (300+ IANA timezones + DST support)
+    - [NEW] Timezone-aware time display (customer TZ + business TZ + UTC)
+    - [NEW] Business hours calculation across timezones
+    - [NEW] Reminder timing respects customer timezone (no 3am surprises)
+  v2.8 (2025-10-20): TIER 2 Critical Features Phase 4 - Reminders & Follow-up [CURRENT]
+    - [NEW] Reminder protocols module (automated scheduling + delivery)
+    - [NEW] Multi-channel reminders (email 24h + SMS 1h + 15min optional)
+    - [NEW] Timezone-aware reminder timing (convert to customer TZ)
+    - [NEW] No-show detection & follow-up workflow (5-step sequence)
+    - [NEW] Tier-based personalization (TIER 1: conservative → TIER 3: aggressive)
+    - [NEW] Reminder preference storage (user chooses channels + DNDs)
+    - [NEW] Engagement tracking & analytics (delivery, open, attendance)
+    - [NEW] Re-engagement strategies for no-shows and at-risk customers
 
 KEY IMPROVEMENTS v2.0:
   ✅ Zero hardcoding of services/times
@@ -52,8 +117,8 @@ Variables:
 
 Author: Lab01-MCP Team
 Created: 2025-10-11
-Updated: 2025-10-19 (v2.0 - Smart UX + Intent Detection)
-Version: {{ version|default('v2.0') }}
+Updated: 2025-10-20 (v2.8 - TIER 2 60% COMPLETE - Reminders & Follow-up)
+Version: {{ version|default('v2.8') }}
 #}
 
 {# ================================================================ #}
@@ -72,6 +137,12 @@ Version: {{ version|default('v2.0') }}
 {% include 'booking_agent/modules/context_enrichment.jinja2' %}
 
 {# ================================================================ #}
+{# PHASE 2.5: CUSTOMER CONTEXT ENRICHMENT (DISABLED - SIMPLIFIED)  #}
+{# (Removed to maintain consistent format for all customers)       #}
+{# ================================================================ #}
+{# {% include 'booking_agent/modules/customer_context_enrichment.jinja2' %} #}
+
+{# ================================================================ #}
 {# PHASE 3: SMART GREETING & INITIAL INTERACTION                   #}
 {# ================================================================ #}
 {% include 'booking_agent/modules/smart_greeting.jinja2' %}
@@ -87,6 +158,16 @@ Version: {{ version|default('v2.0') }}
 {% include 'booking_agent/modules/ux_conversational.jinja2' %}
 
 {# ================================================================ #}
+{# PHASE 4.7: ENHANCED TIME SLOT SELECTION (Improved v2 - Premium UX) #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/enhanced_time_slot_selection.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 4.8: DISAMBIGUATION RULES (NEW - Decision Matrix)         #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/disambiguation_rules.jinja2' %}
+
+{# ================================================================ #}
 {# PHASE 5: TOOL USAGE RULES (Critical)                            #}
 {# ================================================================ #}
 {% include 'booking_agent/modules/tool_usage_rules.jinja2' %}
@@ -97,14 +178,45 @@ Version: {{ version|default('v2.0') }}
 {% include 'booking_agent/modules/confirmation_flow.jinja2' %}
 
 {# ================================================================ #}
+{# PHASE 6.5: INTELLIGENT RECOMMENDATIONS (NEW - TIER 2)           #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/intelligent_recommendations.jinja2' %}
+
+{# ================================================================ #}
 {# PHASE 7: DATA REQUIREMENTS & VALIDATION                         #}
 {# ================================================================ #}
 {% include 'booking_agent/modules/data_requirements.jinja2' %}
 
 {# ================================================================ #}
+{# PHASE 7.5: DATA VALIDATION (NEW - TIER 1 Critical)              #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/data_validation.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 7.6: DUPLICATE BOOKING PREVENTION (NEW - TIER 1)          #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/duplicate_booking_prevention.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 7.7: PROGRESSIVE CONFIRMATION FLOW (DISABLED - SIMPLIFIED) #}
+{# (Removed to maintain consistent format for all customers)        #}
+{# ================================================================ #}
+{# {% include 'booking_agent/modules/progressive_confirmation_flow.jinja2' %} #}
+
+{# ================================================================ #}
 {# PHASE 8: FLEXIBLE DATE PARSING (Relative Dates)                 #}
 {# ================================================================ #}
 {% include 'booking_agent/modules/flexible_dates.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 8.5: TIMEZONE HANDLING (NEW - TIER 2 Global Support)      #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/timezone_handling.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 8.7: REMINDER PROTOCOLS (NEW - TIER 2 Engagement)         #}
+{# ================================================================ #}
+{% include 'booking_agent/modules/reminder_protocols.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 9: FEW-SHOT EXAMPLES (Pattern Learning)                   #}
@@ -124,21 +236,34 @@ Version: {{ version|default('v2.0') }}
 AGENT EXECUTION FLOW:
 
 1. Load context: services, dates, customer_email
-2. Show smart greeting with menu (if first turn)
-3. Receive user query
-4. Detect intent automatically (create/cancel/reschedule/info)
-5. Route to appropriate workflow based on intent
-6. Call necessary tools in order specified
-7. Validate responses against rules
-8. Format output with UX best practices
-9. Provide next steps or fallback options
+2. ENRICH CUSTOMER CONTEXT (if email identified) → Get tier, preferences, history
+3. Show smart greeting with personalization based on tier
+4. Receive user query
+5. Detect intent automatically (create/cancel/reschedule/info)
+6. Route to appropriate workflow based on intent + customer tier
+7. VALIDATE INPUT DATA (email, phone, name, dates) → Reject if invalid + suggest corrections
+8. CHECK FOR CONFLICTS (if creating booking) → Detect duplicates, overlaps, capacity issues
+9. SHOW VISUAL SUMMARY (if creating booking) → Review all details before confirming
+10. Allow EDITING (if needed) → Change any field, re-validate, update summary
+11. Request CONFIRMATION (explicit user action) → Required before creating booking
+12. Call create_booking() tool (with validated data)
+13. Show SUCCESS CONFIRMATION (reference number, next steps)
+14. Send post-confirmation (email, SMS)
+15. Provide next actions (book another, view all, support)
 
 CRITICAL RULES:
+- Customer context enrichment FIRST (enables personalization)
+- Data validation BEFORE tool calls (security + UX)
+- Duplicate prevention BEFORE tool calls (prevent conflicts + errors)
+- Personalize greeting + suggestions based on customer tier
 - Tool calls ONLY after reading user input
 - Intent detection BEFORE tool selection
 - No hallucinations (use tool data or nothing)
 - Always confirm destructive operations
 - No hardcoding (all from context or tools)
+- Progressive validation (validate as data arrives, not all at end)
 - Flexible date parsing with explicit examples
+- Cache customer profile for conversation duration (don't re-fetch)
+- Offer alternatives when conflicts detected (don't just block)
 -#}
 

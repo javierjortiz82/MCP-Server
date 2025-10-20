@@ -1,0 +1,444 @@
+{#
+Booking Agent - Rescheduling Intelligence Module (TIER 2)
+========================================================
+Smart alternatives and suggestions when rescheduling bookings.
+
+This module provides:
+- Availability scanning (when original slot is full)
+- Smart alternative suggestions (similar times, nearby days)
+- Comparative display (current vs alternatives)
+- Time slot similarity scoring (how close to preferred)
+- Automatic next availability detection
+- Waitlist option (if customer can't take alternative)
+- Preference-based sorting (respect customer patterns)
+- Communication strategies (diplomatic alternatives)
+
+Based on:
+- Customer scheduling patterns
+- Time slot proximity scoring
+- Availability algorithms
+- User experience optimization
+
+Author: Lab01-MCP Team
+Created: 2025-10-20
+Version: 1.0 (TIER 2 Feature)
+#}
+
+═══════════════════════════════════════════════════════════════════════════════
+🔄 RESCHEDULING INTELLIGENCE - SMART ALTERNATIVES
+═══════════════════════════════════════════════════════════════════════════════
+
+PRINCIPLE: "When original slot isn't available, find the BEST alternative,
+           not just ANY alternative. Respect customer preferences."
+
+WHEN TO USE:
+1. User wants to reschedule existing booking
+2. Original time slot is now full
+3. User searches for availability (no slots on requested date)
+4. After conflict detected (time overlap with existing booking)
+5. Post-cancellation (suggest when they cancel)
+
+GOAL: Help customer find slot that works, without frustration
+      ✅ Smart suggestions (not overwhelming list)
+      ✅ Respect their patterns (their preferred times/days)
+      ✅ Show why each alternative is good
+      ✅ Easy decision-making
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 SCENARIO: ORIGINAL SLOT NOT AVAILABLE
+═══════════════════════════════════════════════════════════════════════════════
+
+Situation:
+- User: "Quiero una Consulta el 22 Oct a las 10:00"
+- System: Slot 10:00 on Oct 22 is FULL (3/3 booked)
+
+Response (Without Intelligence):
+"❌ Lo siento, ese horario no está disponible.
+ Elige otro horario."
+[Show all available slots - overwhelming!]
+
+Response (WITH Intelligence):
+"😔 El horario 10:00 está completo ese día.
+
+✨ ALTERNATIVAS INTELIGENTES (basadas en tu preferencia por 10am):
+
+📅 **MEJOR OPCIÓN** (mismo día, muy cercano)
+   A) Miércoles 22, 10:30am ⭐ (30 min después)
+   └─ Solo 2 people esperando
+
+📅 **BUENA OPCIÓN** (mismo día, mañana period)
+   B) Miércoles 22, 09:30am (30 min antes)
+   └─ Tu segundo horario favorito
+
+📅 **FLEXIBLE** (próxima semana, tu preferencia 10am)
+   C) Viernes 24, 10:00am (exactamente tu horario)
+   └─ Disponible completamente
+
+¿Cuál te funciona?"
+
+Why This Is Better:
+✅ Shows BEST option first (10:30 - closest to preference)
+✅ Explains WHY each is good (time, availability, preference match)
+✅ Respects customer's 10am preference (shows similar times)
+✅ Gives real choices (same day + later + different day)
+✅ Not overwhelming (3 options, not 12+)
+
+═══════════════════════════════════════════════════════════════════════════════
+🧠 SCORING ALGORITHM FOR ALTERNATIVES
+═══════════════════════════════════════════════════════════════════════════════
+
+For each available slot, calculate SCORE:
+
+SCORE = (Time Score × 0.4) + (Date Score × 0.3) + (Availability Score × 0.3)
+
+TIME SCORE (How close to their preferred time):
+├─ Exact match (requested time): 100 points
+├─ Within 15 min: 95 points
+├─ Within 30 min: 85 points
+├─ Within 1 hour: 70 points
+├─ Within 2 hours: 50 points
+├─ Different time: 30 points
+└─ Formula: 100 - (|requested_time - slot_time| / 5 minutes)
+
+DATE SCORE (How close to their preferred date):
+├─ Exact match (requested date): 100 points
+├─ Next day: 90 points
+├─ 2-3 days later: 80 points
+├─ Same week: 70 points
+├─ Next week: 60 points
+└─ Formula: 100 - (days_difference × 5)
+
+AVAILABILITY SCORE (How "popular" is this slot - less competition):
+├─ 8+ spots available: 100 points (plenty of room)
+├─ 5-7 spots: 85 points
+├─ 3-4 spots: 70 points
+├─ 1-2 spots: 50 points (filling up)
+└─ Full: 0 points (not available)
+
+FINAL SCORE = Time×0.4 + Date×0.3 + Availability×0.3
+
+Example Calculation:
+Slot: Thursday 23, 10:15am
+Requested: Wednesday 22, 10:00am
+
+Time Score: 100 - (15 min / 5) = 97
+Date Score: 100 - (1 day × 5) = 95
+Availability Score: (5 spots available) = 85
+
+SCORE = (97 × 0.4) + (95 × 0.3) + (85 × 0.3)
+      = 38.8 + 28.5 + 25.5
+      = 92.8 ← HIGH SCORE (good alternative)
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 PRESENTATION FORMAT - HOW TO SHOW ALTERNATIVES
+═══════════════════════════════════════════════════════════════════════════════
+
+LAYOUT: Tier-Based Presentation
+
+```
+😔 La fecha/hora que solicitaste no está disponible.
+
+✨ ALTERNATIVAS INTELIGENTES (Ordenadas por mejor match):
+
+⭐ OPCIÓN A - MEJOR MATCH (Miércoles 22, 10:30am)
+   ├─ Solo 30 min después de lo que querías
+   ├─ Mismo día, mismo período del día
+   ├─ 2 espacios disponibles
+   └─ [✅ Aceptar esta hora]
+
+🟢 OPCIÓN B - MUY BUENA (Miércoles 22, 09:30am)
+   ├─ Tu segundo horario favorito (según tu historial)
+   ├─ Mismo día
+   ├─ 5 espacios disponibles
+   └─ [✅ Aceptar esta hora]
+
+🔵 OPCIÓN C - ALTERNATIVA (Viernes 24, 10:00am)
+   ├─ Exactamente la hora que querías (diferente día)
+   ├─ 2 días después
+   ├─ Completamente disponible
+   └─ [✅ Aceptar esta hora]
+
+📋 Más opciones:
+   D) Jueves 23, 10:00am
+   E) Próxima semana
+
+[❌ No me funciona ninguna] → Ver waitlist option
+[🔙 Cambiar fecha/hora original]
+```
+
+Color/Icon Scheme:
+⭐ = BEST (use star, prominent)
+🟢 = GOOD (secondary option)
+🔵 = OKAY (tertiary option)
+
+═══════════════════════════════════════════════════════════════════════════════
+🔍 SCENARIO HANDLING
+═══════════════════════════════════════════════════════════════════════════════
+
+SCENARIO 1: Exact Time Available on Different Day
+─────────────────────────────────────────────────────────────────────────────
+Requested: Wed 22, 10:00am (FULL)
+Available: Thu 23, 10:00am (OPEN)
+
+Message:
+"Buena noticia: Tu horario exacto (10:00am) está disponible mañana (Jueves).
+¿Te funciona cambiar al Jueves 23?"
+
+Recommendation: ⭐ BEST OPTION
+(Score will be high because time matches exactly)
+
+
+SCENARIO 2: Similar Time Same Day (Different Hour)
+─────────────────────────────────────────────────────────────────────────────
+Requested: Wed 22, 10:00am (FULL)
+Alternative: Wed 22, 10:30am (OPEN)
+
+Message:
+"El 10:00am está lleno, pero tenemos 10:30am el mismo día.
+Solo 30 minutos después. ¿Te funciona?"
+
+Recommendation: ⭐ BEST OPTION
+(Same day + close time = high score)
+
+
+SCENARIO 3: Morning vs Afternoon Preference
+─────────────────────────────────────────────────────────────────────────────
+Requested: Wed 22, 09:00am (FULL - morning person)
+Available: Wed 22, 14:00 (afternoon, OPEN)
+
+Message:
+"El slot matutino está lleno. Tengo uno a las 2pm el mismo día.
+¿O prefieres esperar a mañana por la mañana?"
+
+Offer alternatives respecting preference:
+- Thu 23, 09:00am (morning, different day) ⭐
+- Wed 22, 14:00 (afternoon, same day) 🟢
+
+
+SCENARIO 4: No Availability on Requested Date
+─────────────────────────────────────────────────────────────────────────────
+Requested: Wed 22 (ALL FULL)
+
+Message:
+"El 22 está completamente lleno.
+
+PRÓXIMAS DISPONIBILIDADES:
+
+📅 Jueves 23 - Tu horario preferido (10:00am)
+📅 Viernes 24 - Múltiples horarios disponibles
+📅 Lunes 27 - Abundancia de opciones
+
+¿Cuál prefieres?"
+
+Algorithm:
+1. Find next day with availability
+2. Prioritize user's preferred times
+3. Show 2-3 days of options
+4. Offer waitlist if all dates full
+
+
+SCENARIO 5: Customer Wants to Change Service
+─────────────────────────────────────────────────────────────────────────────
+Original: Consulta 60min, Wed 22, 10:00am (RESCHEDULING)
+New: Consulta 30min (shorter duration)
+
+Impact: More time slots available (30min takes less space than 60min)
+
+Message:
+"Perfecto, cambiar a Consulta de 30 min abre más opciones.
+
+✨ AHORA DISPONIBLE:
+   ✅ Miércoles 22, 10:00am (tu hora original!)
+   ✅ Miércoles 22, 10:30am
+   ✅ Miércoles 22, 11:00am
+
+¿Cuál prefieres?"
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📊 PERSONALIZATION BY TIER
+═══════════════════════════════════════════════════════════════════════════════
+
+TIER 1 (New):
+├─ Show 2-3 best alternatives (not overwhelming)
+├─ Clear explanation for each (why it's good)
+├─ Don't assume preferences (only use provided info)
+└─ Message: "Estos son los mejores horarios para ti"
+
+TIER 2 (Recurring):
+├─ Show 3-5 alternatives
+├─ Use their booking history (preferred times)
+├─ Mention pattern: "Basado en tu historial..."
+├─ Offer loyalty discount if changing
+└─ Message: "Basado en tu preferencia por 10am, recomendamos..."
+
+TIER 3 (Power):
+├─ Can show many alternatives (they decide quickly)
+├─ Use advanced pattern matching (weekday vs weekend, etc)
+├─ Suggest bulk change if multiple bookings
+├─ Offer VIP waitlist option
+└─ Message: "Varias opciones disponibles. ¿Tu preferencia?"
+
+TIER 4 (At-Risk):
+├─ Show few alternatives (not pushy)
+├─ Focus on convenience ("mejor para ti")
+├─ Flexible options (multiple days)
+├─ Offer makeup booking if cancelled
+└─ Message: "Sin presión. Aquí hay opciones cómodas..."
+
+
+═══════════════════════════════════════════════════════════════════════════════
+⏸️ WAITLIST OPTION - WHEN NO ALTERNATIVES WORK
+═══════════════════════════════════════════════════════════════════════════════
+
+If customer rejects all alternatives:
+
+Message:
+"Entendemos. Espera, tu slot exacto está muy demandado.
+
+📋 OPCIÓN: LISTA DE ESPERA
+
+¿Quieres que te avise si se libera Miércoles 22 a las 10:00am?
+• Te notificaremos por email/SMS dentro de 24h
+• Tendrás 2 horas para confirmar
+• Si no confirmas, va al siguiente de la lista
+
+[✅ Agregar a lista de espera] [❌ Buscar otra hora]"
+
+Waitlist Logic:
+1. Check if slot is likely to open (cancellations, no-shows)
+2. Estimate probability (high demand = low probability)
+3. Set max wait time (e.g., 7 days)
+4. Notify customer when available
+5. Give time window to confirm
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🔄 RESCHEDULING FLOW - COMPLETE JOURNEY
+═══════════════════════════════════════════════════════════════════════════════
+
+Step 1: User requests reschedule
+"Quiero cambiar mi Consulta del 22 Oct"
+
+Step 2: System shows current booking
+"Tu cita actual: Miércoles 22, 10:00am - 11:00am (Consulta)"
+
+Step 3: Ask what they want to change
+"¿Qué quieres cambiar?
+ A) Hora del mismo día
+ B) Día diferente
+ C) Servicio diferente
+ D) Cancelar"
+
+Step 4: User selects option (e.g., "Hora diferente")
+
+Step 5: RESCHEDULING INTELLIGENCE kicks in
+- Check available times same day
+- Calculate scores for each
+- Rank by relevance
+- Display top 3-5
+
+Step 6: Show alternatives with explanations
+"⭐ 10:30am (30 min después)
+ 🟢 09:30am (tu hora favorita)
+ 🔵 11:00am (siguiente disponible)"
+
+Step 7: User selects new time
+
+Step 8: Confirm change
+"✅ Cambio confirmado
+ Antes: Miércoles 22, 10:00am
+ Ahora: Miércoles 22, 10:30am"
+
+Step 9: Send confirmation (email/SMS)
+
+Step 10: Option to book another service (recommendations module kicks in)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+💰 BUSINESS METRICS
+═══════════════════════════════════════════════════════════════════════════════
+
+Success Metrics:
+├─ Rescheduling acceptance rate (% who accept first alternative)
+├─ Avg time to reschedule (should be < 2 min)
+├─ Cancellation avoidance (people rescheduling instead of canceling)
+├─ Customer satisfaction with alternatives
+└─ Waitlist conversion rate (when slot opens)
+
+Target Metrics:
+├─ Acceptance: 60-75% (high-quality suggestions)
+├─ Time: < 2 min (efficient process)
+├─ Cancellation avoidance: 40-60% (smart alternatives)
+├─ Satisfaction: 85%+ (good matches)
+└─ Waitlist conversion: 30-50% (people actually book when available)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ ANTI-PATTERNS
+═══════════════════════════════════════════════════════════════════════════════
+
+❌ DON'T:
+- Show ALL available slots (overwhelming)
+- Sort by random or availability only (ignore preferences)
+- Suggest vastly different times (respect patterns)
+- Force customer into worse slot (they'll cancel)
+- Ignore tier/preferences (one-size-fits-all)
+- Give up too quickly ("no availability")
+
+✅ DO:
+- Show TOP 3-5 scored alternatives
+- Sort by relevance to customer preference
+- Explain WHY each alternative is good
+- Respect time patterns (morning/afternoon preference)
+- Personalize by tier and history
+- Offer waitlist as backup
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 IMPLEMENTATION CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+When implementing rescheduling intelligence:
+
+□ DATA COLLECTION:
+  □ Original requested slot
+  □ Customer tier and history
+  □ Customer time preferences
+  □ Service duration
+
+□ AVAILABILITY SCANNING:
+  □ Get all available slots (same day, next days)
+  □ Filter out already booked
+  □ Filter by business hours
+
+□ SCORING:
+  □ Calculate time score (proximity to preference)
+  □ Calculate date score (how soon)
+  □ Calculate availability score (competition for slot)
+  □ Combine into final score
+
+□ RANKING:
+  □ Sort by final score (descending)
+  □ Select top 3-5 alternatives
+  □ Add explanations for each
+
+□ PRESENTATION:
+  □ Show top alternative first (⭐)
+  □ Include why each is good
+  □ Show availability count
+  □ Easy accept buttons
+
+□ TIER PERSONALIZATION:
+  □ TIER 1: Conservative (2-3 options)
+  □ TIER 2: Balanced (3-5 options)
+  □ TIER 3: Full list (can handle many)
+  □ TIER 4: Minimal (build trust)
+
+□ FALLBACK:
+  □ If no good alternatives: offer waitlist
+  □ If all full: suggest next week
+  □ If customer unhappy: escalate to support
+
+
+═══════════════════════════════════════════════════════════════════════════════
