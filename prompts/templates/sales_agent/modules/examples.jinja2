@@ -15,31 +15,33 @@ User: "necesito auriculares para trabajar" (or "I need wireless headphones")
 - Apply tool → get product list
 - Expect: Show first {{ pagination_page_size }} + pagination hint
 
-**OUTPUT (CARD FORMAT):**
+**OUTPUT (PROFESSIONAL TEXT FORMAT):**
 ```
 🔍 Encontré 8 opciones de auriculares para trabajar. Aquí están las primeras {{ pagination_page_size }}:
 
-┌─────────────────────────────────────────────────────┐
-│ 1️⃣ 🎧 **Auriculares ProWork X1**                  │
-│ 🏷️ Brand: AudioTech | SKU: AUD-101               │
-│ 💰 Price: $129.99 | 📦 Category: Audio            │
-│ 📝 Auriculares con cancelación de ruido para oficina│
-│ ✨ Features: Noise Cancelling • Wireless • Comfort │
-│ 🎨 Available: Black, Silver                        │
-│ ⭐ Perfectos para concentrarte sin distracciones   │
-└─────────────────────────────────────────────────────┘
+1. **Auriculares ProWork X1** 🎧
+   AudioTech • SKU: AUD-101 • $129.99 • Audio
+   Auriculares con cancelación de ruido para oficina.
+   Features: Noise Cancelling, Wireless, Comfort | Disponible en: Black, Silver
+   → Perfectos para concentrarte sin distracciones
 
-┌─────────────────────────────────────────────────────┐
-│ 2️⃣ 🎧 **Auriculares Studio Quiet**                │
-│ 🏷️ Brand: SoundPro | SKU: AUD-203                │
-│ 💰 Price: $89.50 | 📦 Category: Audio             │
-│ 📝 Auriculares inalámbricos con micrófono integrado│
-│ ✨ Features: Built-in Mic • Long Battery • Quality │
-│ 🎨 Available: White, Blue                          │
-│ ⭐ Ideales para videollamadas de calidad           │
-└─────────────────────────────────────────────────────┘
+2. **Auriculares Studio Quiet** 🎧
+   SoundPro • SKU: AUD-203 • $89.50 • Audio
+   Auriculares inalámbricos con micrófono integrado.
+   Features: Built-in Mic, Long Battery, Quality | Disponible en: White, Blue
+   → Ideales para videollamadas de calidad
 
-[... hasta product #{{ pagination_page_size }} ...]
+3. **Auriculares Wireless Pro** 🎧
+   ProAudio • SKU: AUD-115 • $149.99 • Audio
+   Auriculares premium con tecnología de cancelación activa.
+   Features: Active Noise Cancelling, 30h Battery, Bluetooth 5.0 | Disponible en: Black
+   → Máxima calidad de audio para trabajo intenso
+
+4. **Auriculares Comfort Max** 🎧
+   ComfortSound • SKU: AUD-098 • $69.99 • Audio
+   Auriculares ligeros diseñados para comodidad prolongada.
+   Features: Lightweight, Comfortable, All-day Battery | Disponible en: White, Silver, Blue
+   → Excelente relación precio-calidad para uso diario
 
 ¿Te interesa alguno? También tengo 4 opciones más si quieres verlas.
 ```
@@ -69,52 +71,39 @@ User: "busco algo para cocinar, juegos de mesa y una laptop"
 - Tool 3: search_products(query="laptop")
 - CRITICAL: Show ALL 3 categories in response (don't omit any)
 
-**OUTPUT (CARD FORMAT - with ALL categories):**
+**OUTPUT (PROFESSIONAL TEXT FORMAT - with ALL categories):**
 ```
 🔍 Encontré opciones para tus 3 búsquedas:
 
 ### 🍳 Artículos para Cocinar
-┌─────────────────────────────────────────────────────┐
-│ 1️⃣ 🔪 **Juego de Cuchillos Profesional**           │
-│ 🏷️ Brand: ChefPro | SKU: KIT-301                  │
-│ 💰 Price: $89.99 | 📦 Category: Cocina             │
-│ 📝 Set de 5 cuchillos de acero inoxidable          │
-│ ✨ Features: Professional • Durable • Sharp        │
-│ 🎨 Available: Silver                               │
-│ ⭐ Perfectos para preparar comidas profesionales    │
-└─────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────┐
-│ 2️⃣ 🍳 **Sartén Antiadherente 28cm**                │
-│ 🏷️ Brand: CookMaster | SKU: KIT-205                │
-│ 💰 Price: $45.50 | 📦 Category: Cocina             │
-│ 📝 Sartén con recubrimiento antiadherente premium   │
-│ ✨ Features: Non-stick • Heat-resistant • Durable   │
-│ 🎨 Available: Black, Red                            │
-│ ⭐ Ideal para cocinar sin que se pegue              │
-└─────────────────────────────────────────────────────┘
+1. **Juego de Cuchillos Profesional** 🔪
+   ChefPro • SKU: KIT-301 • $89.99 • Cocina
+   Set de 5 cuchillos de acero inoxidable para chef.
+   Features: Professional, Durable, Sharp | Disponible en: Silver
+   → Perfectos para preparar comidas profesionales
+
+2. **Sartén Antiadherente 28cm** 🍳
+   CookMaster • SKU: KIT-205 • $45.50 • Cocina
+   Sartén con recubrimiento antiadherente premium.
+   Features: Non-stick, Heat-resistant, Durable | Disponible en: Black, Red
+   → Ideal para cocinar sin que se pegue
 
 ### 🎲 Juegos de Mesa
-┌─────────────────────────────────────────────────────┐
-│ 1️⃣ 🎲 **Juego Estrategia Épica**                   │
-│ 🏷️ Brand: GameMaster | SKU: GAME-401               │
-│ 💰 Price: $34.99 | 📦 Category: Juegos             │
-│ 📝 Juego de estrategia para 2-4 jugadores         │
-│ ✨ Features: Strategic • Competitive • Replayable  │
-│ 🎨 Available: Full Set                             │
-│ ⭐ Diversión garantizada para noches familiares     │
-└─────────────────────────────────────────────────────┘
+
+1. **Juego Estrategia Épica** 🎲
+   GameMaster • SKU: GAME-401 • $34.99 • Juegos
+   Juego de estrategia para 2-4 jugadores.
+   Features: Strategic, Competitive, Replayable | Disponible en: Full Set
+   → Diversión garantizada para noches familiares
 
 ### 💻 Laptops
-┌─────────────────────────────────────────────────────┐
-│ 1️⃣ 💻 **Laptop Ultralight 13"**                    │
-│ 🏷️ Brand: ThinBook | SKU: COMP-0009                │
-│ 💰 Price: $999.00 | 📦 Category: Computación       │
-│ 📝 Portátil ultraligera con 16GB RAM y SSD 512GB   │
-│ ✨ Features: Lightweight • Fast • Portable          │
-│ 🎨 Available: Grey, Silver                         │
-│ ⭐ Perfecta para trabajo y viajes                   │
-└─────────────────────────────────────────────────────┘
+
+1. **Laptop Ultralight 13"** 💻
+   ThinBook • SKU: COMP-0009 • $999.00 • Computación
+   Portátil ultraligera con 16GB RAM y SSD 512GB.
+   Features: Lightweight, Fast, Portable | Disponible en: Grey, Silver
+   → Perfecta para trabajo y viajes
 
 ¿Te interesa alguna de estas opciones?
 ```

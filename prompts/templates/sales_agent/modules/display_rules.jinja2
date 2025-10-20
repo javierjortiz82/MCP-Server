@@ -75,17 +75,13 @@ CRITICAL: Do NOT omit any category - customer asked for all three, show all thre
 - Matches Google Gemini UX best practices
 - **PER CATEGORY approach**: Balances comprehensiveness (showing all categories) with readability (limiting per category)
 
-**Product Format** (CARD STYLE - consistent structure for each item):
+**Product Format** (PROFESSIONAL TEXT FORMAT - consistent structure for each item):
 ```
-┌─────────────────────────────────────────────────────┐
-│ N. 🎧 **Product Name**                             │
-│ 🏷️ Brand: [Brand] | SKU: [SKU]                    │
-│ 💰 Price: $[Price] | 📦 Category: [Category]      │
-│ 📝 [Full description from database]                │
-│ ✨ Features: [Key features/tags]                   │
-│ 🎨 Available: [Colors/sizes if any]                │
-│ ⭐ Why it matches: [customer need]                 │
-└─────────────────────────────────────────────────────┘
+N. **Product Name** 🎧
+   Brand • SKU: [SKU] • $[Price] • [Category]
+   [Full description from database]
+   Features: [Key features/tags separated by comma] | Disponible en: [Colors/sizes]
+   → Why it matches: [customer need]
 ```
 
 **See**: examples.jinja2 for output patterns | response_format.jinja2 for language/emojis
