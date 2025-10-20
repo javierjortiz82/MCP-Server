@@ -586,8 +586,18 @@ class BookingAgent(BaseAgent):
 
             # Get parts from response
             parts = self.function_call_handler.get_parts(response)
+
+            # If parts is None, try to extract text directly from content as fallback
             if parts is None:
-                self.logger.warning("Response parts is None")
+                self.logger.warning("Response parts is None - trying direct content extraction")
+                try:
+                    content = response.candidates[0].content if response.candidates else None
+                    text = self.function_call_handler.extract_text_from_content(content)
+                    if text:
+                        self.logger.debug(f"Extracted text from content: {text[:100]}...")
+                        return text
+                except (AttributeError, IndexError) as e:
+                    self.logger.warning(f"Failed to extract text from content: {e}")
                 return self._create_fallback_response(iteration)
 
             # Extract function calls
@@ -600,6 +610,16 @@ class BookingAgent(BaseAgent):
                     self.logger.debug(f"Extracted final text: {text[:100]}...")
                     return text
                 else:
+                    # Try fallback text extraction from content
+                    try:
+                        content = response.candidates[0].content if response.candidates else None
+                        text = self.function_call_handler.extract_text_from_content(content)
+                        if text:
+                            self.logger.debug(f"Extracted text from content (fallback): {text[:100]}...")
+                            return text
+                    except (AttributeError, IndexError):
+                        pass
+
                     self.logger.warning(f"No function calls and no text in iteration {iteration}")
                     return self._create_fallback_response(iteration)
 

@@ -67,12 +67,36 @@ class FunctionCallHandler:
             logger.warning("Response parts is None - cannot extract text")
             return None
 
+        # Handle empty parts list - text may be directly in response
+        if len(parts) == 0:
+            return None
+
         text_parts = [part.text for part in parts if hasattr(part, "text") and part.text]
 
         if not text_parts:
             return None
 
         return " ".join(text_parts)
+
+    def extract_text_from_content(self, content: Any) -> str | None:
+        """Extract text directly from content object.
+
+        This is a fallback when parts structure is not available.
+
+        Args:
+            content: Response content from Gemini
+
+        Returns:
+            Text from content, or None if not available
+        """
+        if content is None:
+            return None
+
+        # Try to get text directly from content
+        if hasattr(content, "text") and content.text:
+            return content.text
+
+        return None
 
     def has_candidates(self, response: Any) -> bool:
         """Check if response has candidates.
@@ -103,4 +127,16 @@ class FunctionCallHandler:
             logger.warning("Response content is None or missing parts - cannot extract")
             return None
 
-        return content.parts
+        parts = content.parts
+
+        # Handle case where parts is empty or None
+        if parts is None or len(parts) == 0:
+            logger.debug("Response parts is empty, checking for text content directly")
+            # Try to extract text content directly if parts are missing
+            if hasattr(content, "text") and content.text:
+                logger.debug("Found text content directly in response - creating part")
+                # Return as empty parts, text will be extracted separately
+                return []
+            return None
+
+        return parts
