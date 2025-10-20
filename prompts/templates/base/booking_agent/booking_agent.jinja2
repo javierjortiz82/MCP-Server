@@ -173,6 +173,11 @@ Version: {{ version|default('v2.8') }}
 {% include 'base/booking_agent/modules/tool_usage_rules.jinja2' %}
 
 {# ================================================================ #}
+{# PHASE 5.5: IMPROVED MENU FORMATTING (UX Enhancement)           #}
+{# ================================================================ #}
+{% include 'base/booking_agent/modules/improved_menu_formatting.jinja2' %}
+
+{# ================================================================ #}
 {# PHASE 6: CONFIRMATION FLOW (Workflow)                           #}
 {# ================================================================ #}
 {% include 'base/booking_agent/modules/confirmation_flow.jinja2' %}

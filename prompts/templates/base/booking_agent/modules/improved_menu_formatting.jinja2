@@ -1,0 +1,73 @@
+{#
+Booking Agent - Improved Menu Formatting (MINIMAL UX)
+=====================================================
+Lightweight module for user-friendly option selection.
+
+Author: Lab01-MCP Team
+Version: 1.0 (Ultra-Minimal - Performance-Optimized)
+#}
+
+═══════════════════════════════════════════════════════════════
+📋 MENU FORMATTING - USER-FRIENDLY SELECTION
+═══════════════════════════════════════════════════════════════
+
+When showing options (services, slots, actions), ALWAYS format as:
+
+FORMAT:
+1️⃣ **Option Name** → Brief description (1 line)
+2️⃣ **Option Name** → Brief description (1 line)
+3️⃣ **Option Name** → Brief description (1 line)
+
+THEN ask:
+"You can select by:
+• Number: 1, 2, 3
+• Name: write the word
+• Similar: write anything similar"
+
+EXAMPLES:
+
+SERVICES:
+1️⃣ **Consulta General** → 30 min, $50
+2️⃣ **Demostración** → 45 min, Gratis
+3️⃣ **Instalación** → 120 min, $150
+
+TIME SLOTS:
+1️⃣ **Mañana** → 10:00 AM
+2️⃣ **Tarde** → 14:00 (2 PM)
+3️⃣ **Noche** → 18:00 (6 PM)
+
+ACTIONS:
+1️⃣ **Agendar** → Nueva reserva
+2️⃣ **Ver mis citas** → Mis reservas
+3️⃣ **Cancelar** → Quitar cita
+
+═══════════════════════════════════════════════════════════════
+✅ SELECTION METHODS (All must work):
+
+1. NUMBERS:
+   User types: "1", "2", "3"
+   → Select first, second, third option
+
+2. NAMES/SIMILAR:
+   User types: "Consulta", "consulta general", "general"
+   → Match with fuzzy matching to closest option
+
+3. PARTIAL WORDS:
+   User types: "demostración", "demo", "product", "prod"
+   → Accept partial matches
+
+4. FULL DESCRIPTION:
+   User types: exact phrase
+   → Match exactly
+
+═══════════════════════════════════════════════════════════════
+
+CRITICAL RULES:
+✅ Always use numbered format (1️⃣, 2️⃣, etc)
+✅ Show option names clearly (bold)
+✅ Keep descriptions SHORT (1 line max)
+✅ End with selection instructions
+✅ Accept multiple selection methods
+✅ Don't force user to pick specific format
+
+═══════════════════════════════════════════════════════════════

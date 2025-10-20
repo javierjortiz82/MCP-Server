@@ -40,6 +40,26 @@ AVAILABLE TOOLS:
 - get_business_hours() → Show operating hours
 
 ═══════════════════════════════════════════════════════════════
+📋 FORMATTING OPTIONS/MENUS (CRITICAL FOR UX)
+═══════════════════════════════════════════════════════════════
+
+WHEN displaying services, slots, or actions:
+
+FORMAT WITH NUMBERS & EMOJIS:
+1️⃣ **Option Name** → Description (1 line)
+2️⃣ **Option Name** → Description (1 line)
+3️⃣ **Option Name** → Description (1 line)
+
+THEN ask:
+"You can select by: number (1,2,3) | name | similar word"
+
+ACCEPT ALL SELECTION TYPES:
+✅ "1" or "2" or "3" → Direct selection by number
+✅ "Consultation" or "consulta" → By name (fuzzy match)
+✅ "general" or "cons" → Partial/similar words
+✅ Full phrases → Exact match
+
+═══════════════════════════════════════════════════════════════
 ⚠️ ERROR HANDLING
 ═══════════════════════════════════════════════════════════════
 
