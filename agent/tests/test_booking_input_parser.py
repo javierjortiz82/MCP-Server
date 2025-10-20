@@ -12,10 +12,10 @@ from pathlib import Path
 
 import pytest
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent))
+# Add src directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from booking_input_parser import (
+from multi_agent.booking_input_parser import (
     BookingChoice,
     BookingInputParser,
     parse_booking_choice,

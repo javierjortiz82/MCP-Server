@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 # Add agent/src to path
-agent_src = Path(__file__).parent / "src"
+agent_src = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(agent_src))
 
 from multi_agent.prompt_manager import PromptManager

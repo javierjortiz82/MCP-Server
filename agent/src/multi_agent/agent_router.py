@@ -9,6 +9,28 @@ The router analyzes user queries and returns the appropriate intent:
 - booking: Appointments, reservations, scheduling
 - general: FAQ, company info, support
 
+ARCHITECTURE NOTES:
+===================
+
+Classification Methods (PRIMARY vs FALLBACK):
+1. PRIMARY: PromptManager-based classification (ACTIVE)
+   - Uses get_classification_prompt() to load dynamic templates
+   - Supports A/B testing via PromptManager.get_router_prompt()
+   - Used in classify_intent() method
+   - Status: ✅ PRODUCTION-READY (active since v1.1.0)
+
+2. FALLBACK: Legacy CLASSIFICATION_PROMPT (DEPRECATED)
+   - Uses hardcoded CLASSIFICATION_PROMPT constant (lines 96-134)
+   - Only used if PromptManager fails to load
+   - Status: ⚠️ DEPRECATED (kept for backward compatibility)
+   - Timeline: Will be removed when PromptManager is stable (v2.0.0)
+
+3. MEMORY INTEGRATION: Optional (ACTIVE)
+   - Uses MemoryManager to load user context
+   - Improves classification accuracy for returning users
+   - Session-level + user-level memory support
+   - Status: ✅ PRODUCTION-READY (active since v1.2.0)
+
 Memory Integration (Phase 3 - 2025-10-12):
     - Optional MemoryManager integration for context-aware classification
     - Uses memory blocks (user preferences, interests) to improve accuracy
@@ -33,6 +55,7 @@ References:
 Author: Lab01-MCP Team
 Created: 2025-10-11
 Version: 1.2.0 (Memory Integration)
+Last Audited: 2025-10-20
 """
 
 from __future__ import annotations
