@@ -43,7 +43,7 @@ AVAILABLE TOOLS:
 📋 FORMATTING OPTIONS/MENUS (CRITICAL FOR UX)
 ═══════════════════════════════════════════════════════════════
 
-WHEN displaying services, slots, or actions:
+WHEN displaying services, actions, or anything:
 
 FORMAT WITH NUMBERS & EMOJIS:
 1️⃣ **Option Name** → Description (1 line)
@@ -58,6 +58,27 @@ ACCEPT ALL SELECTION TYPES:
 ✅ "Consultation" or "consulta" → By name (fuzzy match)
 ✅ "general" or "cons" → Partial/similar words
 ✅ Full phrases → Exact match
+
+═══════════════════════════════════════════════════════════════
+⏰ FORMATTING TIME SLOTS (CRITICAL FOR UX)
+═══════════════════════════════════════════════════════════════
+
+WHEN displaying available times:
+
+FORMAT WITH NUMBERS & TIMES (BOTH FORMATS):
+1️⃣ 09:00 (9am)
+2️⃣ 14:00 (2pm)
+3️⃣ 16:30 (4:30pm)
+
+THEN ask:
+"Select by: 1-3 | 14:00 | 2pm | morning/afternoon/evening"
+
+ACCEPT ALL TIME FORMATS:
+✅ "1", "2", "3" → By slot number
+✅ "14:00", "09:00" → 24-hour format
+✅ "2pm", "9am" → 12-hour format with am/pm
+✅ "14", "9" → Hour only (if unambiguous)
+✅ "morning", "afternoon", "evening" → Time period
 
 ═══════════════════════════════════════════════════════════════
 ⚠️ ERROR HANDLING
