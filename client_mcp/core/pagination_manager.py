@@ -472,6 +472,13 @@ class PaginationManager:
             brand = product.get("brand", "N/A")
             price = product.get("price", 0.0)
 
+            # Ensure price is a float (may come as string from database)
+            if isinstance(price, str):
+                try:
+                    price = float(price)
+                except (ValueError, TypeError):
+                    price = 0.0
+
             response_lines.append(f"{idx}. 🛍️ **{name}**")
             response_lines.append(f"   📝 {description}")
             response_lines.append(f"   🏷️ SKU: {sku}")
