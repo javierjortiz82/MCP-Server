@@ -12,21 +12,64 @@ Features:
 - Backward compatibility with existing code
 - Feature flag support for gradual rollout
 
-Architecture:
+ARCHITECTURE OVERVIEW:
+======================
+
+Prompt Inventory (Status as of 2025-10-20):
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ACTIVE (Production-Ready):
+  ✅ get_router_prompt()         - Intent classification prompt (STABLE)
+  ✅ get_booking_prompt()        - Booking/reservation agent (STABLE, multilingual)
+  ✅ get_general_prompt()        - FAQ/info agent (STABLE, multilingual)
+  ✅ get_sales_prompt()          - Product recommendation agent (STABLE, multilingual)
+
+A/B TESTING (Supported):
+  ✅ Booking A/B variants        - Via get_booking_prompt(user_id=uid, variant='a'|'b')
+  ✅ Sales A/B variants          - Via get_sales_prompt(user_id=uid, variant='a'|'b')
+  ✅ General A/B variants        - Via get_general_prompt(user_id=uid, variant='a'|'b')
+  ✅ Router A/B variants         - Via get_router_prompt(user_id=uid, variant='a'|'b')
+
+MULTILINGUAL (Active):
+  ✅ Automatic language detection via Gemini
+  ✅ All templates: base/booking_agent.jinja2, etc.
+  ✅ user_lang parameter: Kept for backward compatibility (deprecated)
+  ✅ Spanish (es) and English (en) support via template variations
+
+DEPRECATED (Keep for backward compatibility):
+  ⚠️  services.yaml loading (line 335 comment)
+  ⚠️  Legacy hardcoded service lists (no longer used)
+
+Directory Structure:
     prompts/
-    ├── templates/          # Jinja2 templates for each agent
-    ├── data/              # YAML configuration data
-    ├── config/            # Version management
-    └── README.md          # Documentation
+    ├── templates/                    # Jinja2 templates for each agent
+    │   ├── base/                    # Main templates (all multilingual)
+    │   │   ├── booking_agent.jinja2
+    │   │   ├── general_agent.jinja2
+    │   │   ├── sales_agent.jinja2
+    │   │   └── agent_router.jinja2
+    │   └── [other templates]        # Legacy/experimental
+    │
+    ├── data/                        # YAML configuration data
+    │   ├── prompts_config.yaml      # Version management
+    │   └── [other configs]
+    │
+    └── README.md                    # Documentation
 
 Note:
     Agents MUST use MCP tools (get_services, get_business_hours, etc.) to access
     database data. Direct database connections in PromptManager have been removed
     to maintain architectural consistency with the MCP Server pattern.
 
+Performance Notes:
+    - Template loading is cached per PromptManager instance
+    - A/B variant selection is deterministic (based on user_id hash)
+    - Config reload is explicit (call reload_config() for updates)
+
 Author: Lab01-MCP Team
 Created: 2025-10-11
 Version: 1.2.0 (A/B testing infrastructure for Sales Agent)
+Last Audited: 2025-10-20
 """
 
 from __future__ import annotations

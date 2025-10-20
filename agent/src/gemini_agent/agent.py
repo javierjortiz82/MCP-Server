@@ -4,10 +4,15 @@ This module provides the Google Gemini AI integration layer, extracted from
 the main application for better separation of concerns.
 
 Updated to use Pydantic v2 configuration and structured logging.
+
+DEPRECATED: This module is deprecated. Use BaseAgent or specialized agents instead.
+See migration guide in the class docstring.
 """
 
 import asyncio
+import warnings
 from typing import Any
+from functools import wraps
 
 from gemini_agent.config import settings
 from gemini_agent.utils.logger import setup_logging
@@ -18,14 +23,85 @@ from google.genai import types
 logger = setup_logging("gemini_agent")
 
 
+def deprecated(reason: str = "", removal_date: str = "") -> type:
+    """Decorator to mark a class as deprecated with migration guidance."""
+
+    def decorator(cls: type) -> type:
+        message = f"{cls.__name__} is deprecated"
+        if reason:
+            message += f": {reason}"
+        if removal_date:
+            message += f" (will be removed on {removal_date})"
+
+        original_init = cls.__init__
+
+        @wraps(original_init)
+        def new_init(self: Any, *args: Any, **kwargs: Any) -> None:
+            warnings.warn(message, category=DeprecationWarning, stacklevel=2)
+            return original_init(self, *args, **kwargs)
+
+        cls.__init__ = new_init
+        cls.__deprecated__ = True
+        return cls
+
+    return decorator
+
+
+@deprecated(
+    reason="Use BaseAgent instead (provides same functionality with better architecture)",
+    removal_date="2025-12-31",
+)
 class GeminiAgent:
     """Google Gemini AI Agent for natural language processing.
+
+    ⚠️ DEPRECATED: This class is deprecated. Use BaseAgent or specialized agents instead.
 
     This class encapsulates all Gemini-specific functionality:
     - Client initialization
     - Response generation
     - Conversation history management
     - Configuration management
+
+    Migration Guide:
+    ===============
+
+    Before (using GeminiAgent):
+        >>> from gemini_agent import GeminiAgent
+        >>> agent = GeminiAgent(api_key="key")
+        >>> await agent.initialize()
+        >>> response = await agent.generate_response("Hello")
+
+    After (using BaseAgent):
+        >>> from gemini_agent import BaseAgent
+        >>> class CustomAgent(BaseAgent):
+        ...     @property
+        ...     def agent_name(self) -> str:
+        ...         return "my_agent"
+        ...
+        ...     def get_system_prompt(self, **kwargs) -> str:
+        ...         return "You are helpful"
+        >>> agent = CustomAgent()
+        >>> await agent.initialize()
+        >>> response = await agent.generate_response("Hello")
+
+    After (using Specialized Agents - RECOMMENDED):
+        >>> from multi_agent import BookingAgent, SalesAgent, GeneralAgent
+        >>> agent = BookingAgent()  # or SalesAgent(), GeneralAgent()
+        >>> await agent.initialize()
+        >>> response = await agent.generate_response("Hello")
+
+    Why deprecate?
+    ==============
+    - BaseAgent eliminates ~280 lines of duplicate code
+    - Provides unified interface for all agent types
+    - Built-in memory management and MCP tools support
+    - A/B testing framework
+    - Better separation of concerns
+
+    Removal Timeline:
+    =================
+    - Now: DeprecationWarning emitted on instantiation
+    - 2025-12-31: Class will be removed from codebase
     """
 
     def __init__(
