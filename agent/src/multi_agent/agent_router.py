@@ -472,7 +472,9 @@ NO agregues explicaciones ni puntuación adicional."""
                           to database for analytics (default: True).
 
         Returns:
-            Intent enum value (SALES, BOOKING, or GENERAL).
+            Tuple of (Intent, detected_language) where:
+                - Intent: enum value (SALES, BOOKING, or GENERAL)
+                - detected_language: str ("en" or "es") auto-detected from query
 
         Raises:
             ValueError: If query is empty or whitespace.
@@ -481,10 +483,10 @@ NO agregues explicaciones ni puntuación adicional."""
         Example:
             >>> router = AgentRouter(memory_manager=memory, session_id=session_id)
             >>> await router.initialize()
-            >>> intent = await router.classify_intent("Busco una laptop gaming")
-            >>> print(intent)  # Intent.SALES (uses memory context for better accuracy)
-            >>> intent = await router.classify_intent("Quiero agendar una cita")
-            >>> print(intent)  # Intent.BOOKING
+            >>> intent, lang = await router.classify_intent("Busco una laptop gaming")
+            >>> print(intent, lang)  # Intent.SALES, "es"
+            >>> intent, lang = await router.classify_intent("I want to book an appointment")
+            >>> print(intent, lang)  # Intent.BOOKING, "en"
         """
         if not self.client:
             logger.error("AgentRouter not initialized - call initialize() first")
@@ -580,7 +582,7 @@ NO agregues explicaciones ni puntuación adicional."""
                         f"⚠️ Empty response but continuing conversation. "
                         f"Maintaining previous intent: {last_intent_str}"
                     )
-                    return Intent(last_intent_str)
+                    return (Intent(last_intent_str), detected_language)
 
                 raise RuntimeError("No content parts in classification response")
 
@@ -595,7 +597,7 @@ NO agregues explicaciones ni puntuación adicional."""
                         f"⚠️ No text in response but continuing conversation. "
                         f"Maintaining previous intent: {last_intent_str}"
                     )
-                    return Intent(last_intent_str)
+                    return (Intent(last_intent_str), detected_language)
 
                 raise RuntimeError("No text in classification response")
 
@@ -620,7 +622,7 @@ NO agregues explicaciones ni puntuación adicional."""
                 except Exception as e:
                     logger.warning(f"Failed to persist intent: {e}")
 
-            return intent
+            return (intent, detected_language)
 
         except ValueError:
             # Re-raise validation errors
@@ -650,7 +652,12 @@ NO agregues explicaciones ni puntuación adicional."""
                     f"⚠️ Classification failed on short/follow-up query but context available. "
                     f"Maintaining previous intent: {last_intent_str} (sticky session for follow-ups)"
                 )
-                return Intent(last_intent_str)
+                # In exception handler, detected_language might not be available
+                try:
+                    detected_lang = detect_user_language(query)
+                except Exception:
+                    detected_lang = "es"
+                return (Intent(last_intent_str), detected_lang)
 
             # For complex/unrelated queries: Don't hide the error, let it propagate
             logger.error(

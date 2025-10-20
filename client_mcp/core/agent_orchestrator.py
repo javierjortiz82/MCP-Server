@@ -359,8 +359,9 @@ class AgentOrchestrator:
             if self.last_bot_message:
                 context["last_bot_message"] = self.last_bot_message
 
-            intent = await self.router.classify_intent(query, context=context if context else None)
+            intent, detected_language = await self.router.classify_intent(query, context=context if context else None)
             logger.info(f"Intent classified: {intent.value}")
+            logger.info(f"🌐 Detected language from router: {detected_language}")
 
             # Save current intent for next iteration
             self.last_intent = intent
@@ -370,27 +371,34 @@ class AgentOrchestrator:
             # Fallback to general agent on classification errors
             logger.warning("⚠️ Falling back to general agent due to classification error")
             intent = Intent.GENERAL
+            # Try to detect language from query as fallback
+            try:
+                from gemini_agent.utils.language_detector import detect_user_language
+                detected_language = detect_user_language(query)
+            except Exception:
+                detected_language = "es"  # Default to Spanish
 
         # Step 2: Route to specialized agent and save response
         try:
             response = None
             if intent == Intent.SALES:
-                response = await self._route_to_sales(query, include_history=include_history)
+                response = await self._route_to_sales(query, include_history=include_history, language=detected_language)
 
             elif intent == Intent.BOOKING:
                 response = await self._route_to_booking(
                     query,
                     customer_email=customer_email,
                     include_history=include_history,
+                    language=detected_language,
                 )
 
             elif intent == Intent.GENERAL:
-                response = await self._route_to_general(query, include_history=include_history)
+                response = await self._route_to_general(query, include_history=include_history, language=detected_language)
 
             else:
                 # Unknown intent - fallback to general
                 logger.warning(f"Unknown intent: {intent}, falling back to general")
-                response = await self._route_to_general(query, include_history=include_history)
+                response = await self._route_to_general(query, include_history=include_history, language=detected_language)
 
             # Save last bot message for context in next classification
             self.last_bot_message = response[:200] if response else None  # First 200 chars
@@ -717,12 +725,14 @@ class AgentOrchestrator:
         query: str,
         *,
         include_history: bool = True,
+        language: str = "es",
     ) -> str:
         """Route query to sales agent (SalesAgent).
 
         Args:
             query: User query.
             include_history: Include conversation history.
+            language: Detected user language ("en" or "es").
 
         Returns:
             Response from sales agent.
@@ -734,11 +744,11 @@ class AgentOrchestrator:
         logger.debug("Routing to SALES agent (SalesAgent)")
 
         # Set language context for MCP handlers (sales tool calls)
-        set_current_language(self.language)
-        logger.debug(f"🌐 Language context set to: {self.language}")
+        set_current_language(language)
+        logger.debug(f"🌐 Language context set to: {language}")
 
         # Call SalesAgent's send_message method with language parameter
-        response = await self.sales_agent.send_message(query, language=self.language)
+        response = await self.sales_agent.send_message(query, language=language)
         return response
 
     async def _route_to_booking(
@@ -747,6 +757,7 @@ class AgentOrchestrator:
         *,
         customer_email: str | None = None,
         include_history: bool = True,
+        language: str = "es",
     ) -> str:
         """Route query to booking agent.
 
@@ -754,6 +765,7 @@ class AgentOrchestrator:
             query: User query.
             customer_email: Customer email (uses session email if not provided).
             include_history: Include conversation history.
+            language: Detected user language ("en" or "es").
 
         Returns:
             Response from booking agent.
@@ -765,8 +777,8 @@ class AgentOrchestrator:
         logger.debug("Routing to BOOKING agent")
 
         # Set language context for MCP handlers (booking tool calls)
-        set_current_language(self.language)
-        logger.debug(f"🌐 Language context set to: {self.language}")
+        set_current_language(language)
+        logger.debug(f"🌐 Language context set to: {language}")
 
         # Use stored session email if not provided explicitly
         effective_email = customer_email or self.customer_email
@@ -780,7 +792,7 @@ class AgentOrchestrator:
             query,
             customer_email=effective_email,
             include_history=include_history,
-            language=self.language,  # Pass language to agent for dynamic template selection
+            language=language,  # Pass language to agent for dynamic template selection
         )
 
         return response
@@ -790,12 +802,14 @@ class AgentOrchestrator:
         query: str,
         *,
         include_history: bool = True,
+        language: str = "es",
     ) -> str:
         """Route query to general agent.
 
         Args:
             query: User query.
             include_history: Include conversation history.
+            language: Detected user language ("en" or "es").
 
         Returns:
             Response from general agent.
@@ -807,13 +821,13 @@ class AgentOrchestrator:
         logger.debug("Routing to GENERAL agent")
 
         # Set language context for MCP handlers (general tool calls)
-        set_current_language(self.language)
-        logger.debug(f"🌐 Language context set to: {self.language}")
+        set_current_language(language)
+        logger.debug(f"🌐 Language context set to: {language}")
 
         response = await self.general_agent.generate_response(
             query,
             include_history=include_history,
-            language=self.language,  # Pass language to agent for dynamic template selection
+            language=language,  # Pass language to agent for dynamic template selection
         )
 
         return response
