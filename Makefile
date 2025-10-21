@@ -73,7 +73,6 @@ install:
 	@echo "$(YELLOW)Installing all dependencies...$(NC)"
 	@$(ACTIVATE) && $(PIP) install -r requirements.txt && \
 		$(PIP) install -r agent/requirements.txt && \
-		$(PIP) install -r agent/requirements-dev.txt && \
 		$(PIP) install -r client_mcp/requirements.txt && \
 		$(PIP) install -r client_mcp/requirements-dev.txt && \
 		$(PIP) install -r email_service/requirements.txt && \
