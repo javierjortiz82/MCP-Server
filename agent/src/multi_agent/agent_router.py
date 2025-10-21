@@ -656,7 +656,7 @@ NO agregues explicaciones ni puntuación adicional."""
                 try:
                     detected_lang = detect_user_language(query)
                 except Exception:
-                    detected_lang = "es"
+                    detected_lang = "en"  # Default to English (international default)
                 return (Intent(last_intent_str), detected_lang)
 
             # For complex/unrelated queries: Don't hide the error, let it propagate
