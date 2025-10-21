@@ -689,6 +689,52 @@ Update `docs/NOTAS_CLAUDE.md` when:
 - Changing data structure
 - Modifying version config
 
+### 7. **Dynamic Few-Shot Examples (2025 Best Practice)**
+
+**Overview**: Use dynamic, contextually-relevant examples instead of hardcoded static data.
+
+**Two Modes Available**:
+
+**MODE 1: Dynamic Few-Shot** (Recommended for Production)
+- ✅ Inject real examples from database based on user query
+- ✅ Adapts in real-time to provide most pertinent examples
+- ✅ Best learning from actual product data
+
+```python
+# Get contextual examples
+example_products = get_relevant_products(user_query, limit=4)
+
+# Render template with dynamic examples
+prompt = manager.get_sales_prompt(
+    example_products=example_products,  # ← Dynamic injection
+    pagination_page_size=4
+)
+```
+
+**MODE 2: Skeleton Fallback** (Development/Fallback)
+- ✅ Uses `[placeholder]` format to teach structure
+- ✅ Works when no query context available
+- ✅ Zero memorization risk, no hardcoded data
+
+```jinja2
+{# Template automatically falls back to skeleton mode #}
+{% if example_products %}
+  {# Use real examples #}
+{% else %}
+  {# Use [placeholder] format #}
+{% endif %}
+```
+
+**Benefits**:
+- **Contextual Relevance**: Examples match user's actual needs
+- **No Hardcoded Data**: Eliminates static, outdated examples
+- **Scalability**: Works across all product categories
+- **Token Efficiency**: Only load examples when needed
+
+**Implementation Guide**: See `templates/sales_agent/modules/examples.jinja2` (lines 276-442) for comprehensive Python integration examples including vectorstore-based selection and caching strategies.
+
+**Best Practice**: Always use dynamic mode in production, skeleton mode for testing/development.
+
 ## 🐛 Troubleshooting
 
 ### Template Not Found Error
@@ -817,7 +863,8 @@ Lab01-MCP Team - 2025
 
 ---
 
-**Version**: 2.0.0 (Modular Architecture)
+**Version**: 2.1.0 (Modular Architecture + Dynamic Few-Shot)
 **Created**: 2025-10-11
-**Last Updated**: 2025-10-20
+**Last Updated**: 2025-10-21
 **Architecture**: Modular templates with 25+ booking modules, 8 sales modules, 3 general modules
+**New Features**: Dynamic few-shot examples with skeleton fallback (Google Gemini 2025 best practices)
