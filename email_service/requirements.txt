@@ -1,5 +1,11 @@
-# Email Service Dependencies
-# Production Requirements
+# ============================================================================
+# Email Service - Python Dependencies
+# ============================================================================
+# All dependencies (production + development) for the email service
+#
+# Installation:
+#   pip install -r requirements.txt
+# ============================================================================
 
 # Core Dependencies
 pydantic>=2.0
@@ -7,3 +13,32 @@ pydantic[email]>=2.0
 pydantic-settings>=2.0
 psycopg2-binary>=2.9.0
 jinja2>=3.1.0
+
+# ============================================================================
+# Development Dependencies
+# ============================================================================
+
+# Testing
+pytest>=7.0
+pytest-cov>=4.0
+pytest-asyncio>=0.21
+
+# Type Checking
+mypy>=1.0
+types-psycopg2
+
+# Code Quality
+black>=23.0
+ruff>=0.1.0
+isort>=5.12
+flake8>=6.0
+bandit>=1.7.0
+
+# Development Tools
+pre-commit>=3.0
+ipython>=8.0
+
+# Documentation
+sphinx>=6.0
+sphinx-rtd-theme>=1.2
+myst-parser>=1.0

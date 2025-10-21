@@ -1,13 +1,10 @@
 # ============================================================================
 # SmartBot MCP Client - Python Dependencies
 # ============================================================================
-# Production dependencies for the MCP client with Google GenAI integration
+# All dependencies (production + development) for the MCP client with Google GenAI integration
 #
 # Installation:
 #   pip install -r requirements.txt
-#
-# Development installation (includes dev tools):
-#   pip install -r requirements.txt -r requirements-dev.txt
 # ============================================================================
 
 # Core MCP SDK
@@ -35,3 +32,20 @@ python-dotenv>=1.0.0          # Load environment variables from .env file
 
 # Template Engine
 jinja2>=3.1.0                 # Template engine for PromptManager (modular prompts)
+
+# ============================================================================
+# Development Dependencies
+# ============================================================================
+
+# Code Quality
+ruff>=0.1.0                   # Fast Python linter and formatter
+mypy>=1.0.0                   # Static type checker
+
+# Testing
+pytest>=7.0.0                 # Testing framework
+pytest-asyncio>=0.21.0        # Async test support
+pytest-cov>=4.1.0             # Coverage plugin for pytest
+pytest-mock>=3.12.0           # Mocking support
+
+# Code Coverage
+coverage[toml]>=7.0.0         # Code coverage measurement

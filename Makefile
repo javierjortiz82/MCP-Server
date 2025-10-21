@@ -74,9 +74,7 @@ install:
 	@$(ACTIVATE) && $(PIP) install -r requirements.txt && \
 		$(PIP) install -r agent/requirements.txt && \
 		$(PIP) install -r client_mcp/requirements.txt && \
-		$(PIP) install -r client_mcp/requirements-dev.txt && \
 		$(PIP) install -r email_service/requirements.txt && \
-		$(PIP) install -r email_service/requirements-dev.txt && \
 		$(PIP) install -r mcp_server/requirements.txt || { echo "$(RED)Failed to install dependencies$(NC)"; exit 1; }
 	@echo "$(YELLOW)Installing code review tools...$(NC)"
 	@$(ACTIVATE) && $(PIP) install -q vulture bandit isort || { echo "$(RED)Failed to install review tools$(NC)"; exit 1; }
