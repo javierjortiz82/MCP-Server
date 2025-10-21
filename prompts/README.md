@@ -20,12 +20,13 @@ A modular, version-controlled prompt management system for the multi-agent AI ar
 
 ## 🎯 Overview
 
-The Prompt Management System provides a centralized, modular approach to managing AI agent prompts for Lab01-MCP's multi-agent system. It replaces hardcoded prompts with external Jinja2 templates and YAML configuration files, enabling:
+The Prompt Management System provides a centralized, **modular** approach to managing AI agent prompts for Lab01-MCP's multi-agent system. It replaces hardcoded prompts with external Jinja2 templates and YAML configuration files, enabling:
 
-- **Separation of Concerns**: Code vs content separation
-- **Version Control**: Multiple prompt versions coexist
-- **A/B Testing**: Compare different prompt strategies
-- **Database Integration**: Load dynamic data (services, hours)
+- **Modular Architecture**: 36+ reusable components across booking, sales, and general agents
+- **Separation of Concerns**: Code vs content separation with module-based organization
+- **Version Control**: Multiple prompt versions coexist with base/rollback copies
+- **A/B Testing**: Compare different prompt strategies and module combinations
+- **Database Integration**: Load dynamic data (services, hours) with intelligent caching
 - **Hot Reload**: Update prompts without redeployment
 
 ### Key Benefits
@@ -40,18 +41,31 @@ The Prompt Management System provides a centralized, modular approach to managin
 
 ```
 prompts/
-├── templates/           # Jinja2 prompt templates
-│   ├── router_classification.jinja2
-│   ├── booking_agent.jinja2
-│   ├── general_agent.jinja2
-│   └── sales_agent.jinja2
-├── data/               # YAML configuration data
-│   ├── services.yaml
-│   ├── business_info.yaml
-│   └── policies.yaml
-├── config/             # Version management
-│   └── prompt_versions.yaml
-└── README.md           # This file
+├── templates/                    # Jinja2 prompt templates (modular)
+│   ├── router_classification.jinja2  # Router agent (flat)
+│   ├── booking_agent/                # Booking agent (modular)
+│   │   ├── booking_agent.jinja2      # Main template
+│   │   ├── base.jinja2               # Base template
+│   │   └── modules/                  # 25+ reusable modules
+│   ├── general_agent/                # General agent (modular)
+│   │   ├── general_agent.jinja2      # Main template
+│   │   ├── base.jinja2               # Base template
+│   │   └── modules/                  # 3 reusable modules
+│   ├── sales_agent/                  # Sales agent (modular)
+│   │   ├── sales_agent.jinja2        # Main template
+│   │   ├── base.jinja2               # Base template
+│   │   └── modules/                  # 8 reusable modules
+│   └── base/                         # Base versions for rollback
+│       ├── router_classification.jinja2
+│       ├── booking_agent/
+│       ├── general_agent/
+│       └── sales_agent/
+├── data/                         # YAML configuration data
+│   ├── business_info.yaml        # Company info, hours, contact
+│   └── policies.yaml             # Payment, shipping, returns
+├── config/                       # Version management
+│   └── prompt_versions.yaml      # Active versions & A/B testing
+└── README.md                     # This file
 ```
 
 ### Components
@@ -62,9 +76,14 @@ prompts/
    - Integrates with database for dynamic data
 
 2. **Templates** (`templates/`)
-   - Jinja2 templates for each agent
-   - Support variables, loops, conditionals
-   - Clean separation of structure and content
+   - **Modular Architecture**: Templates organized by agent with reusable modules
+   - **Main Templates**: Orchestrate modules via `{% include %}` directives
+   - **Base Templates**: Foundation templates for inheritance
+   - **Module Library**: 36+ specialized components across all agents
+     - Booking Agent: 25+ modules (UX, validation, intelligence)
+     - Sales Agent: 8 modules (display, navigation, quality)
+     - General Agent: 3 modules (info, policies, style)
+   - Support variables, loops, conditionals, template inheritance
 
 3. **Data Files** (`data/`)
    - YAML files for configuration data
@@ -160,23 +179,76 @@ prompt = manager.get_booking_prompt(services=services)
 
 ## 📁 File Structure
 
-### Templates Directory
+### Templates Directory (Modular Architecture)
 
 ```
 templates/
-├── router_classification.jinja2    # Intent classification (40 lines)
-├── booking_agent.jinja2             # Booking/appointments (60 lines)
-├── general_agent.jinja2             # FAQ/general info (90 lines)
-└── sales_agent.jinja2               # Sales/products (600+ lines)
+├── router_classification.jinja2         # Intent classification (flat structure)
+│
+├── booking_agent/                       # Booking agent (MODULAR)
+│   ├── booking_agent.jinja2             # Main template (orchestrates modules)
+│   ├── base.jinja2                      # Base template (foundation)
+│   └── modules/                         # 25+ reusable components
+│       ├── confirmation_flow.jinja2
+│       ├── context_enrichment.jinja2
+│       ├── data_validation.jinja2
+│       ├── duplicate_booking_prevention.jinja2
+│       ├── enhanced_time_slot_selection.jinja2
+│       ├── error_recovery_strategies.jinja2
+│       ├── examples.jinja2
+│       ├── flexible_dates.jinja2
+│       ├── intelligent_recommendations.jinja2
+│       ├── intent_detection.jinja2
+│       ├── progressive_confirmation_flow.jinja2
+│       ├── reasoning_instructions.jinja2
+│       ├── reminder_protocols.jinja2
+│       ├── rescheduling_intelligence.jinja2
+│       ├── scope_guardrails.jinja2
+│       ├── smart_greeting.jinja2
+│       ├── time_selection_ux.jinja2
+│       ├── timezone_handling.jinja2
+│       ├── tool_usage_rules.jinja2
+│       ├── ux_best_practices.jinja2
+│       ├── ux_conversational.jinja2
+│       └── ... (25+ total modules)
+│
+├── general_agent/                       # General agent (MODULAR)
+│   ├── general_agent.jinja2             # Main template
+│   ├── base.jinja2                      # Base template
+│   └── modules/                         # 3 reusable components
+│       ├── business_info.jinja2
+│       ├── policies.jinja2
+│       └── response_style.jinja2
+│
+├── sales_agent/                         # Sales agent (MODULAR)
+│   ├── sales_agent.jinja2               # Main template
+│   ├── base.jinja2                      # Base template (legacy compatibility)
+│   └── modules/                         # 8 reusable components
+│       ├── agent_role.jinja2
+│       ├── anti_hallucination.jinja2
+│       ├── display_rules.jinja2
+│       ├── examples.jinja2
+│       ├── pagination_navigation.jinja2
+│       ├── quality_rules.jinja2
+│       ├── response_format.jinja2
+│       └── tools_context.jinja2
+│
+└── base/                                # Base versions (for rollback)
+    ├── router_classification.jinja2
+    ├── booking_agent/ (complete copy)
+    ├── general_agent/ (complete copy)
+    └── sales_agent/ (complete copy)
 ```
 
 ### Data Directory
 
 ```
 data/
-├── services.yaml        # Booking services (temporary, will load from DB)
-├── business_info.yaml   # Company info, hours, contact
-└── policies.yaml        # Payment, shipping, returns, warranty
+├── business_info.yaml   # Company info, hours, contact details
+└── policies.yaml        # Payment, shipping, returns, warranty policies
+
+Note: Services data is now loaded directly from the database (test.service_types)
+      via PromptManager.load_services_from_db() - See database_integration section
 ```
 
 ### Config Directory
@@ -272,22 +344,76 @@ active_versions:
   new_agent: v1.0
 ```
 
+### Working with Modular Templates
+
+The booking, general, and sales agents use a **modular architecture** where functionality is split into reusable modules.
+
+#### Structure
+
+```
+agent_name/
+├── agent_name.jinja2      # Main template (orchestrates modules)
+├── base.jinja2            # Base template (foundation)
+└── modules/               # Reusable components
+    ├── module1.jinja2
+    ├── module2.jinja2
+    └── ...
+```
+
+#### Including Modules
+
+Main templates use `{% include %}` to compose modules:
+
+```jinja2
+{# booking_agent/booking_agent.jinja2 #}
+{% include 'booking_agent/modules/scope_guardrails.jinja2' %}
+{% include 'booking_agent/modules/data_validation.jinja2' %}
+{% include 'booking_agent/modules/ux_conversational.jinja2' %}
+```
+
+#### Creating a New Module
+
+1. **Create module file**:
+```bash
+touch templates/booking_agent/modules/new_feature.jinja2
+```
+
+2. **Write module content**:
+```jinja2
+{# New Feature Module #}
+## NEW FEATURE
+
+Description of the new feature...
+```
+
+3. **Include in main template**:
+```jinja2
+{# In booking_agent/booking_agent.jinja2 #}
+{% include 'booking_agent/modules/new_feature.jinja2' %}
+```
+
+4. **Test**: Render the booking prompt and verify the module is included
+
+#### Module Best Practices
+
+- **Single Responsibility**: Each module handles ONE specific concern
+- **Self-Contained**: Modules should work independently
+- **Clear Names**: Use descriptive names (e.g., `duplicate_booking_prevention.jinja2`)
+- **Comments**: Document module purpose and dependencies
+- **Backup Copies**: Keep `.backup` versions before major changes
+
 ## 📄 Data Files
 
-### services.yaml
+### ~~services.yaml~~ (DEPRECATED)
 
-Defines booking services. **Note**: Will be replaced by database loading in Fase 3.
+**Status**: REMOVED - Services are now loaded directly from database (`test.service_types`)
 
-```yaml
-services:
-  - name: consultation
-    display_name: Consulta General
-    description: Consulta general de servicios disponibles
-    duration_minutes: 30
-    price: 50.00
-    color: "#4A90E2"
-    icon: chat
+The `services.yaml` file has been removed as services are now dynamically loaded from the database using:
+```python
+services = await manager.load_services_from_db(conn)
 ```
+
+See [Database Integration](#database-integration) section for details.
 
 ### business_info.yaml
 
@@ -332,12 +458,31 @@ Versions are controlled in `config/prompt_versions.yaml`:
 ```yaml
 active_versions:
   router: v1.0
-  booking: v1.0
-  general: v1.0
-  sales: v1.0
+  booking: v2.1      # Modular version with 25+ modules
+  general: v1.0      # Modular version with 3 modules
+  sales: v1.0        # Modular version with 8 modules
 ```
 
+### Base Templates (Rollback Safety)
+
+The `templates/base/` directory contains **stable copies** of all agent templates:
+
+```
+templates/base/
+├── router_classification.jinja2
+├── booking_agent/           # Complete copy with all modules
+├── general_agent/           # Complete copy with all modules
+└── sales_agent/             # Complete copy with all modules
+```
+
+**Purpose**:
+- **Rollback Safety**: Quickly revert to stable versions
+- **Comparison**: Compare current vs. base versions
+- **Testing**: Test new modules without breaking production
+
 ### Creating a New Version
+
+#### For Flat Templates (e.g., Router)
 
 1. **Copy existing template**:
 
@@ -354,9 +499,40 @@ active_versions:
   router: v2.0  # Changed from v1.0
 ```
 
-4. **Test**: System automatically loads v2.0
+#### For Modular Templates (e.g., Booking)
 
-5. **Rollback** (if needed): Change back to v1.0 in config
+1. **Backup current module** (optional):
+
+```bash
+cp templates/booking_agent/modules/scope_guardrails.jinja2 \
+   templates/booking_agent/modules/scope_guardrails.jinja2.backup
+```
+
+2. **Modify module** or create new module
+
+3. **Update main template** if needed (add/remove includes)
+
+4. **Test thoroughly**: Render booking prompt
+
+5. **Rollback** (if needed): Restore from `.backup` or `base/`
+
+### Rollback Strategies
+
+**Method 1: Restore from .backup**
+```bash
+cp templates/booking_agent/modules/scope_guardrails.jinja2.backup \
+   templates/booking_agent/modules/scope_guardrails.jinja2
+```
+
+**Method 2: Restore from base/**
+```bash
+cp -r templates/base/booking_agent/ templates/
+```
+
+**Method 3: Git revert**
+```bash
+git checkout HEAD~1 templates/booking_agent/modules/scope_guardrails.jinja2
+```
 
 ## 🧪 A/B Testing
 
@@ -406,9 +582,9 @@ logger.info(f"Used version: {version_used}")
 
 ### Loading Services from Database
 
-**Current State (Fase 2)**: Services loaded from `data/services.yaml`
+**Status**: ✅ ACTIVE - Services are now loaded directly from the database
 
-**Future State (Fase 3)**: Services loaded directly from database
+The system automatically loads services from `test.service_types` table with 15-minute caching.
 
 ```python
 import psycopg2
@@ -422,11 +598,11 @@ conn = psycopg2.connect(
     password="mcp_password"
 )
 
-# Load services
+# Load services (cached for 15 minutes)
 manager = PromptManager()
 services = await manager.load_services_from_db(conn)
 
-# Use in prompt
+# Use in booking prompt
 prompt = manager.get_booking_prompt(services=services)
 ```
 
@@ -436,12 +612,27 @@ In `config/prompt_versions.yaml`:
 
 ```yaml
 database_integration:
-  enabled: true
+  enabled: true                    # Database integration is active
+
+  # Services data (for booking agent)
   services:
-    source: database  # "database" or "yaml"
-    table: test.service_types
-    cache_ttl_minutes: 15
+    source: database               # Loading from database (not YAML)
+    table: test.service_types      # Database table
+    cache_ttl_minutes: 15          # Cache refresh interval
+
+  # Business hours (for general agent)
+  business_hours:
+    source: database               # Loading from database
+    table: test.business_hours
+    cache_ttl_minutes: 60
 ```
+
+### Benefits
+
+- **Always Up-to-Date**: Services reflect database changes within cache TTL
+- **Performance**: 15-minute cache reduces database queries
+- **Consistency**: Single source of truth (database)
+- **No YAML Maintenance**: Services managed via database UI/API
 
 ## ✅ Best Practices
 
@@ -527,9 +718,25 @@ prompt = manager.get_booking_prompt(
 
 **Solution**: Check YAML syntax
 ```bash
-# Validate YAML
-python3 -c "import yaml; yaml.safe_load(open('data/services.yaml'))"
+# Validate YAML files
+python3 -c "import yaml; yaml.safe_load(open('data/business_info.yaml'))"
+python3 -c "import yaml; yaml.safe_load(open('data/policies.yaml'))"
+python3 -c "import yaml; yaml.safe_load(open('config/prompt_versions.yaml'))"
 ```
+
+### Module Not Found Error
+
+**Error**: Module file not loading in modular templates
+
+**Solution**: Check module path and file existence
+```bash
+# Verify module exists
+ls prompts/templates/booking_agent/modules/
+ls prompts/templates/general_agent/modules/
+ls prompts/templates/sales_agent/modules/
+```
+
+**Note**: Some modules have `.backup` versions for rollback purposes
 
 ### Fallback Mode Active
 
@@ -543,17 +750,23 @@ use_templates: true  # Must be true
 
 ### Services Not Updating
 
-**Issue**: Services data not current
+**Issue**: Services data not reflecting recent database changes
 
 **Solution**:
-1. Check `data/services.yaml` is up-to-date
-2. Or enable database integration:
+1. **Check cache TTL**: Services are cached for 15 minutes
+   - Wait for cache to expire, or
+   - Restart the service to force cache refresh
+2. **Verify database connection**: Ensure connection to `test.service_types` table
+3. **Check configuration**:
 ```yaml
+# In config/prompt_versions.yaml
 database_integration:
   enabled: true
   services:
-    source: database
+    source: database  # Must be "database", not "yaml"
+    cache_ttl_minutes: 15
 ```
+4. **Manual refresh**: Force reload by restarting PromptManager
 
 ## 🤝 Contributing
 
@@ -604,6 +817,7 @@ Lab01-MCP Team - 2025
 
 ---
 
-**Version**: 1.0.0
+**Version**: 2.0.0 (Modular Architecture)
 **Created**: 2025-10-11
-**Last Updated**: 2025-10-11
+**Last Updated**: 2025-10-20
+**Architecture**: Modular templates with 25+ booking modules, 8 sales modules, 3 general modules
