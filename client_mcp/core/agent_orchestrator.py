@@ -376,7 +376,7 @@ class AgentOrchestrator:
                 from gemini_agent.utils.language_detector import detect_user_language
                 detected_language = detect_user_language(query)
             except Exception:
-                detected_language = "es"  # Default to Spanish
+                detected_language = "en"  # Default to English (international default)
 
         # Step 2: Route to specialized agent and save response
         try:
@@ -725,7 +725,7 @@ class AgentOrchestrator:
         query: str,
         *,
         include_history: bool = True,
-        language: str = "es",
+        language: str = "en",
     ) -> str:
         """Route query to sales agent (SalesAgent).
 
@@ -757,7 +757,7 @@ class AgentOrchestrator:
         *,
         customer_email: str | None = None,
         include_history: bool = True,
-        language: str = "es",
+        language: str = "en",
     ) -> str:
         """Route query to booking agent.
 
@@ -802,7 +802,7 @@ class AgentOrchestrator:
         query: str,
         *,
         include_history: bool = True,
-        language: str = "es",
+        language: str = "en",
     ) -> str:
         """Route query to general agent.
 
