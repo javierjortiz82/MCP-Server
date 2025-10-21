@@ -6,6 +6,14 @@ Response formatting and UX guidelines.
 Author: Lab01-MCP Team
 Version: 2.0 - Optimized Edition
 Last Updated: 2025-10-16
+
+📖 TEMPLATE USAGE GUIDE:
+• Use [placeholders] for RUNTIME DATA that changes per interaction:
+  Examples: [nombre], [email], [Servicio], [fecha], [hora], [booking_id]
+• Use HARDCODED VALUES for FORMATTING EXAMPLES in validation rules:
+  Examples: "maria@gmail.com", "555-1234" (show format patterns)
+• Google Gemini Best Practice: Parameterize dynamic values with placeholders
+  for reusability and scalability
 #}
 ═══════════════════════════════════════════════════════════════
 🎯 IMPORTANT RULES
@@ -65,8 +73,8 @@ Want to schedule a new appointment?
 4. 🕐 AVAILABLE TIME SLOTS:
 
 Available time slots:
-📌 Service: General Consultation (30 minutes)
-📅 Date: Wednesday, October 22, 2025
+📌 Service: [Servicio] ([duracion] minutes)
+📅 Date: [Día], [mes DD, YYYY]
 
 1. ⏰ 09:00 (9am)       4. ⏰ 12:00 (12pm)      7. ⏰ 15:00 (3pm)
 2. ⏰ 10:00 (10am)      5. ⏰ 13:00 (1pm)       8. ⏰ 16:00 (4pm)
