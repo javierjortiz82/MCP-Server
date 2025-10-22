@@ -80,18 +80,18 @@ def register_tools():
 
         ** WHEN TO USE THIS TOOL **:
         ✅ Client explicitly mentions a product code/SKU
-        ✅ Query contains patterns like: "SKU XXX", "código YYY", "producto ZZZ-####"
-        ✅ Client asks for "el producto [CODE]"
+        ✅ Query contains patterns like: "SKU XXX", "code YYY", "product ZZZ-####"
+        ✅ Client asks for "the product [CODE]" or "product [CODE]"
 
         ** EXAMPLES OF VALID USE **:
-        - "quiero el TOY-0018"
-        - "busco el producto COMP-0038"
-        - "dame información del SKU HOME-0007"
-        - "producto AUTO-0016"
+        - "I want the TOY-0018"
+        - "looking for product COMP-0038"
+        - "give me info about SKU HOME-0007"
+        - "product AUTO-0016"
 
         ** DON'T USE WHEN **:
-        ❌ Client mentions product name without code ("busco laptop")
-        ❌ Query is conceptual/need-based ("algo para limpiar")
+        ❌ Client mentions product name without code ("looking for laptop")
+        ❌ Query is conceptual/need-based ("something to clean")
         ❌ Query has typos in SKU (use fuzzy_search_smart instead)
 
         ** PERFORMANCE **: Ultra-fast (~9ms average) - Direct database lookup
@@ -175,21 +175,21 @@ def register_tools():
         ** WHEN TO USE THIS TOOL **:
         ✅ Client describes a NEED or BENEFIT (not a specific product name)
         ✅ Conceptual/abstract queries about PURPOSE or USE CASE
-        ✅ Queries with patterns: "algo para...", "necesito para...", "quiero para..."
+        ✅ Queries with patterns: "something for...", "I need to...", "I want to..."
         ✅ Client describes what they want to ACHIEVE, not what they want to BUY
 
         ** EXAMPLES OF VALID USE **:
-        - "algo para limpiar mi casa automáticamente"
-        - "necesito mejorar mi computadora, quiero más velocidad"
-        - "proteger mi celular de caídas"
-        - "trabajar desde casa profesionalmente"
-        - "hacer ejercicio en casa"
-        - "algo para dormir mejor"
-        - "iluminar mi habitación de forma inteligente"
+        - "something to automatically clean my house"
+        - "I need to improve my computer, I want more speed"
+        - "protect my phone from drops"
+        - "work from home professionally"
+        - "exercise at home"
+        - "something to sleep better"
+        - "light my room intelligently"
 
         ** DON'T USE WHEN **:
-        ❌ Client mentions specific product name ("busco laptop", "quiero teclado")
-        ❌ Client asks about a category ("productos de gaming", "qué hay en hogar")
+        ❌ Client mentions specific product name ("looking for laptop", "want keyboard")
+        ❌ Client asks about a category ("gaming products", "what's in home")
         ❌ Query has typos in product names (use fuzzy_search_smart)
         ❌ Client mentions exact SKU/code (use fetch_by_sku)
 
@@ -197,7 +197,7 @@ def register_tools():
         - Uses Google Gemini embedding-001 to convert query → 1536-dim vector
         - Compares semantic meaning (not exact words) with product embeddings
         - Finds products by WHAT THEY DO, not just what they're called
-        - Example: "limpiar automáticamente" → finds robot vacuums (even without word "robot")
+        - Example: "clean automatically" → finds robot vacuums (even without word "robot")
 
         ** PERFORMANCE **:
         - Average: ~490ms (slower than fuzzy_search_smart due to AI embedding generation)
@@ -245,9 +245,9 @@ def register_tools():
         query: str,
         fields: list[str] | None = None,
         limit: int = 20,
-        strict_threshold: float = 0.3,
-        word_threshold: float = 0.4,
-        fallback_threshold: float = 0.2,
+        strict_threshold: float = 0.25,
+        word_threshold: float = 0.35,
+        fallback_threshold: float = 0.15,
         name_weight: float = 2.0,
         description_weight: float = 1.0,
         category_weight: float = 1.5,
@@ -258,46 +258,46 @@ def register_tools():
 
         ** WHEN TO USE THIS TOOL **:
         ✅ Client mentions SPECIFIC PRODUCT NAME (even with typos)
-        ✅ Client asks about PRODUCT CATEGORY ("qué hay en hogar", "productos de gaming")
+        ✅ Client asks about PRODUCT CATEGORY ("what's in home", "gaming products")
         ✅ Query contains TYPOS or SPELLING ERRORS in product names
         ✅ Client wants to browse a category without specific needs
 
         ** EXAMPLES OF VALID USE **:
         Product name searches:
-        - "busco un teclado mecánico"
-        - "necesito auriculares inalámbricos"
-        - "quiero una silla de oficina"
-        - "auriculars de estudio" (with typo 'auriculars')
-        - "roboot aspirador" (with typo 'roboot')
-        - "chaquetta impermeable" (with typo 'chaquetta')
+        - "looking for mechanical keyboard"
+        - "I need wireless headphones"
+        - "I want an office chair"
+        - "studio headphons" (with typo 'headphons')
+        - "robbot vacuum" (with typo 'robbot')
+        - "waterprof jacket" (with typo 'waterprof')
 
         Category searches (NEW - improved from 40% → 100% success rate):
-        - "qué hay en hogar"
-        - "productos de computación"
-        - "tienes cosas de deportes"
-        - "qué vendes de audio"
-        - "muéstrame productos de cocina"
-        - "productos para oficina"
+        - "what's in home"
+        - "computing products"
+        - "do you have sports stuff"
+        - "what do you sell in audio"
+        - "show me kitchen products"
+        - "office products"
 
         ** DON'T USE WHEN **:
-        ❌ Query is conceptual/need-based ("algo para limpiar", "trabajar desde casa")
+        ❌ Query is conceptual/need-based ("something to clean", "work from home")
         ❌ Client mentions exact SKU code (use fetch_by_sku)
         ❌ Query describes benefits/purposes rather than product names (use search_products)
 
         ** HOW IT WORKS - 4-TIER FALLBACK STRATEGY **:
-        1. Tier 1 (strict_threshold=0.3): Standard trigram similarity search
-        2. Tier 2 (word_threshold=0.4): Word similarity for better partial/typo matching (weighted)
-        2.5. Tier 2.5 (word_threshold=0.4): Token-based search (splits query into individual words)
-        3. Tier 3 (fallback_threshold=0.2): Relaxed threshold as final attempt
+        1. Tier 1 (strict_threshold=0.25): Standard trigram similarity search
+        2. Tier 2 (word_threshold=0.35): Word similarity for better partial/typo matching (weighted)
+        2.5. Tier 2.5 (word_threshold=0.35): Token-based search (splits query into individual words)
+        3. Tier 3 (fallback_threshold=0.15): Relaxed threshold as final attempt
 
         Returns results from first successful tier. Each result includes 'search_tier' field
         showing which tier succeeded: 'standard', 'word_similarity', 'token_based', or 'fallback'.
 
         ** TIER 2.5 EXPLANATION (NEW 2025-10-03) **:
         When multi-word queries fail in Tier 2 due to irrelevant terms diluting similarity:
-        - Example: "sartenes electricos" → whole phrase similarity = 0.200 (fails threshold 0.4)
-        - Tier 2.5 splits into tokens: ["sartenes", "electricos"]
-        - Evaluates each token separately: "sartenes" → 0.444 ✅ (passes threshold)
+        - Example: "electric pans" → whole phrase similarity = 0.200 (fails threshold 0.4)
+        - Tier 2.5 splits into tokens: ["electric", "pans"]
+        - Evaluates each token separately: "pans" → 0.444 ✅ (passes threshold)
         - Returns products matching ANY token with highest individual token score
         - This solves the problem where users add modifiers that don't exist in product names
 
@@ -307,8 +307,8 @@ def register_tools():
         - Second token: weight 0.5 (medium priority - typically a modifier)
         - Third+ tokens: weight 0.33, 0.25... (decreasing priority)
         - Formula: position_weight = 1.0 / (position + 1)
-        - Example: "sartenes electricos" → "sartenes" (pos 0, weight 1.0) prioritized over
-          "electricos" (pos 1, weight 0.5), even if "electricos" has higher raw similarity
+        - Example: "electric pans" → "pans" (pos 0, weight 1.0) prioritized over
+          "electric" (pos 1, weight 0.5), even if "electric" has higher raw similarity
         - This prevents irrelevant modifiers from outranking the main search term
 
         ** KEY IMPROVEMENT (2025-10-03) **:
@@ -318,8 +318,8 @@ def register_tools():
 
         ** WEIGHTED SCORING (NEW 2025-10-03) **:
         Tier 2 now uses weighted scoring to prioritize name matches over description matches.
-        This fixes issues like "sartén eléctrico" returning "Escritorio Ajustable" (has "eléctrico"
-        in description) before "Sartén Antiadherente" (has "sartén" in name).
+        This fixes issues like "electric pan" returning "Adjustable Desk" (has "electric"
+        in description) before "Non-Stick Pan" (has "pan" in name).
 
         Default weights:
         - name: 2.0 (highest priority - product name is most important)
@@ -334,8 +334,8 @@ def register_tools():
         - Weighted scoring adds <1ms overhead
 
         ** ACCENT & CASE INSENSITIVE **:
-        - "camara" matches "cámara"
-        - "LAPTOP" matches "laptop"
+        - "camera" matches "cámara" (accent-insensitive)
+        - "LAPTOP" matches "laptop" (case-insensitive)
         - Uses normalize_text() function: unaccent + lowercase
 
         Args:
@@ -346,9 +346,12 @@ def register_tools():
             limit: Maximum results to return (default: 20, max recommended: 50)
                    Balances token efficiency (~800 tokens for 20 products) with UX
                    (enables 5 pages of 4 products). Follows API best practices 2025.
-            strict_threshold: Tier 1 similarity threshold (default: 0.3 = 30% match)
-            word_threshold: Tier 2 word similarity threshold (default: 0.4 = 40% match)
-            fallback_threshold: Tier 3 relaxed threshold (default: 0.2 = 20% match)
+            strict_threshold: Tier 1 similarity threshold (default: 0.25 = 25% match)
+                             Lowered from 0.30 to catch more real-world product names
+            word_threshold: Tier 2 word similarity threshold (default: 0.35 = 35% match)
+                           Lowered from 0.40 for better partial/typo matching
+            fallback_threshold: Tier 3 relaxed threshold (default: 0.15 = 15% match)
+                               Lowered from 0.20 to ensure broad fallback coverage
             name_weight: Weight for name field (default: 2.0 - prioritize name matches)
             description_weight: Weight for description field (default: 1.0)
             category_weight: Weight for category field (default: 1.5)

@@ -1,32 +1,196 @@
 {#
 Sales Agent - Tools Context Module (English)
 ==============================================
-Guidelines for using MCP tools for product search.
+Complete guide to MCP product search tools with real tool names and parameters.
+Aligned with actual tool implementations in product_handlers.py
 
 Author: Lab01-MCP Team
 Created: 2025-10-13
-Version: 1.0
+Updated: 2025-10-21 (Real tool names + improved thresholds)
+Version: 2.0
 #}
-AVAILABLE TOOLS:
 
-You have access to real-time product search tools:
+## 🔧 AVAILABLE MCP TOOLS
 
-1. **search_products** - Main product search
-   - Use when customer asks about products, needs, wants
-   - Parameters: category, search_term, filters
-   - Always search DB first before suggesting anything
+You have access to **3 real-time product search tools** from the MCP server:
 
-2. **get_product_details** - Detailed product information
-   - SKU, specifications, pricing, availability
-   - Use when customer needs in-depth information
+### **1. fuzzy_search_smart** - Intelligent Typo-Tolerant Search (Primary Tool)
 
-3. **list_categories** - Available product categories
-   - Use when customer unsure about what exists
-   - Helps guide exploration
+**When to use:**
+✅ Customer mentions specific product NAME ("laptop", "keyboard", "headphones")
+✅ Customer asks about CATEGORY ("what's in home", "gaming products")
+✅ Query contains TYPOS or misspellings ("laptp", "keybord")
+✅ Browse products in a category
 
-SEARCH STRATEGY:
-- Try multiple search terms if first fails
-- Use filters: price range, features, brand
-- Show top 3-5 relevant results
-- Always provide specific product data from tools
-- Never invent product information
+**How it works:**
+- PostgreSQL trigram similarity (pg_trgm) with 4-tier fallback
+- Tier 1: Standard similarity (threshold: 0.25)
+- Tier 2: Word similarity with weighted scoring (threshold: 0.35)
+- Tier 2.5: Token-based search (splits multi-word queries)
+- Tier 3: Relaxed fallback (threshold: 0.15)
+- Ultra-fast: ~10ms average, 45x faster than semantic search
+
+**Parameters:**
+```python
+fuzzy_search_smart(
+    query: str,              # e.g., "wireless headphones", "laptops"
+    fields: list = ["name", "description", "category"],  # searchable fields
+    limit: int = 20,         # max results (default: 20)
+    strict_threshold: float = 0.25,    # Tier 1 threshold (lowered from 0.30)
+    word_threshold: float = 0.35,      # Tier 2 threshold (lowered from 0.40)
+    fallback_threshold: float = 0.15,  # Tier 3 threshold (lowered from 0.20)
+)
+```
+
+**Examples:**
+- "looking for mechanical keyboard" → Finds keyboards
+- "what's in home" → Lists home category products
+- "studio headphons" (typo) → Still finds headphones
+
+---
+
+### **2. search_products** - Semantic AI Search (For Conceptual Queries)
+
+**When to use:**
+✅ Customer describes a NEED or BENEFIT ("something to clean automatically")
+✅ Conceptual/abstract queries about PURPOSE ("work from home professionally")
+✅ Queries like "something for...", "I need to...", "I want to..."
+✅ Customer describes what they want to ACHIEVE, not what they want to BUY
+
+**How it works:**
+- Google Gemini embedding-001 (1536-dim vectors)
+- PostgreSQL pgvector extension (L2 distance)
+- Finds products by WHAT THEY DO, not just their names
+- Example: "clean automatically" → finds robot vacuums (without word "robot")
+
+**Performance:**
+- Average: ~490ms (slower due to AI embedding generation)
+- Use when semantic understanding is critical
+
+**Parameters:**
+```python
+search_products(
+    query: str,  # Conceptual description, e.g., "protect phone from drops"
+    k: int = 5   # Number of results (default: 5, max recommended: 10)
+)
+```
+
+**Examples:**
+- "something to automatically clean my house" → Robot vacuums
+- "I need to improve my computer, I want more speed" → RAM, SSDs
+- "work from home professionally" → Desks, chairs, monitors
+
+**DON'T use when:**
+❌ Customer mentions specific product name ("laptop") → use fuzzy_search_smart
+❌ Query has typos → use fuzzy_search_smart
+
+---
+
+### **3. fetch_by_sku** - Exact SKU Lookup (For Product Codes)
+
+**When to use:**
+✅ Customer explicitly mentions a product code/SKU
+✅ Query contains patterns: "SKU XXX", "code YYY", "product ZZZ-####"
+✅ Customer asks for "the product [CODE]"
+
+**How it works:**
+- Direct database lookup by exact SKU code
+- Ultra-fast: ~9ms average (indexed primary key lookup)
+- Case-sensitive SKU matching
+
+**Parameters:**
+```python
+fetch_by_sku(
+    sku: str  # Exact SKU code, e.g., "COMP-0038", "TOY-0018"
+)
+```
+
+**Examples:**
+- "I want the TOY-0018"
+- "looking for product COMP-0038"
+- "give me info about SKU HOME-0007"
+
+**DON'T use when:**
+❌ SKU has typos → use fuzzy_search_smart
+❌ Customer doesn't mention a code → use fuzzy_search_smart or search_products
+
+---
+
+## 🎯 TOOL SELECTION STRATEGY
+
+**Step 1: Analyze the query type**
+
+```
+IF query contains exact SKU pattern (e.g., "XXX-####"):
+   → Use fetch_by_sku
+
+ELSE IF query is conceptual/need-based ("something to...", "I need to..."):
+   → Use search_products
+
+ELSE (specific product name or category):
+   → Use fuzzy_search_smart
+```
+
+**Step 2: Follow the Intelligent Search Strategy**
+
+Reference: `intelligent_search_strategy.jinja2` module for complete multi-tier fallback approach.
+
+**Key principles:**
+- ✅ Try 2-3 different strategies if first search yields 0-2 results
+- ✅ Use category expansion when needed
+- ✅ Switch tools if initial tool doesn't work well
+- ❌ Never accept 0-2 results without trying alternatives
+- ❌ Never invent products (see anti_hallucination.jinja2)
+
+**Step 3: Present results intelligently**
+
+- Show 4 products at a time (see pagination_navigation.jinja2)
+- Provide context: "Found 12 laptops, showing first 4"
+- Enable pagination with "next" / "more" commands
+
+---
+
+## 📊 TOOL PERFORMANCE COMPARISON
+
+| Tool | Speed | Best For | Accuracy |
+|------|-------|----------|----------|
+| **fetch_by_sku** | ~9ms | Exact SKU lookups | 100% |
+| **fuzzy_search_smart** | ~10ms | Product names, categories, typos | 95%+ |
+| **search_products** | ~490ms | Conceptual/need-based queries | 100% |
+
+---
+
+## ⚡ QUICK REFERENCE
+
+**Product name queries:**
+```
+"laptop" → fuzzy_search_smart("laptop", limit=20)
+"wireless headphones" → fuzzy_search_smart("wireless headphones", limit=20)
+```
+
+**Category queries:**
+```
+"what's in home" → fuzzy_search_smart("home", fields=["category"], limit=20)
+"gaming products" → fuzzy_search_smart("gaming", limit=20)
+```
+
+**Conceptual queries:**
+```
+"something to clean automatically" → search_products("clean automatically", k=5)
+"work from home" → search_products("work from home professionally", k=5)
+```
+
+**SKU queries:**
+```
+"product COMP-0038" → fetch_by_sku("COMP-0038")
+```
+
+---
+
+## 🚨 CRITICAL RULES
+
+1. **Always use real tool responses** - Never invent product data
+2. **Respect result limits** - If tool returns 4 products, show only 4
+3. **Try multiple strategies** - Don't give up after one failed search
+4. **Provide accurate SKUs** - SKUs must match tool responses exactly
+5. **Language-agnostic** - Tools work in any language, respond in customer's language

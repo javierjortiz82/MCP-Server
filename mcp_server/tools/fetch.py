@@ -15,9 +15,9 @@ def fetch_by_sku(sku: str) -> dict | None:
     mentions a product code.
 
     Use cases:
-    - "quiero el TOY-0018"
-    - "busco el producto COMP-0038"
-    - "dame información del SKU HOME-0007"
+    - "I want the TOY-0018"
+    - "looking for product COMP-0038"
+    - "give me info about SKU HOME-0007"
 
     Performance: ~9ms average (direct indexed lookup)
 
@@ -35,16 +35,16 @@ def fetch_by_sku(sku: str) -> dict | None:
         >>> fetch_by_sku("INVALID-SKU")
         None
     """
-    logger.debug("Buscando producto por SKU: %s", sku)
+    logger.debug("Searching product by SKU: %s", sku)
     sql = (
         f"SELECT id, sku, name, description, category, brand, tags, color, size, price "
         f"FROM {settings.SCHEMA_NAME}.products WHERE sku = %s"
     )
     result = fetchone(sql, (sku,))
     if result:
-        logger.debug("Producto encontrado por SKU %s: ID=%s", sku, result.get("id"))
+        logger.debug("Product found by SKU %s: ID=%s", sku, result.get("id"))
     else:
-        logger.warning("No se encontró producto con SKU: %s", sku)
+        logger.warning("Product not found with SKU: %s", sku)
     return result
 
 
@@ -71,14 +71,14 @@ def fetch_by_id(product_id: int) -> dict | None:
         >>> fetch_by_id(9999)
         None
     """
-    logger.debug("Buscando producto por ID: %s", product_id)
+    logger.debug("Searching product by ID: %s", product_id)
     sql = (
         f"SELECT id, sku, name, description, category, brand, tags, color, size, price "
         f"FROM {settings.SCHEMA_NAME}.products WHERE id = %s"
     )
     result = fetchone(sql, (product_id,))
     if result:
-        logger.debug("Producto encontrado por ID %s: SKU=%s", product_id, result.get("sku"))
+        logger.debug("Product found by ID %s: SKU=%s", product_id, result.get("sku"))
     else:
-        logger.warning("No se encontró producto con ID: %s", product_id)
+        logger.warning("Product not found with ID: %s", product_id)
     return result
