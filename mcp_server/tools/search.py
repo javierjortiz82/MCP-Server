@@ -21,9 +21,9 @@ def search_products(query: str, k: int = 5) -> list[dict]:
     - Returns products ordered by semantic similarity
 
     Use cases:
-    - Conceptual queries: "algo para limpiar automáticamente"
-    - Need-based searches: "trabajar desde casa profesionalmente"
-    - Benefit/purpose queries: "proteger mi celular de caídas"
+    - Conceptual queries: "something to automatically clean"
+    - Need-based searches: "work from home professionally"
+    - Benefit/purpose queries: "protect my phone from drops"
 
     Performance: ~490ms average (embedding generation + vector search)
 
@@ -39,15 +39,15 @@ def search_products(query: str, k: int = 5) -> list[dict]:
     Raises:
         Exception: If embedding generation fails or database error occurs
     """
-    logger.info("Iniciando búsqueda vectorial para query: '%s' (k=%d)", query, k)
+    logger.info("Starting vector search for query: '%s' (k=%d)", query, k)
 
     vectors = emb_client.embed([query])
     if not vectors:
-        logger.warning("No se pudieron generar embeddings para la query")
+        logger.warning("Could not generate embeddings for query")
         return []
 
     qvec = vectors[0]
-    logger.debug("Vector generado para query (dimensión: %d)", len(qvec))
+    logger.debug("Vector generated for query (dimension: %d)", len(qvec))
 
     sql = (
         f"SELECT id, sku, name, description, category, brand, tags, color, size, price,"
@@ -59,17 +59,17 @@ def search_products(query: str, k: int = 5) -> list[dict]:
     )
 
     try:
-        # Convertir lista de floats a string formato pgvector
+        # Convert float list to pgvector string format
         qvec_str = "[" + ",".join(map(str, qvec)) + "]"
 
-        # Pasamos qvec como string dos veces
+        # Pass qvec as string twice
         rows = fetchall(sql, (qvec_str, qvec_str, k))
-        logger.info("Búsqueda vectorial completada: %d resultados encontrados", len(rows))
+        logger.info("Vector search completed: %d results found", len(rows))
 
-        # No exponer embedding en resultados
+        # Don't expose embedding in results
         for r in rows:
             r.pop("distance", None)
         return rows
     except Exception as e:
-        logger.error("Error en búsqueda vectorial: %s", e)
+        logger.error("Error in vector search: %s", e)
         raise

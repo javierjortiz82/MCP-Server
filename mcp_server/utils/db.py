@@ -37,20 +37,20 @@ def init_db(minconn: int = 1, maxconn: int = 5) -> None:
     """
     global _pool
     if _pool is None:
-        logger.info("Inicializando pool de conexiones a base de datos...")
+        logger.info("Initializing database connection pool...")
         _pool = SimpleConnectionPool(minconn, maxconn, dsn=settings.DATABASE_URL)
         # register vector adapter on a temporary connection
         conn = _pool.getconn()
         try:
             register_vector(conn)
             conn.commit()
-            logger.info("Tipo vector registrado correctamente en PostgreSQL")
+            logger.info("Vector type successfully registered in PostgreSQL")
         except Exception as e:
-            logger.error("Error al registrar tipo vector: %s", e)
+            logger.error("Error registering vector type: %s", e)
             raise
         finally:
             _pool.putconn(conn)
-        logger.info("Pool de conexiones inicializado exitosamente")
+        logger.info("Database connection pool initialized successfully")
 
 
 @contextmanager

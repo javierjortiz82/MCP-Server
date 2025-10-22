@@ -38,7 +38,7 @@ class EmbeddingsClient:
             ValueError: If GOOGLE_API_KEY is not set in settings
         """
         logger.info(
-            "Inicializando cliente de embeddings con modelo: %s",
+            "Initializing embeddings client with model: %s",
             settings.EMBEDDING_MODEL,
         )
         self._client = genai.Client(api_key=settings.GOOGLE_API_KEY)
@@ -76,28 +76,28 @@ class EmbeddingsClient:
             - Model: gemini-embedding-001 (supports Spanish and English)
         """
         if not texts:
-            logger.debug("Lista de textos vacía, retornando lista vacía")
+            logger.debug("Empty text list, returning empty list")
             return []
 
-        logger.debug("Generando embeddings para %d textos", len(texts))
+        logger.debug("Generating embeddings for %d texts", len(texts))
         try:
-            # Usar la API correcta de Google GenAI 2025
+            # Use the correct Google GenAI 2025 API
             resp = self._client.models.embed_content(
                 model=self._model,
                 contents=texts,
                 config=types.EmbedContentConfig(output_dimensionality=1536),
             )
-            # Extraer embeddings de la respuesta
+            # Extract embeddings from response
             if resp.embeddings is None:
-                logger.warning("Respuesta sin embeddings")
+                logger.warning("Response without embeddings")
                 return []
             vectors: list[list[float]] = [
                 list(embedding.values) for embedding in resp.embeddings if embedding.values
             ]
-            logger.debug("Embeddings generados exitosamente: %d vectores", len(vectors))
+            logger.debug("Embeddings generated successfully: %d vectors", len(vectors))
             return vectors
         except Exception as e:
-            logger.error("Error al generar embeddings: %s", e)
+            logger.error("Error generating embeddings: %s", e)
             raise
 
 
