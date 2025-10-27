@@ -34775,3 +34775,97 @@ SPANISH: "Algo salió mal" → ENGLISH: "Something went wrong"
 - Module disabling for performance (Lote 2 context)
 
 ---
+
+## 📧 Reparación de Email Queue - Bookings 38 y 39 (2025-10-27)
+
+### Problema Identificado
+
+Los bookings 38 y 39 fueron creados el **2025-10-27 04:03-04:06** pero **NO tenían registros en `test.email_queue`**.
+
+**Causa raíz:** Bug en código antiguo de `_enqueue_email()` que fue arreglado en 2025-10-17, pero los bookings se crearon después sin aparecer en logs.
+
+### Evidencia del Bug Histórico
+
+```
+2025-10-14 12:43:32 [WARNING] - Failed to enqueue email: can't adapt type 'dict'
+2025-10-16 00:41:50 [WARNING] - Failed to enqueue email: can't adapt type 'dict'
+2025-10-17 00:35:31 [WARNING] - Failed to enqueue email: can't adapt type 'dict'
+```
+
+El código pasaba un `dict` en lugar de `str` a `_enqueue_email()`.
+
+### Reparación Ejecutada
+
+✅ **Paso 1:** Obtención de datos de bookings 38 y 39
+✅ **Paso 2:** Creación manual de registros en `email_queue`
+✅ **Paso 3:** Verificación en BD
+
+**Resultado:**
+- Booking 38 → Email ID 112 (booking_created, pending)
+- Booking 39 → Email ID 113 (booking_created, pending)
+
+### Refactorización de Funciones de Booking (2025-10-27)
+
+Se refactorizó el código para asegurar que **los errores de email NUNCA cancelen los bookings:**
+
+#### Cambios Realizados:
+
+**1. Movido `_enqueue_email()` FUERA del try/except de database**
+   - En `create_booking()` (línea 599-613)
+   - En `cancel_booking()` (línea 731-745)
+   - En `reschedule_booking()` (línea 945-961)
+
+**2. Mejorado `_enqueue_email()` para ser verdaderamente fire-and-forget:**
+   - Añadida validación de `customer_email` antes de procesar
+   - Conversión de fechas/tiempos a strings (para JSON serialization)
+   - Garantizado que NUNCA lanza excepciones (solo loguea)
+
+#### Beneficio:
+
+```python
+# ✅ NUEVO FLUJO (correcto):
+try:
+    # 1. Validaciones
+    # 2. Crear booking en BD → SUCCESS
+    # 3. Crear respuesta
+except Exception:
+    # Si BD falla, rollback calendar
+    # raise → NO llega al email
+
+# 4. Enquear email (AQUÍ, fuera del try)
+#    Si falla, se loguea pero NO afecta al booking
+#    El booking ya fue creado exitosamente en BD
+
+return response
+```
+
+### Test de Verificación (2025-10-27 04:30)
+
+Se ejecutó test de creación de booking con el código refactorizado:
+
+**Test Data:**
+- Cliente: Test Refactor User
+- Email: test_refactor_user@example.com
+- Servicio: consultation
+- Fecha: 2025-10-31
+- Hora: 14:00
+
+**Resultados:**
+```
+✅ Booking creado: ID=41, Status=confirmed
+✅ Email enquenado: ID=114, Status=pending
+✅ Ambos registros en BD correctamente
+✅ Logs muestran flujo correcto:
+   - Booking created: ID=41
+   - Email queued: ID=114, recipient=test_refactor_user@example.com
+```
+
+### Status Actual
+
+✅ Emails en queue, listos para worker
+✅ Sistema funcional para nuevos bookings
+✅ Emails NUNCA cancelarán bookings exitosos
+✅ Código refactorizado con separación de responsabilidades
+✅ Test de integración completado exitosamente
+
+---

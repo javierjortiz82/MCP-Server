@@ -359,11 +359,18 @@ def _enqueue_email(
         old_time: Old time for rescheduled bookings (optional).
 
     Note:
-        This is a fire-and-forget operation. Failures are logged but don't
-        block booking operations.
+        This is a FIRE-AND-FORGET operation. NEVER raises exceptions.
+        Failures are logged but don't block booking operations.
+        ✅ Email failures will NOT cause booking operations to fail.
     """
+    # Guard clauses: exit early if email not available
     if not EMAIL_QUEUE_AVAILABLE or not EmailQueueManager:
         logger.debug("Email queue not available - skipping email notification")
+        return
+
+    # Validate required fields
+    if not booking_data or "customer_email" not in booking_data:
+        logger.warning(f"❌ Cannot enqueue {email_type} email: missing customer_email in booking_data")
         return
 
     try:
@@ -374,8 +381,8 @@ def _enqueue_email(
             "customer_name": booking_data.get("customer_name", t("booking.defaults.customer_name", lang="en")),
             "booking_id": booking_data.get("booking_id") or booking_data.get("id"),
             "service_type": booking_data.get("service_type", t("booking.defaults.service_type", lang="en")),
-            "booking_date": booking_data.get("booking_date", ""),
-            "booking_time": booking_data.get("booking_time", ""),
+            "booking_date": str(booking_data.get("booking_date", "")),  # Ensure string
+            "booking_time": str(booking_data.get("booking_time", "")),  # Ensure string
             "duration_minutes": booking_data.get("duration_minutes", 60),
             "google_calendar_link": calendar_link,
         }
@@ -386,8 +393,8 @@ def _enqueue_email(
         elif email_type == "booking_rescheduled":
             context["old_date"] = old_date
             context["old_time"] = old_time
-            context["new_date"] = booking_data.get("booking_date")
-            context["new_time"] = booking_data.get("booking_time")
+            context["new_date"] = str(booking_data.get("booking_date", ""))  # Ensure string
+            context["new_time"] = str(booking_data.get("booking_time", ""))  # Ensure string
             # Ensure duration_minutes is included for template rendering
             if "duration_minutes" not in context:
                 context["duration_minutes"] = booking_data.get("duration_minutes", 60)
@@ -410,13 +417,14 @@ def _enqueue_email(
             priority=5,
         )
 
-        logger.info(f"📧 Email queued: type={email_type}, email_id={email_id}, template_context_keys={list(context.keys())}")
+        logger.info(f"📧 Email queued: type={email_type}, email_id={email_id}, recipient={booking_data['customer_email']}")
 
     except Exception as exc:
-        logger.error(f"❌ Email notification failed: {exc}")
-        logger.debug(f"Email details - type: {email_type}, recipient: {booking_data.get('customer_email')}")
-        # Don't raise - email is optional, shouldn't block booking
-        # Note: Booking operation completed successfully, email delivery only failed
+        logger.error(f"❌ Email notification failed: {exc}", exc_info=True)
+        logger.debug(f"Failed email details - type: {email_type}, recipient: {booking_data.get('customer_email')}")
+        # ✅ GUARANTEED: Never raises exceptions
+        # Email is optional and should not block booking operations
+        # Booking operation completed successfully regardless of email status
 
 
 # ============================================================================
@@ -577,23 +585,6 @@ def create_booking(
             "created_at": db_result["created_at"],
         }
 
-        # Enqueue confirmation email
-        _enqueue_email(
-            email_type=EmailNotificationType.BOOKING_CREATED.value,
-            booking_data={
-                "booking_id": booking_id,
-                "customer_name": customer_name,
-                "customer_email": customer_email,
-                "service_type": service_type,
-                "booking_date": booking_date,
-                "booking_time": booking_time,
-                "duration_minutes": duration_minutes,
-            },
-            calendar_link=calendar_link,
-        )
-
-        return booking_response
-
     except Exception as exc:
         logger.exception(f"Failed to create booking in database: {exc}")
 
@@ -609,6 +600,25 @@ def create_booking(
 
         error_msg = t("booking.messages.create_booking_failed_general", lang="en", error=str(exc))
         raise RuntimeError(error_msg) from exc
+
+    # ✅ ENQUEUE EMAIL AFTER DATABASE COMMIT (outside try/except)
+    # This ensures that email failures don't cause database rollback
+    # Email is fire-and-forget: failures are logged but don't block response
+    _enqueue_email(
+        email_type=EmailNotificationType.BOOKING_CREATED.value,
+        booking_data={
+            "booking_id": booking_id,
+            "customer_name": customer_name,
+            "customer_email": customer_email,
+            "service_type": service_type,
+            "booking_date": booking_date,
+            "booking_time": booking_time,
+            "duration_minutes": duration_minutes,
+        },
+        calendar_link=calendar_link,
+    )
+
+    return booking_response
 
 
 def cancel_booking(
@@ -713,26 +723,28 @@ def cancel_booking(
             "calendar_event_deleted": calendar_deleted,
         }
 
-        # Enqueue cancellation email
-        _enqueue_email(
-            email_type=EmailNotificationType.BOOKING_CANCELLED.value,
-            booking_data={
-                "booking_id": booking_id,
-                "customer_name": booking["customer_name"],
-                "customer_email": booking["customer_email"],
-                "service_type": booking["service_type"],
-                "booking_date": str(booking["booking_date"]),
-                "booking_time": str(booking["booking_time"]),
-                "cancellation_reason": cancellation_reason,
-            },
-        )
-
-        return cancellation_response
-
     except Exception as exc:
         logger.exception(f"Failed to cancel booking in database: {exc}")
         error_msg = t("booking.messages.cancel_booking_failed_general", lang="en", error=str(exc))
         raise RuntimeError(error_msg) from exc
+
+    # ✅ ENQUEUE EMAIL AFTER DATABASE COMMIT (outside try/except)
+    # This ensures that email failures don't cause database rollback
+    # Email is fire-and-forget: failures are logged but don't block response
+    _enqueue_email(
+        email_type=EmailNotificationType.BOOKING_CANCELLED.value,
+        booking_data={
+            "booking_id": booking_id,
+            "customer_name": booking["customer_name"],
+            "customer_email": booking["customer_email"],
+            "service_type": booking["service_type"],
+            "booking_date": str(booking["booking_date"]),
+            "booking_time": str(booking["booking_time"]),
+            "cancellation_reason": cancellation_reason,
+        },
+    )
+
+    return cancellation_response
 
 
 def reschedule_booking(
@@ -925,28 +937,30 @@ def reschedule_booking(
             "google_calendar_link": updated_calendar_link,
         }
 
-        # Enqueue rescheduled email
-        _enqueue_email(
-            email_type=EmailNotificationType.BOOKING_RESCHEDULED.value,
-            booking_data={
-                "booking_id": booking_id,
-                "customer_name": booking["customer_name"],
-                "customer_email": booking["customer_email"],
-                "service_type": booking["service_type"],
-                "booking_date": new_date,
-                "booking_time": new_time,
-            },
-            calendar_link=updated_calendar_link,
-            old_date=str(booking["booking_date"]),
-            old_time=str(booking["booking_time"]),
-        )
-
-        return reschedule_response
-
     except Exception as exc:
         logger.exception(f"Failed to reschedule booking in database: {exc}")
         error_msg = t("booking.messages.reschedule_booking_failed_general", lang="en", error=str(exc))
         raise RuntimeError(error_msg) from exc
+
+    # ✅ ENQUEUE EMAIL AFTER DATABASE COMMIT (outside try/except)
+    # This ensures that email failures don't cause database rollback
+    # Email is fire-and-forget: failures are logged but don't block response
+    _enqueue_email(
+        email_type=EmailNotificationType.BOOKING_RESCHEDULED.value,
+        booking_data={
+            "booking_id": booking_id,
+            "customer_name": booking["customer_name"],
+            "customer_email": booking["customer_email"],
+            "service_type": booking["service_type"],
+            "booking_date": new_date,
+            "booking_time": new_time,
+        },
+        calendar_link=updated_calendar_link,
+        old_date=str(booking["booking_date"]),
+        old_time=str(booking["booking_time"]),
+    )
+
+    return reschedule_response
 
 
 def find_first_available_slots_in_range(
