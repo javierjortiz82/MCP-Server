@@ -20,7 +20,6 @@ Requisitos en .env:
 from __future__ import annotations
 
 import json
-import logging
 import os
 import sys
 import time
@@ -32,6 +31,16 @@ import psycopg2
 from dotenv import load_dotenv
 from psycopg2.extras import execute_values
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+# Load .env from SQL/ directory (standalone mode)
+# SQL module is self-contained with its own configuration
+load_dotenv()  # Load SQL/.env
+
+# Add parent directory to path to import utils
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Import logger configuration
+from utils.logger import setup_logging
 
 # Google Gemini
 try:
@@ -48,13 +57,8 @@ try:
 except ImportError:
     PSYCOPG2_AVAILABLE = False
 
-load_dotenv()
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
-logger = logging.getLogger("populate")
+# Configure logging with file rotation
+logger = setup_logging("populate")
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")

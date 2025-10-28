@@ -411,8 +411,8 @@ if email:
 
 ```bash
 # Database
-DATABASE_URL=postgresql://mcp_user:password@localhost:5434/mcp_db
-SCHEMA_NAME=public
+DATABASE_URL=postgresql://mcp_user:mcp_password@localhost:5434/mcpdb
+SCHEMA_NAME=test
 
 # SMTP (Gmail example)
 SMTP_HOST=smtp.gmail.com
@@ -656,7 +656,7 @@ EMAIL_WORKER_BATCH_SIZE=25
 EMAIL_WORKER_POLL_INTERVAL=15
 
 # Check database connections
-psql -c "SELECT count(*) FROM pg_stat_activity WHERE datname = 'mcp_db';"
+psql -c "SELECT count(*) FROM pg_stat_activity WHERE datname = 'mcpdb';"
 ```
 
 ### Issue: "Templates not found"

@@ -130,6 +130,28 @@ class Settings(BaseSettings):
         description="Log level (DEBUG, INFO, WARNING, ERROR)",
     )
 
+    LOG_TO_FILE: bool = Field(
+        default=True,
+        description="Enable file logging",
+    )
+
+    LOG_DIR: str = Field(
+        default="logs",
+        description="Directory for log files",
+    )
+
+    LOG_MAX_SIZE_MB: int = Field(
+        default=10,
+        gt=0,
+        description="Maximum log file size in megabytes",
+    )
+
+    LOG_BACKUP_COUNT: int = Field(
+        default=5,
+        gt=0,
+        description="Number of backup log files to keep",
+    )
+
     @field_validator("LOG_LEVEL")
     @classmethod
     def validate_log_level(cls, v: str) -> str:

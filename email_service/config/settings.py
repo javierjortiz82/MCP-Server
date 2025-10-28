@@ -60,7 +60,7 @@ class EmailConfig(BaseSettings):
     # Database Configuration
     # ========================================================================
     DATABASE_URL: str = Field(
-        default="postgresql://mcp_user:password@localhost:5434/mcp_db",
+        default="postgresql://mcp_user:mcp_password@localhost:5434/mcpdb",
         description="PostgreSQL connection string",
     )
     SCHEMA_NAME: str = Field(
@@ -171,6 +171,16 @@ class EmailConfig(BaseSettings):
     LOG_DIR: str = Field(
         default="./logs",
         description="Directory for log files",
+    )
+    LOG_MAX_SIZE_MB: int = Field(
+        default=10,
+        gt=0,
+        description="Maximum log file size in megabytes",
+    )
+    LOG_BACKUP_COUNT: int = Field(
+        default=5,
+        gt=0,
+        description="Number of backup log files to keep",
     )
 
     # ========================================================================

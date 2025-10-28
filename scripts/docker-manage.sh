@@ -119,7 +119,7 @@ cmd_backup() {
     timestamp=$(date +%Y%m%d_%H%M%S)
     backup_file="backup_${timestamp}.sql"
 
-    docker-compose exec -T postgres pg_dump -U mcp_user mcp_db > "./backups/$backup_file"
+    docker-compose exec -T postgres pg_dump -U mcp_user mcpdb > "./backups/$backup_file"
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}Backup created: ./backups/$backup_file${NC}"
@@ -142,7 +142,7 @@ cmd_restore() {
     fi
 
     echo -e "${YELLOW}Restoring database from: $backup_file${NC}"
-    docker-compose exec -T postgres psql -U mcp_user mcp_db < "$backup_file"
+    docker-compose exec -T postgres psql -U mcp_user mcpdb < "$backup_file"
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}Database restored successfully!${NC}"

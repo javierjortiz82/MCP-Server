@@ -24,6 +24,7 @@ class BookingAgentSettings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
+        # Path: booking_agent_settings.py -> config -> gemini_agent -> src -> agent -> .env
         env_file=str(Path(__file__).parent.parent.parent.parent / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,

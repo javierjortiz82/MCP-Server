@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     # Pydantic Configuration
     # ============================================================================
     model_config = SettingsConfigDict(
-        # Path to .env file (at project root: agent/.env)
+        # Path to .env file (agent service configuration)
+        # Path: settings.py -> config -> gemini_agent -> src -> agent -> .env
         env_file=str(Path(__file__).parent.parent.parent.parent / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,  # Allow GOOGLE_API_KEY or google_api_key
