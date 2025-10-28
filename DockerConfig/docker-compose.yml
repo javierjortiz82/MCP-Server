@@ -1,3 +1,7 @@
+# Infrastructure variables can be loaded from root .env
+# Run: docker-compose -f DockerConfig/docker-compose.yml --env-file .env up
+# Or place a .env in DockerConfig/ with only infrastructure vars (POSTGRES_*, PGADMIN_*)
+
 services:
   postgres:
     build:
@@ -49,47 +53,13 @@ services:
       dockerfile: ../DockerConfig/Dockerfile.mcp
     container_name: mcp-server
     restart: unless-stopped
+    # Load service-specific configuration from mcp_server/.env
+    env_file:
+      - ../mcp_server/.env
     environment:
-      # Database connection (using internal Docker network)
+      # Override only Docker-specific variables (internal hostnames)
       DATABASE_URL: postgresql://${POSTGRES_USER:-mcp_user}:${POSTGRES_PASSWORD:-mcp_password}@postgres:5432/${POSTGRES_DB:-mcpdb}
-      SCHEMA_NAME: ${SCHEMA_NAME:-test}
-
-      # Google API (REQUIRED - set in .env file)
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
-
-      # Embedding configuration
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini-embedding-001}
-
-      # Logging
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      LOG_MAX_SIZE_MB: ${LOG_MAX_SIZE_MB:-10}
-      LOG_BACKUP_COUNT: ${LOG_BACKUP_COUNT:-5}
       LOG_DIR: logs
-
-      # Processing
-      BATCH_SIZE: ${BATCH_SIZE:-8}
-      PGVECTOR_IVF_LISTS: ${PGVECTOR_IVF_LISTS:-100}
-
-      # Google Calendar (REQUIRED for bookings - set in .env)
-      GOOGLE_CALENDAR_ENABLED: ${GOOGLE_CALENDAR_ENABLED}
-      GOOGLE_CALENDAR_CREDENTIALS_PATH: ${GOOGLE_CALENDAR_CREDENTIALS_PATH}
-      GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID}
-      GOOGLE_CALENDAR_TIMEZONE: ${GOOGLE_CALENDAR_TIMEZONE}
-
-      # Booking configuration (optional)
-      BOOKING_DEFAULT_DURATION_MINUTES: ${BOOKING_DEFAULT_DURATION_MINUTES:-60}
-      BOOKING_SLOT_INTERVAL_MINUTES: ${BOOKING_SLOT_INTERVAL_MINUTES:-30}
-      BOOKING_ADVANCE_BOOKING_DAYS: ${BOOKING_ADVANCE_BOOKING_DAYS:-30}
-      BOOKING_MIN_ADVANCE_MINUTES: ${BOOKING_MIN_ADVANCE_MINUTES:-60}
-      BOOKING_MAX_DAILY_APPOINTMENTS: ${BOOKING_MAX_DAILY_APPOINTMENTS:-10}
-
-      # Memory configuration (optional)
-      MEMORY_ENABLED: ${MEMORY_ENABLED:-true}
-      MEMORY_TTL_DAYS: ${MEMORY_TTL_DAYS:-90}
-      MEMORY_MAX_HISTORY_TURNS: ${MEMORY_MAX_HISTORY_TURNS:-10}
-      MEMORY_SEMANTIC_EXTRACTION_ENABLED: ${MEMORY_SEMANTIC_EXTRACTION_ENABLED:-true}
-      MEMORY_AUTO_CLEANUP_ENABLED: ${MEMORY_AUTO_CLEANUP_ENABLED:-true}
-      MEMORY_PRIORITY_THRESHOLD: ${MEMORY_PRIORITY_THRESHOLD:-5}
     ports:
       - "8009:8009"
     volumes:
@@ -113,32 +83,12 @@ services:
       dockerfile: Dockerfile
     container_name: mcp-email-worker
     restart: unless-stopped
+    # Load service-specific configuration from email_service/.env
+    env_file:
+      - ../email_service/.env
     environment:
-      # Database connection
+      # Override only Docker-specific variables (internal hostnames)
       DATABASE_URL: postgresql://${POSTGRES_USER:-mcp_user}:${POSTGRES_PASSWORD:-mcp_password}@postgres:5432/${POSTGRES_DB:-mcpdb}
-      SCHEMA_NAME: ${SCHEMA_NAME:-test}
-
-      # SMTP configuration (REQUIRED - set in .env file)
-      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@lab01.com}
-      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Lab01 Bookings}
-      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
-
-      # Worker configuration
-      EMAIL_WORKER_POLL_INTERVAL: ${EMAIL_WORKER_POLL_INTERVAL:-10}
-      EMAIL_WORKER_BATCH_SIZE: ${EMAIL_WORKER_BATCH_SIZE:-50}
-      EMAIL_RETRY_MAX_ATTEMPTS: ${EMAIL_RETRY_MAX_ATTEMPTS:-3}
-      EMAIL_RETRY_BACKOFF_SECONDS: ${EMAIL_RETRY_BACKOFF_SECONDS:-300}
-
-      # Reminders
-      REMINDER_24H_ENABLED: ${REMINDER_24H_ENABLED:-true}
-      REMINDER_1H_ENABLED: ${REMINDER_1H_ENABLED:-true}
-
-      # Logging
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - ../email_service:/app/email_service
       - email_logs:/app/email_service/logs

@@ -40,16 +40,16 @@ postgres:
 #### From Host Machine
 ```bash
 # Connect to PostgreSQL from host
-psql -h localhost -p 5434 -U mcp_user -d mcp_db
+psql -h localhost -p 5434 -U mcp_user -d mcpdb
 
 # Connection URL from host
-postgresql://mcp_user:password@localhost:5434/mcp_db
+postgresql://mcp_user:mcp_password@localhost:5434/mcpdb
 ```
 
 #### From Docker Containers
 ```bash
 # Containers use internal port 5432
-postgresql://mcp_user:password@postgres:5432/mcp_db
+postgresql://mcp_user:mcp_password@postgres:5432/mcpdb
 ```
 
 ### Important Notes
@@ -70,12 +70,12 @@ POSTGRES_PORT=5434
 
 #### Development (from host)
 ```env
-DATABASE_URL=postgresql://mcp_user:password@localhost:5434/mcp_db
+DATABASE_URL=postgresql://mcp_user:mcp_password@localhost:5434/mcpdb
 ```
 
 #### Docker Services (internal)
 ```env
-DATABASE_URL=postgresql://mcp_user:password@postgres:5432/mcp_db
+DATABASE_URL=postgresql://mcp_user:mcp_password@postgres:5432/mcpdb
 ```
 
 ## Common Issues and Solutions
@@ -126,7 +126,7 @@ DATABASE_URL=postgresql://mcp_user:password@postgres:5432/mcp_db
 ### Test from Host
 ```bash
 # Using psql
-psql -h localhost -p 5434 -U mcp_user -d mcp_db -c "SELECT 1"
+psql -h localhost -p 5434 -U mcp_user -d mcpdb -c "SELECT 1"
 
 # Using pg_isready
 pg_isready -h localhost -p 5434 -U mcp_user
@@ -194,10 +194,10 @@ Docker services can reach PostgreSQL using:
 Example from MCP Server:
 ```python
 # Correct - uses Docker service name and internal port
-DATABASE_URL = "postgresql://mcp_user:password@postgres:5432/mcp_db"
+DATABASE_URL = "postgresql://mcp_user:mcp_password@postgres:5432/mcpdb"
 
 # Wrong - would fail from container
-DATABASE_URL = "postgresql://mcp_user:password@localhost:5434/mcp_db"
+DATABASE_URL = "postgresql://mcp_user:mcp_password@localhost:5434/mcpdb"
 ```
 
 ## Quick Reference
@@ -215,10 +215,10 @@ DATABASE_URL = "postgresql://mcp_user:password@localhost:5434/mcp_db"
 
 ```bash
 # Required in .env
-POSTGRES_PORT=5434        # External port for host access
-POSTGRES_USER=mcp_user    # Database user
-POSTGRES_PASSWORD=secret  # Database password
-POSTGRES_DB=mcp_db       # Database name
+POSTGRES_PORT=5434           # External port for host access
+POSTGRES_USER=mcp_user       # Database user
+POSTGRES_PASSWORD=mcp_password # Database password
+POSTGRES_DB=mcpdb            # Database name
 ```
 
 ## Troubleshooting Checklist

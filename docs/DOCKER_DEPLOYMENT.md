@@ -234,7 +234,7 @@ docker stats
 docker network inspect lab01-mcp_lab01_network
 
 # Execute command
-docker-compose exec postgres psql -U mcp_user -d mcp_db
+docker-compose exec postgres psql -U mcp_user -d mcpdb
 ```
 
 ## Health Monitoring
@@ -319,7 +319,7 @@ ls -la ./backups/
 
 ```bash
 # Backup database
-docker-compose exec postgres pg_dump -U mcp_user mcp_db > backup.sql
+docker-compose exec postgres pg_dump -U mcp_user mcpdb > backup.sql
 
 # Backup volumes
 docker run --rm -v lab01-mcp_postgres_data:/data -v $(pwd):/backup alpine tar czf /backup/postgres_data.tar.gz /data

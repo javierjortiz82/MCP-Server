@@ -1,806 +1,1099 @@
 ╔════════════════════════════════════════════════════════════════════════════╗
-║             LAB01-MCP DATABASE - COMPLETE INSTALLATION GUIDE               ║
-║                        Deployment & Configuration                          ║
+║          LAB01-MCP COMPLETE SYSTEM DEPLOYMENT GUIDE                        ║
+║        From Zero to Production - All Services Included                     ║
 ╚════════════════════════════════════════════════════════════════════════════╝
 
 
-▶️  PREREQUISITES
+================================================================================
+📖 TABLE OF CONTENTS
+================================================================================
+
+Part 1: INITIAL SETUP (First Time Users)
+  • Prerequisites & System Requirements
+  • Project Structure
+  • Environment Configuration (.env files)
+  • Environment Validation
+
+Part 2: INFRASTRUCTURE DEPLOYMENT
+  • Docker Services (PostgreSQL, pgAdmin)
+  • Database Initialization & Data Loading
+
+Part 3: SERVICES DEPLOYMENT
+  • MCP Server
+  • Client MCP (Odiseo Bot)
+  • Agent Service (Optional)
+  • Email Worker (Optional)
+
+Part 4: VALIDATION & TESTING
+  • Health Checks
+  • End-to-End Testing
+  • Troubleshooting
+
+Part 5: DAILY OPERATIONS
+  • Starting/Stopping Services
+  • Monitoring
+  • Common Tasks
+
+
+════════════════════════════════════════════════════════════════════════════
+PART 1: INITIAL SETUP (FIRST TIME USERS)
+════════════════════════════════════════════════════════════════════════════
+
+▶️  STEP 1.1: PREREQUISITES & SYSTEM REQUIREMENTS
 ────────────────────────────────────────────────────────────────────────────
 
-Before starting, ensure you have:
+Before starting, ensure you have installed:
 
-1. Docker & Docker Compose installed
-   $ docker --version
-   $ docker-compose --version
+1. Docker & Docker Compose
+   $ docker --version           # Should show: Docker version 20.10+
+   $ docker-compose --version   # Should show: Docker Compose version 1.29+
 
-2. PostgreSQL container running (mcp-postgres)
-   $ cd ../DockerConfig && docker-compose up -d postgres
+   Installation (if missing):
+   Ubuntu/Debian: $ sudo apt-get install docker.io docker-compose
+   macOS:         $ brew install docker docker-compose
+   Windows:       Download Docker Desktop from docker.com
 
-   ⏳ Wait for healthcheck to pass (~30 seconds)
+2. Python 3.9 or higher
+   $ python3 --version          # Should show: Python 3.9+ or Python 3.10+
 
-   Verify container is running:
-   $ docker ps | grep mcp-postgres
+   Installation (if missing):
+   Ubuntu/Debian: $ sudo apt-get install python3 python3-pip python3-venv
+   macOS:         $ brew install python3
+   Windows:       Download from python.org
 
-   Expected: Container should show as "Up" on port 5434
+3. Git (for cloning repository)
+   $ git --version              # Should show: git version 2.x+
 
-   ⚠️  Note: Container starts EMPTY (no automatic initialization)
+4. Make (for automation)
+   $ make --version             # Should show: GNU Make 4.x+
 
-3. Python 3 installed (for data loading with embeddings)
-   $ python3 --version
-   Expected: Python 3.9 or higher
+   Installation (if missing):
+   Ubuntu/Debian: $ sudo apt-get install build-essential
+   macOS:         Already installed with Xcode Command Line Tools
+   Windows:       $ choco install make (via Chocolatey)
 
-   Note: deploy.sh auto-installs required Python packages if missing
-
-4. Environment variables configured
-   $ cp .env.example .env
-
-   Edit .env and verify:
-   - DATABASE_URL=postgresql://mcp_user:mcp_password@localhost:5434/mcpdb
-   - GOOGLE_API_KEY=your-gemini-api-key (required for embeddings)
-   - SCHEMA_NAME=test
-   - EMBEDDING_MODEL=gemini-embedding-001
-   - OUTPUT_DIMENSIONALITY=768
-   - BATCH_SIZE=8
-
-5. PostgreSQL connectivity
-   $ docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "SELECT 1;"
-
-   Expected output: single row with "1"
+5. System Resources (Minimum)
+   - RAM: 4 GB available
+   - Disk: 5 GB free space
+   - CPU: 2 cores or more
 
 
-▶️  INSTALLATION OVERVIEW
+▶️  STEP 1.2: PROJECT SETUP
 ────────────────────────────────────────────────────────────────────────────
 
-The database installation consists of 4 automated phases (via ./scripts/deploy.sh):
+1. Clone the repository (if not already done):
+   $ git clone <repository-url> Lab01-MCP
+   $ cd Lab01-MCP
 
-  ┌─────────────────────────────────────────────────────────────────┐
-  │ PHASE 1: DDL DEPLOYMENT (Database Structure)                   │
-  ├─────────────────────────────────────────────────────────────────┤
-  │ • Creates schema "test" (or custom schema from .env)            │
-  │ • Installs PostgreSQL extensions (uuid-ossp, vector, etc)       │
-  │ • Creates 14 tables across 5 subsystems                         │
-  │ • Creates 80+ optimized indexes (B-tree, GIN, IVFFlat)          │
-  │ • Creates 31 functions and triggers                             │
-  │                                                                 │
-  │ Time: 5-10 seconds                                              │
-  │ Idempotent: Yes (safe to run multiple times)                    │
-  └─────────────────────────────────────────────────────────────────┘
+2. Verify project structure:
+   $ ls -la
 
-  ┌─────────────────────────────────────────────────────────────────┐
-  │ PHASE 2: DML DEPLOYMENT (Data Loading with Embeddings) ⭐ NEW  │
-  ├─────────────────────────────────────────────────────────────────┤
-  │ • Auto-checks Python dependencies (psycopg2, google-genai, etc) │
-  │ • Auto-installs missing packages via pip3                       │
-  │ • Loads 90 products with AI embeddings (Google Gemini API)      │
-  │ • Loads 5 service types                                         │
-  │ • Loads 6 business hours configurations                         │
-  │ • Loads 25 blocked time records                                 │
-  │                                                                 │
-  │ Time: ~60 seconds (includes embedding generation)               │
-  │ Method: Python direct DB insertion (no SQL files)               │
-  │ Configuration: Reads from .env (DATABASE_URL, SCHEMA_NAME, etc) │
-  └─────────────────────────────────────────────────────────────────┘
+   Expected directories:
+   ├── agent/                  → Gemini agent service
+   ├── client_mcp/             → Odiseo Bot (main client)
+   ├── DockerConfig/           → Docker infrastructure configs
+   ├── docs/                   → Documentation
+   ├── email_service/          → Email worker service
+   ├── mcp_server/             → MCP server (FastMCP)
+   ├── scripts/                → Deployment scripts
+   ├── SQL/                    → Database schemas and data
+   ├── test/                   → Test suites
+   ├── Makefile                → Automation commands
+   ├── requirements.txt        → Python dependencies
+   └── .env.example            → Environment template (ROOT - deprecated)
 
-  ┌─────────────────────────────────────────────────────────────────┐
-  │ PHASE 3: DEPLOYMENT VALIDATION                                  │
-  ├─────────────────────────────────────────────────────────────────┤
-  │ • Verifies schema, tables, indexes, functions created           │
-  │ • Checks data loaded correctly                                  │
-  │                                                                 │
-  │ Time: ~2 seconds                                                │
-  └─────────────────────────────────────────────────────────────────┘
+   Each service has its own .env file:
+   ├── agent/.env.example
+   ├── client_mcp/.env.example
+   ├── DockerConfig/.env
+   ├── email_service/.env.example
+   ├── mcp_server/.env.example
+   └── SQL/.env.example
 
-  ┌─────────────────────────────────────────────────────────────────┐
-  │ PHASE 4: HEALTH CHECKS                                          │
-  ├─────────────────────────────────────────────────────────────────┤
-  │ • Comprehensive database health verification                    │
-  │ • Query testing and performance checks                          │
-  │                                                                 │
-  │ Time: ~5 seconds                                                │
-  └─────────────────────────────────────────────────────────────────┘
+3. Verify you are in the project root:
+   $ pwd
+   Expected: /path/to/Lab01-MCP
 
 
-▶️  STEP 1: PREPARE PROJECT STRUCTURE
+▶️  STEP 1.3: ENVIRONMENT CONFIGURATION
 ────────────────────────────────────────────────────────────────────────────
 
-Navigate to the SQL directory:
-$ cd /path/to/Lab01-MCP/SQL
+Lab01-MCP uses MICROSERVICES ARCHITECTURE with independent .env files.
+Each service has its own configuration.
 
-Verify directory structure:
-$ ls -la
+🔴 CRITICAL: Configure ALL .env files before proceeding!
 
-Expected directories:
-  00_init/            → Initialization scripts (extensions, schema)
-  01_ddl/             → Data Definition Language (table definitions)
-  02_functions/       → Database functions and triggers
-  03_indexes/         → Consolidated index definitions
-  04_seed/            → Seed data (DML - insert statements)
-  scripts/            → Deployment and verification scripts
-  data/               → Source JSON files for data loading
+────────────────────────────────────────────────────────────────────────────
+1. DockerConfig/.env (Infrastructure - Already Configured)
+────────────────────────────────────────────────────────────────────────────
+   This file defines PostgreSQL and pgAdmin configuration.
 
-Expected files in root:
-  README.md                     → Full documentation
-  QUICK_START.txt               → This file
+   $ cat DockerConfig/.env
 
-Expected files in 05_orchestration/ (Orchestration):
-  01_deploy.sql                 → Master deployment orchestrator (10 phases)
-  02_validate_deployment.sql    → Validation and health checks
+   Required variables (already set, verify values):
+   POSTGRES_DB=mcpdb
+   POSTGRES_USER=mcp_user
+   POSTGRES_PASSWORD=mcp_password
+   POSTGRES_PORT=5434
+   PGADMIN_EMAIL=admin@example.com
+   PGADMIN_PASSWORD=admin123
+   PGADMIN_PORT=8090
+
+   ⚠️  NOTE: These values are shared across all services via DATABASE_URL
+
+────────────────────────────────────────────────────────────────────────────
+2. SQL/.env (Database Module)
+────────────────────────────────────────────────────────────────────────────
+   $ cp SQL/.env.example SQL/.env
+   $ vi SQL/.env
+
+   Required configuration:
+   DATABASE_URL=postgresql://mcp_user:mcp_password@localhost:5434/mcpdb
+   SCHEMA_NAME=test
+   GOOGLE_API_KEY=your-google-gemini-api-key-here  # From ai.google.dev
+   EMBEDDING_MODEL=gemini-embedding-001
+   BATCH_SIZE=8
+
+   ⚠️  Get your GOOGLE_API_KEY from: https://aistudio.google.com/app/apikey
+
+────────────────────────────────────────────────────────────────────────────
+3. mcp_server/.env (MCP Server)
+────────────────────────────────────────────────────────────────────────────
+   $ cp mcp_server/.env.example mcp_server/.env
+   $ vi mcp_server/.env
+
+   Critical variables:
+   GOOGLE_API_KEY=your-google-gemini-api-key-here
+   DATABASE_URL=postgresql://mcp_user:mcp_password@localhost:5434/mcpdb
+   SCHEMA_NAME=test
+   EMBEDDING_MODEL=gemini-embedding-001
+   LOG_LEVEL=INFO
+
+────────────────────────────────────────────────────────────────────────────
+4. client_mcp/.env (Odiseo Bot)
+────────────────────────────────────────────────────────────────────────────
+   $ cp client_mcp/.env.example client_mcp/.env
+   $ vi client_mcp/.env
+
+   Critical variables:
+   GOOGLE_API_KEY=your-google-gemini-api-key-here
+   DATABASE_URL=postgresql://mcp_user:mcp_password@localhost:5434/mcpdb
+   SCHEMA_NAME=test
+   MCP_HOST=localhost
+   MCP_PORT=8009
+   LOG_LEVEL=INFO
+
+────────────────────────────────────────────────────────────────────────────
+5. agent/.env (Gemini Agent - Optional)
+────────────────────────────────────────────────────────────────────────────
+   $ cp agent/.env.example agent/.env
+   $ vi agent/.env
+
+   Critical variables:
+   GOOGLE_API_KEY=your-google-gemini-api-key-here
+   MODEL=gemini-2.0-flash-exp
+   LOG_LEVEL=INFO
+
+────────────────────────────────────────────────────────────────────────────
+6. email_service/.env (Email Worker - Optional)
+────────────────────────────────────────────────────────────────────────────
+   $ cp email_service/.env.example email_service/.env
+   $ vi email_service/.env
+
+   Critical variables:
+   DATABASE_URL=postgresql://mcp_user:mcp_password@localhost:5434/mcpdb
+   SCHEMA_NAME=test
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=your-email@gmail.com
+   SMTP_PASSWORD=your-app-password
+   LOG_LEVEL=INFO
 
 
-▶️  STEP 2: FULL AUTOMATED DEPLOYMENT (RECOMMENDED) ⭐
+▶️  STEP 1.4: ENVIRONMENT VALIDATION (⭐ NEW - COMPREHENSIVE)
 ────────────────────────────────────────────────────────────────────────────
 
-Execute the complete deployment with automatic validation:
+After configuring all .env files, validate the entire environment:
 
-$ cd /path/to/Lab01-MCP/SQL
-$ ./scripts/deploy.sh
+$ make validate
 
-What this command does:
-  1. Checks all prerequisites (Docker, container, database, Python)
-  2. PHASE 1: Executes DDL deployment (tables, indexes, functions)
-  3. PHASE 2: Auto-installs Python dependencies (if needed)
-  4. PHASE 2: Executes populate.py --db --embeddings (data + vectors)
-  5. PHASE 3: Runs validation checks
-  6. PHASE 4: Performs health verification
-  7. Displays comprehensive summary
+This command performs 89 comprehensive validations including:
+  ✅ Docker installation and daemon status
+  ✅ Directory structure integrity
+  ✅ All .env files existence
+  ✅ docker-compose.yml syntax
+  ✅ Pydantic v2 configuration mapping
+  ✅ Critical variables presence (GOOGLE_API_KEY, DATABASE_URL, etc)
+  ✅ Database credentials consistency (username, password, host, schema)
+  ✅ Embedding model consistency
+  ✅ Log level consistency
+  ✅ Error pattern consistency
+  ✅ Retry strategy consistency
+  ✅ Rate limiting policies
+  ✅ Port conflict detection
+  ✅ Variable format validation
 
 Expected output:
-  ╔═══════════════════════════════════════════════════════════╗
-  ║  LAB01-MCP DATABASE DEPLOYMENT                            ║
-  ╚═══════════════════════════════════════════════════════════╝
+  ╔═══════════════════════════════════════════════════════════════╗
+  ║       Lab01-MCP Environment Validation                        ║
+  ╚═══════════════════════════════════════════════════════════════╝
 
-  [STEP] Checking prerequisites...
-  ✅ Docker found
-  ✅ Container 'mcp-postgres' is running
-  ✅ Database connectivity verified
-  ✅ Deploy script found: 01_deploy.sql
-  ✅ Validate script found: 02_validate_deployment.sql
-  ✅ Verify script found: verify.sh
-  ✅ All prerequisites passed
+  [API Keys]
+    ✓ 4/4 services have GOOGLE_API_KEY configured
 
-  ╔═══════════════════════════════════════════════════════════╗
-  ║  PHASE 1: DATABASE DEPLOYMENT (DDL)                       ║
-  ╚═══════════════════════════════════════════════════════════╝
+  [DB Credentials]
+    ✓ All services use username: mcp_user
+    ✓ All services use same password
+    ✓ All services use host: localhost
+    ✓ All services use schema: test
 
-  [1/10] Installing PostgreSQL extensions...
-  [2/10] Creating schema and configuring permissions...
-  [3/10] Creating products table with indexes...
-  [4/10] Creating bookings schema (appointments, services, hours)...
-  [5/10] Creating email queue system...
-  [6/10] Creating multi-agent memory system...
-  [7/10] Creating utility tables (pagination)...
-  [8/10] Creating consolidated indexes...
-  [9/10] Creating functions and triggers...
-  [10/10] Data loading phase...
-  NOTE: Seed data will be loaded via populate.py (bash script handles this)
+  [Embedding Model]
+    ✓ All services use: gemini-embedding-001
 
-  ✅ Deployment completed successfully
+  [Log Level]
+    ✓ All services use LOG_LEVEL: INFO
 
-  ╔═══════════════════════════════════════════════════════════╗
-  ║  PHASE 2: DATA LOADING (DML + EMBEDDINGS)                 ║
-  ╚═══════════════════════════════════════════════════════════╝
+  Summary:
+    ✓ 89 passed
+    ⚠ 3 warnings (intentional configuration differences)
 
-  [STEP] Loading data via Python (with embeddings)...
-  Executing: populate.py --db --embeddings
+If validation fails:
+  1. Check error messages carefully
+  2. Fix configuration issues in respective .env files
+  3. Re-run: make validate
+  4. DO NOT proceed until all critical validations pass
 
-  ℹ️  Checking Python dependencies...
-  ✅ Python dependencies verified
+⚠️  WARNINGS ARE ACCEPTABLE - Some services intentionally have different
+    configurations (e.g., rate limiting policies, retry delays). This is
+    expected and does not block deployment.
 
-  ℹ️  Running populate.py with --db --embeddings...
-  2025-10-19 [INFO] Loading data from /path/to/SQL/data
-  2025-10-19 [INFO] Processing: products
-  2025-10-19 [INFO] Loaded 90 records from 01_products.json
-  2025-10-19 [INFO] Processing 90 products for embeddings...
-  2025-10-19 [INFO] Embedding model: gemini-embedding-001, Batch size: 8
-  2025-10-19 [INFO] Generated embeddings for 8/90 products
-  ...
-  2025-10-19 [INFO] ✅ All 90 products processed
-  2025-10-19 [INFO] ✅ Inserted 90 records to products
-  2025-10-19 [INFO] Processing: service_types
-  2025-10-19 [INFO] ✅ Inserted 5 records to service_types
-  2025-10-19 [INFO] Processing: business_hours
-  2025-10-19 [INFO] ✅ Inserted 6 records to business_hours
-  2025-10-19 [INFO] Processing: blocked_times
-  2025-10-19 [INFO] ✅ Inserted 25 records to blocked_times
-  2025-10-19 [INFO] ✅ All data processed successfully!
 
-  ✅ Data loaded successfully (including embeddings)
+════════════════════════════════════════════════════════════════════════════
+PART 2: INFRASTRUCTURE DEPLOYMENT
+════════════════════════════════════════════════════════════════════════════
 
-  ╔═══════════════════════════════════════════════════════════╗
-  ║  PHASE 3: DEPLOYMENT VALIDATION                           ║
-  ╚═══════════════════════════════════════════════════════════╝
+▶️  STEP 2.1: START DOCKER INFRASTRUCTURE
+────────────────────────────────────────────────────────────────────────────
 
-  ✅ Validation completed
+Start PostgreSQL and pgAdmin services:
 
-  ╔═══════════════════════════════════════════════════════════╗
-  ║  PHASE 4: HEALTH CHECKS                                   ║
-  ╚═══════════════════════════════════════════════════════════╝
+$ make docker-start
+# OR
+$ cd DockerConfig && docker-compose up -d
 
-  ✅ All health checks passed
+Expected output:
+  Creating network "docker-config_default" with the default driver
+  Creating mcp-postgres ... done
+  Creating pgadmin       ... done
 
+Verify containers are running:
+$ docker ps
+
+Expected output:
+  CONTAINER ID   IMAGE              PORTS                     STATUS
+  xxxxxxxxxxxx   postgres:16        0.0.0.0:5434->5432/tcp    Up X seconds
+  xxxxxxxxxxxx   dpage/pgadmin4     0.0.0.0:8090->80/tcp      Up X seconds
+
+Wait for healthcheck (30-45 seconds):
+$ docker logs mcp-postgres --tail 10
+
+Expected: "database system is ready to accept connections"
+
+
+▶️  STEP 2.2: VERIFY DATABASE CONNECTIVITY
+────────────────────────────────────────────────────────────────────────────
+
+Test database connection:
+
+$ docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "SELECT 1;"
+
+Expected output:
+  ?column?
+ ----------
+        1
+ (1 row)
+
+If connection fails, check:
+  1. Container is running: docker ps | grep mcp-postgres
+  2. Port is correct: 5434
+  3. Credentials match DockerConfig/.env
+  4. Wait 30 more seconds for initialization
+
+
+▶️  STEP 2.3: DEPLOY DATABASE (DDL + DML + EMBEDDINGS)
+────────────────────────────────────────────────────────────────────────────
+
+Execute the comprehensive database deployment script:
+
+$ cd SQL
+$ ./scripts/deploy.sh
+
+This automated script performs:
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ PHASE 1: DDL DEPLOYMENT (~10 seconds)                          │
+  ├─────────────────────────────────────────────────────────────────┤
+  │ • Installs PostgreSQL extensions (uuid-ossp, vector, etc)      │
+  │ • Creates schema "test" (or SCHEMA_NAME from .env)             │
+  │ • Creates 14 tables (products, bookings, email, memory)        │
+  │ • Creates 80+ optimized indexes (B-tree, GIN, IVFFlat)         │
+  │ • Creates 31 functions and triggers                            │
+  └─────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ PHASE 2: DML DEPLOYMENT (~60 seconds)                          │
+  ├─────────────────────────────────────────────────────────────────┤
+  │ • Auto-checks Python dependencies (psycopg2, google-genai)     │
+  │ • Auto-installs missing packages via pip3                      │
+  │ • Loads 90 products with AI embeddings (Google Gemini)         │
+  │ • Loads 5 service types, 6 business hours, 25 blocked times    │
+  │ • Generates 768-dimensional vectors for semantic search        │
+  └─────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ PHASE 3: VALIDATION (~2 seconds)                               │
+  ├─────────────────────────────────────────────────────────────────┤
+  │ • Verifies schema, tables, indexes created                     │
+  │ • Checks data loaded correctly (row counts)                    │
+  └─────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ PHASE 4: HEALTH CHECKS (~5 seconds)                            │
+  ├─────────────────────────────────────────────────────────────────┤
+  │ • Tests database functions and triggers                        │
+  │ • Validates vector search capabilities                         │
+  │ • Verifies query performance                                   │
+  └─────────────────────────────────────────────────────────────────┘
+
+Expected total time: ~75 seconds
+
+Expected output summary:
   ╔═══════════════════════════════════════════════════════════╗
   ║  DEPLOYMENT SUMMARY                                       ║
   ╚═══════════════════════════════════════════════════════════╝
 
   ✅ Database deployment completed
   ℹ️  Schema: test
-  ℹ️  Tables: 14 (DDL)
-  ℹ️  Indexes: 80+ (optimized)
-  ℹ️  Functions: 31 (bookings, email, memory)
+  ℹ️  Tables: 14
+  ℹ️  Indexes: 80+
+  ℹ️  Functions: 31
   ℹ️  Data loaded:
-  ℹ️    • Products: 90 (with embeddings)
+  ℹ️    • Products: 90 (with 768-dim embeddings)
   ℹ️    • Service types: 5
   ℹ️    • Business hours: 6
   ℹ️    • Blocked times: 25
 
-  ℹ️  To verify deployment: ./verify.sh
-  ℹ️  To check database health: ./verify.sh --quick
+If deployment fails, see "Database Troubleshooting" section below.
 
-Exit code: 0 (success)
-
-Total time: ~70 seconds
-
-
-▶️  STEP 3: VERIFY DEPLOYMENT (OPTIONAL IF NOT AUTO-VERIFIED)
-────────────────────────────────────────────────────────────────────────────
-
-Run comprehensive health checks:
-
+Verify deployment manually:
+$ cd SQL
 $ ./scripts/verify.sh
 
-This checks:
-  ✓ Docker container running
-  ✓ Database connectivity
-  ✓ Schema exists
-  ✓ All 14 tables created
-  ✓ Products data loaded (90 records)
-  ✓ Embeddings generated (1536-dimensional vectors)
-  ✓ Indexes created and working
-  ✓ Functions and triggers operational
-  ✓ Search capabilities enabled
-
-Quick health check (5 seconds):
+Quick health check:
+$ cd SQL
 $ ./scripts/verify.sh --quick
 
-Detailed diagnostics (shows all checks with explanations):
-$ ./scripts/verify.sh --detailed
 
+════════════════════════════════════════════════════════════════════════════
+PART 3: SERVICES DEPLOYMENT
+════════════════════════════════════════════════════════════════════════════
 
-▶️  STEP 4: ALTERNATIVE DEPLOYMENT OPTIONS
+▶️  STEP 3.1: INSTALL PYTHON DEPENDENCIES
 ────────────────────────────────────────────────────────────────────────────
 
-If you need to deploy in phases or troubleshoot:
+Create virtual environment and install dependencies:
+
+$ cd /path/to/Lab01-MCP
+$ python3 -m venv .venv
+$ source .venv/bin/activate
+$ pip install --upgrade pip
+$ pip install -r requirements.txt
+
+Expected packages installed (200+):
+  - fastapi, uvicorn (MCP server)
+  - google-generativeai (Gemini integration)
+  - psycopg2-binary (PostgreSQL)
+  - pydantic, pydantic-settings (configuration)
+  - pgvector (vector search)
+  - pytest, pytest-cov (testing)
+  - ...and many more
+
+Verification:
+$ pip list | grep -E "fastapi|google-generativeai|psycopg2|pydantic"
+
+Expected:
+  fastapi                   0.115.x
+  google-generativeai       0.8.x
+  psycopg2-binary           2.9.x
+  pydantic                  2.9.x
+  pydantic-settings         2.6.x
 
 
-4A. VALIDATE EXISTING DATABASE ONLY
-────────────────────────────────────
-Checks if database is already properly configured (no deployment):
-
-$ ./scripts/deploy.sh --validate-only
-
-Use this to:
-  - Verify previous deployment succeeded
-  - Check database health without re-deploying
-  - Troubleshoot configuration issues
-
-
-4B. DEPLOYMENT WITHOUT VERIFICATION
-────────────────────────────────────
-Deploy but skip health checks (faster but less safe):
-
-$ ./scripts/deploy.sh --no-verify
-
-Time saved: ~30 seconds
-When to use: After successful deployment, to re-run quickly
-
-
-4C. MANUAL PHASE-BY-PHASE DEPLOYMENT
-────────────────────────────────────
-For advanced control, manually execute phases:
-
-# Phase 1: Initialize
-$ docker exec mcp-postgres psql -U mcp_user -d mcpdb -f 00_init/01_extensions.sql
-$ docker exec mcp-postgres psql -U mcp_user -d mcpdb -f 00_init/02_schema.sql
-$ docker exec mcp-postgres psql -U mcp_user -d mcpdb -f 00_init/03_users_permissions.sql
-
-# Phase 2: DDL (Table definitions)
-$ docker exec mcp-postgres psql -U mcp_user -d mcpdb -f 01_ddl/01_products.sql
-$ docker exec mcp-postgres psql -U mcp_user -d mcpdb -f 01_ddl/bookings/01_appointments.sql
-# ... (continue with other DDL files)
-
-# Phase 3: Indexes
-$ docker exec mcp-postgres psql -U mcp_user -d mcpdb -f 03_indexes/01_indexes.sql
-
-# Phase 4: Functions
-$ docker exec mcp-postgres psql -U mcp_user -d mcpdb -f 02_functions/01_bookings.sql
-# ... (continue with other function files)
-
-# Phase 5: Seed data
-$ cd src && python3 populate.py --db
-
-
-▶️  STEP 5: MANUAL DATA LOADING (IF NEEDED)
+▶️  STEP 3.2: START ALL SERVICES (AUTOMATED)
 ────────────────────────────────────────────────────────────────────────────
 
-NOTE: Data loading is now AUTOMATIC in deploy.sh (Phase 2)
-      The commands below are for manual/advanced use only
+Option A: FULL AUTOMATED DEPLOYMENT (Recommended for first-time setup)
+$ make deploy
 
-The unified Python loader handles all seed data:
+This command:
+  1. Validates environment (make validate)
+  2. Checks Python version
+  3. Creates virtual environment
+  4. Installs dependencies
+  5. Starts Docker services (PostgreSQL)
+  6. Deploys database (if not already)
+  7. Starts MCP server
+  8. Runs test suite
+  9. Starts Odiseo Bot
+  10. Shows service status
 
-Load all seed data to database (with embeddings):
-$ cd src
-$ python3 populate.py --db --embeddings
+Expected time: ~3-5 minutes (first run with dependency installation)
 
-Load only products (with auto-generated embeddings):
-$ python3 populate.py --db --embeddings --table products
-
-Load only reference data (no embeddings needed):
-$ python3 populate.py --db --table service_types
-$ python3 populate.py --db --table business_hours
-$ python3 populate.py --db --table blocked_times
-
-Generate SQL INSERT files (for reference/version control):
-$ python3 populate.py --output-sql-dir ../04_seed/
-
-For complete usage options, see SQL/src/USAGE.md
-
-
-▶️  DATABASE TABLES CREATED
 ────────────────────────────────────────────────────────────────────────────
 
-After successful deployment, you should have 14 tables:
+Option B: QUICK START (If environment already set up)
+$ make start
 
-Core Data:
-  • products (90 records, with embeddings)
+This command:
+  1. Checks Docker services
+  2. Starts MCP server
+  3. Starts Odiseo Bot
+  4. Shows service status
 
-Bookings System:
-  • appointments
-  • service_types
-  • business_hours
-  • blocked_times
-  • service_hours
-
-Communication:
-  • email_queue
-
-Memory System:
-  • conversation_sessions
-  • conversation_messages
-  • agent_memory_blocks
-  • user_memory_profiles
-  • user_memory_blocks
-  • agent_context_transfers
-
-Utilities:
-  • pagination_contexts
-
-Total:
-  • 80+ indexes optimized for different query patterns
-  • 31 stored functions and triggers
-  • 768-dimensional vector embeddings per product (Google Gemini)
+Expected time: ~10 seconds
 
 
-▶️  TESTING THE DEPLOYMENT
+▶️  STEP 3.3: START SERVICES INDIVIDUALLY (MANUAL CONTROL)
 ────────────────────────────────────────────────────────────────────────────
 
-Once deployment completes, test with these queries:
+If you need fine-grained control, start services individually:
 
-1. Count products:
-$ docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "SELECT COUNT(*) FROM test.products;"
-Expected: 90
+────────────────────────────────────────────────────────────────────────────
+3.3.1: Start MCP Server
+────────────────────────────────────────────────────────────────────────────
+$ cd mcp_server
+$ source ../.venv/bin/activate
+$ python server.py
 
-2. Check embeddings:
+Expected output:
+  INFO:     Started server process [XXXXX]
+  INFO:     Waiting for application startup.
+  INFO:     Application startup complete.
+  INFO:     Uvicorn running on http://0.0.0.0:8009 (Press CTRL+C to quit)
+
+Verify MCP server is running:
+$ curl http://localhost:8009/health
+
+Expected: {"status": "healthy"}
+
+Leave this terminal open or run in background:
+$ nohup python server.py > logs/mcp_server.log 2>&1 &
+
+────────────────────────────────────────────────────────────────────────────
+3.3.2: Start Odiseo Bot (Client MCP)
+────────────────────────────────────────────────────────────────────────────
+$ cd client_mcp
+$ source ../.venv/bin/activate
+$ python -m client_mcp
+
+Expected output:
+  🤖 Odiseo Bot Iniciado
+  ℹ️  Conectando a MCP Server: http://localhost:8009
+  ✅ Conexión exitosa
+
+  Comandos disponibles:
+    /help      - Mostrar ayuda
+    /productos - Buscar productos
+    /reservas  - Sistema de reservas
+    /salir     - Cerrar bot
+
+  ¿En qué puedo ayudarte?
+
+Test basic functionality:
+  > Hola
+  Expected: Response from Odiseo Bot
+
+────────────────────────────────────────────────────────────────────────────
+3.3.3: Start Email Worker (Optional - Background Service)
+────────────────────────────────────────────────────────────────────────────
+$ cd email_service
+$ source ../.venv/bin/activate
+$ python -m email_service.worker
+
+Expected output:
+  [INFO] Email worker started
+  [INFO] Polling email_queue every 10 seconds
+  [INFO] SMTP configured: smtp.gmail.com:587
+
+Leave running in background:
+$ nohup python -m email_service.worker > logs/email_worker.log 2>&1 &
+
+────────────────────────────────────────────────────────────────────────────
+3.3.4: Start Agent Service (Optional - For Multi-Agent System)
+────────────────────────────────────────────────────────────────────────────
+$ cd agent
+$ source ../.venv/bin/activate
+$ python -m gemini_agent.agent
+
+Expected output:
+  [INFO] Gemini Agent started
+  [INFO] Model: gemini-2.0-flash-exp
+  [INFO] Listening on http://0.0.0.0:8000
+
+
+▶️  STEP 3.4: VERIFY ALL SERVICES ARE RUNNING
+────────────────────────────────────────────────────────────────────────────
+
+Check service status:
+$ make status
+# OR
+$ ./scripts/deploy.sh status
+
+Expected output:
+  ========================================
+           Deployment Status
+  ========================================
+  ✓ MCP Server: Running (PID: 12345)
+  ✓ Odiseo Bot: Running (PID: 12346)
+  ✓ PostgreSQL: Running
+  ========================================
+  Logs available at: logs/
+
+Check processes manually:
+$ ps aux | grep -E "server.py|client_mcp|email_service"
+
+Check Docker services:
+$ docker ps
+
+Expected:
+  CONTAINER ID   IMAGE              STATUS          PORTS
+  xxxxxxxxxxxx   postgres:16        Up X minutes    0.0.0.0:5434->5432/tcp
+  xxxxxxxxxxxx   dpage/pgadmin4     Up X minutes    0.0.0.0:8090->80/tcp
+
+Check ports in use:
+$ netstat -tuln | grep -E "5434|8009|8000|8090"
+
+Expected:
+  tcp  0  0  0.0.0.0:5434  0.0.0.0:*  LISTEN  (PostgreSQL)
+  tcp  0  0  0.0.0.0:8009  0.0.0.0:*  LISTEN  (MCP Server)
+  tcp  0  0  0.0.0.0:8090  0.0.0.0:*  LISTEN  (pgAdmin)
+
+
+════════════════════════════════════════════════════════════════════════════
+PART 4: VALIDATION & TESTING
+════════════════════════════════════════════════════════════════════════════
+
+▶️  STEP 4.1: HEALTH CHECKS
+────────────────────────────────────────────────────────────────────────────
+
+1. Database Health:
+   $ cd SQL && ./scripts/verify.sh --quick
+
+   Expected:
+     ✅ Database: Connected
+     ✅ Schema: test exists
+     ✅ Tables: 14/14
+     ✅ Products: 90 rows
+     ✅ Embeddings: 768-dimensional vectors
+
+2. MCP Server Health:
+   $ curl http://localhost:8009/health
+
+   Expected:
+     {"status":"healthy","database":"connected"}
+
+3. Services Connectivity:
+   $ curl http://localhost:8009/mcp/tools
+
+   Expected: JSON array with available tools
+
+4. Database Query Test:
+   $ docker exec mcp-postgres psql -U mcp_user -d mcpdb -c \
+     "SELECT COUNT(*) FROM test.products WHERE embedding IS NOT NULL;"
+
+   Expected:
+      count
+     -------
+        90
+     (1 row)
+
+
+▶️  STEP 4.2: AUTOMATED TEST SUITE
+────────────────────────────────────────────────────────────────────────────
+
+Run comprehensive test suite:
+
+$ make test
+# OR
+$ source .venv/bin/activate
+$ pytest test/ -v --cov=client_mcp --cov=mcp_server --cov=agent
+
+Expected output:
+  ============================= test session starts =============================
+  collected XXX items
+
+  test/test_mcp_server.py::test_health_endpoint PASSED                    [  X%]
+  test/test_mcp_server.py::test_tools_endpoint PASSED                     [  X%]
+  test/test_client_mcp.py::test_connection PASSED                         [  X%]
+  test/test_database.py::test_products_loaded PASSED                      [  X%]
+  test/test_search.py::test_vector_search PASSED                          [  X%]
+  test/test_bookings.py::test_availability PASSED                         [  X%]
+  ...
+
+  ============================= XXX passed in X.XXs ==============================
+  Coverage: XX%
+
+If tests fail, check logs:
+  $ cat logs/test_results.log
+
+
+▶️  STEP 4.3: END-TO-END TESTING
+────────────────────────────────────────────────────────────────────────────
+
+Test complete user workflows:
+
+────────────────────────────────────────────────────────────────────────────
+Test 1: Product Search
+────────────────────────────────────────────────────────────────────────────
+Open Odiseo Bot terminal and type:
+  > Busco un laptop
+
+Expected:
+  🔍 Buscando productos relacionados con "laptop"...
+
+  Encontré 5 productos:
+  1. Dell XPS 13 - $1299.99
+  2. MacBook Air M2 - $1199.99
+  3. Lenovo ThinkPad - $899.99
+  ...
+
+  ¿Quieres más información sobre alguno?
+
+────────────────────────────────────────────────────────────────────────────
+Test 2: Booking Availability
+────────────────────────────────────────────────────────────────────────────
+  > Quiero agendar una cita para mañana a las 10am
+
+Expected:
+  📅 Verificando disponibilidad...
+  ✅ Horario disponible: Mañana 10:00 AM
+
+  ¿Confirmas la reserva?
+
+────────────────────────────────────────────────────────────────────────────
+Test 3: Vector Similarity Search (Direct Database)
+────────────────────────────────────────────────────────────────────────────
+$ docker exec mcp-postgres psql -U mcp_user -d mcpdb <<EOF
+SELECT sku, name, category
+FROM test.products
+WHERE embedding IS NOT NULL
+ORDER BY embedding <-> (
+  SELECT embedding FROM test.products WHERE sku = 'LAPTOP-001' LIMIT 1
+) LIMIT 5;
+EOF
+
+Expected: 5 products most similar to LAPTOP-001
+
+────────────────────────────────────────────────────────────────────────────
+Test 4: Booking System Functions
+────────────────────────────────────────────────────────────────────────────
 $ docker exec mcp-postgres psql -U mcp_user -d mcpdb -c \
-  "SELECT sku, name, array_length(embedding, 1) as embedding_dim FROM test.products LIMIT 1;"
-Expected: sku | name | embedding_dim
-          xxx | xxx  | 768
+  "SELECT test.is_slot_available('2025-01-15'::DATE, '14:00'::TIME, 60);"
 
-3. Test availability slot function:
-$ docker exec mcp-postgres psql -U mcp_user -d mcpdb -c \
-  "SELECT test.is_slot_available(CURRENT_DATE, '09:00'::TIME, 60);"
 Expected: t (true) or f (false)
 
-4. Test vector search (semantic similarity):
+
+════════════════════════════════════════════════════════════════════════════
+PART 5: DAILY OPERATIONS
+════════════════════════════════════════════════════════════════════════════
+
+▶️  STARTING & STOPPING SERVICES
+────────────────────────────────────────────────────────────────────────────
+
+Start all services:
+$ make start
+# OR
+$ ./scripts/deploy.sh start
+
+Stop all services:
+$ make stop
+# OR
+$ ./scripts/deploy.sh stop
+
+Restart all services:
+$ make stop && make start
+
+Stop only Docker infrastructure:
+$ make docker-stop
+
+Start only Docker infrastructure:
+$ make docker-start
+
+
+▶️  MONITORING & LOGS
+────────────────────────────────────────────────────────────────────────────
+
+View MCP Server logs:
+$ tail -f logs/mcp_server.log
+
+View Odiseo Bot logs:
+$ tail -f logs/odiseo_bot.log
+
+View PostgreSQL logs:
+$ docker logs mcp-postgres -f
+
+View all Docker logs:
+$ cd DockerConfig && docker-compose logs -f
+
+View email worker logs:
+$ tail -f logs/email_worker.log
+
+Check system resources:
+$ docker stats
+
+Check database size:
 $ docker exec mcp-postgres psql -U mcp_user -d mcpdb -c \
-  "SELECT sku, name FROM test.products ORDER BY embedding <-> \
-   '[0.1, -0.2, ...]'::vector LIMIT 5;"
-Expected: Top 5 semantically similar products
+  "SELECT pg_size_pretty(pg_database_size('mcpdb'));"
 
 
-▶️  TROUBLESHOOTING
+▶️  COMMON TASKS
 ────────────────────────────────────────────────────────────────────────────
 
-SCHEMA_NAME Configuration Issues:
+Reload database data (without schema changes):
+$ cd SQL/src
+$ python3 populate.py --db --embeddings
 
-Problem: "Schema name not recognized" or "Schema 'test' not found"
-Solution:
-  1. Verify SCHEMA_NAME is set in .env:
-     $ cat .env | grep SCHEMA_NAME
-     Expected: SCHEMA_NAME=test (or your configured value)
+Add new products:
+$ cd SQL/src
+$ python3 populate.py --db --table products
 
-  2. If missing or wrong, edit .env:
-     $ vi .env
-     # Find line: SCHEMA_NAME=test
-     # Ensure no spaces around = sign
+Run linting and formatting:
+$ make lint
+$ make format
 
-  3. Verify deploy.sh reads it correctly:
-     $ grep -A 2 "source.*ENV_FILE" ./scripts/deploy.sh
-     # Should show .env loading
+Run security checks:
+$ make check
 
-  4. Re-run deployment with correct schema:
-     $ ./scripts/deploy.sh
+Access pgAdmin (Database GUI):
+1. Open browser: http://localhost:8090
+2. Login:
+   Email: admin@example.com
+   Password: admin123
+3. Add server:
+   Host: host.docker.internal (macOS/Windows) or 172.17.0.1 (Linux)
+   Port: 5434
+   Database: mcpdb
+   Username: mcp_user
+   Password: mcp_password
 
-Problem: "Schema exists but tables not found"
-Solution:
-  1. Verify correct schema name:
-     $ docker exec mcp-postgres psql -U mcp_user -d mcpdb -c \
-       "SELECT schemaname FROM pg_namespace WHERE schemaname LIKE '%test%';"
+Access PostgreSQL directly:
+$ docker exec -it mcp-postgres psql -U mcp_user -d mcpdb
 
-  2. If different schema created, check .env history:
-     $ git log -p -- .env | grep SCHEMA_NAME
+Backup database:
+$ docker exec mcp-postgres pg_dump -U mcp_user mcpdb | gzip > backup_$(date +%Y%m%d).sql.gz
 
-  3. Deploy to correct schema:
-     $ vi .env  # Set SCHEMA_NAME to matching value
-     $ ./scripts/deploy.sh
+Restore database:
+$ gunzip -c backup_20250128.sql.gz | docker exec -i mcp-postgres psql -U mcp_user -d mcpdb
 
-Problem: "Multiple schemas created" (test, dev, prod all exist)
-Solution:
-  All schemas can coexist. To clean up old schemas:
-  $ docker exec mcp-postgres psql -U mcp_user -d mcpdb -c \
-    "DROP SCHEMA IF EXISTS old_schema CASCADE;"
 
-  Then set SCHEMA_NAME in .env to desired schema and redeploy.
+════════════════════════════════════════════════════════════════════════════
+TROUBLESHOOTING
+════════════════════════════════════════════════════════════════════════════
 
+▶️  ENVIRONMENT VALIDATION ISSUES
 ────────────────────────────────────────────────────────────────────────────
 
-General Deployment Issues:
+Problem: "make validate" fails with errors
+Solution:
+  1. Read error messages carefully
+  2. Check which .env file has issues
+  3. Fix configuration in that file
+  4. Re-run: make validate
+
+Problem: "GOOGLE_API_KEY format may be invalid"
+Solution:
+  1. Verify API key starts with "AIza"
+  2. Get new key from: https://aistudio.google.com/app/apikey
+  3. Update all service .env files with same key
+  4. Re-run: make validate
+
+Problem: "Services use different database hosts"
+Solution:
+  All services must use same DATABASE_URL
+  Check: mcp_server/.env, client_mcp/.env, email_service/.env, SQL/.env
+  Should all have: postgresql://mcp_user:mcp_password@localhost:5434/mcpdb
+
+
+▶️  DOCKER ISSUES
+────────────────────────────────────────────────────────────────────────────
+
+Problem: "Cannot connect to the Docker daemon"
+Solution:
+  $ sudo systemctl start docker       # Linux
+  $ open -a Docker                    # macOS
+  Verify: $ docker ps
 
 Problem: "Container 'mcp-postgres' not found"
 Solution:
-  $ cd ../DockerConfig
+  $ cd DockerConfig
+  $ docker-compose up -d postgres
+  $ docker ps | grep postgres
+
+Problem: "Port 5434 already in use"
+Solution:
+  Find conflicting process:
+  $ lsof -i :5434
+  Kill or change port in DockerConfig/.env
+
+Problem: "PostgreSQL healthcheck failing"
+Solution:
+  Wait 30-60 seconds for initialization
+  Check logs: $ docker logs mcp-postgres
+  If errors persist, recreate container:
+  $ cd DockerConfig
+  $ docker-compose down
+  $ docker volume rm dockerconfig_postgres-data
   $ docker-compose up -d
-  $ docker ps | grep mcp-postgres
 
-Problem: "Cannot connect to database"
+
+▶️  DATABASE ISSUES
+────────────────────────────────────────────────────────────────────────────
+
+Problem: "Schema 'test' does not exist"
 Solution:
-  Check database is accepting connections:
-  $ docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "SELECT 1;"
+  Re-run database deployment:
+  $ cd SQL
+  $ ./scripts/deploy.sh
 
-  If failed, check PostgreSQL logs:
-  $ docker logs mcp-postgres | tail -50
-
-Problem: "File not found: deploy.sql"
+Problem: "No products found" or "Products loaded: 0"
 Solution:
-  Ensure you're in the SQL directory:
-  $ pwd  # Should show: /path/to/Lab01-MCP/SQL
-  $ ls 05_orchestration/01_deploy.sql  # Should list the file
-
-Problem: "Permission denied" when running scripts
-Solution:
-  Make scripts executable:
-  $ chmod +x ./scripts/deploy.sh
-  $ chmod +x ./scripts/verify.sh
-
-Problem: "Google API key not found" (embeddings fail)
-Solution:
-  Embeddings are optional. To enable:
-  1. Get API key from Google AI Studio (ai.google.dev)
-  2. Add to .env file: GOOGLE_API_KEY=your-key-here
-
-  Or skip embeddings:
-  $ python3 src/populate.py --db --table service_types
-
-Problem: Deployment fails midway
-Solution:
-  1. Check error message in output
-  2. Run validation to identify issue:
-     $ ./scripts/deploy.sh --validate-only
-  3. Check database logs:
-     $ docker logs mcp-postgres | tail -100
-  4. If issue found, fix, then re-run:
-     $ ./scripts/deploy.sh
+  Re-populate database:
+  $ cd SQL/src
+  $ python3 populate.py --db --embeddings
 
 Problem: "Extension 'vector' does not exist"
 Solution:
-  pgvector must be installed in PostgreSQL:
   $ docker exec mcp-postgres psql -U mcp_user -d mcpdb \
     -c "CREATE EXTENSION IF NOT EXISTS vector;"
+  Then re-run: cd SQL && ./scripts/deploy.sh
 
-Problem: Out of memory during embeddings
+Problem: "Google API quota exceeded" during embeddings
 Solution:
-  Reduce batch size in .env:
-  BATCH_SIZE=4  # Default is 8
+  1. Reduce batch size in SQL/.env: BATCH_SIZE=4
+  2. Use Free Tier API key (15 requests/minute limit)
+  3. Wait 24 hours for quota reset
+  4. Or upgrade to paid tier
 
-  Then retry:
-  $ python3 src/populate.py --db --table products
 
-
-▶️  WHAT HAPPENS IN EACH PHASE
+▶️  SERVICE STARTUP ISSUES
 ────────────────────────────────────────────────────────────────────────────
 
-PHASE 1: PostgreSQL Extensions
-  Installs: uuid-ossp, unaccent, pg_trgm, vector
-  Purpose: Enable UUID generation, fuzzy search, vector operations
+Problem: "MCP Server fails to start"
+Solution:
+  1. Check logs: $ tail -f logs/mcp_server.log
+  2. Verify port 8009 is free: $ lsof -i :8009
+  3. Check mcp_server/.env configuration
+  4. Verify database is running
+  5. Try manual start:
+     $ cd mcp_server
+     $ python server.py
 
-PHASE 2: Schema & Permissions
-  Creates: test schema
-  Configures: mcp_user permissions
-  Ensures: Proper access control
+Problem: "Odiseo Bot cannot connect to MCP Server"
+Solution:
+  1. Verify MCP Server is running: $ curl http://localhost:8009/health
+  2. Check MCP_HOST and MCP_PORT in client_mcp/.env
+  3. Check firewall rules
+  4. Restart MCP Server first, then Odiseo Bot
 
-PHASE 3-7: Table Creation (DDL)
-  Products: Main product catalog with embeddings
-  Bookings: Appointment and scheduling system
-  Email: Email queue for async communication
-  Memory: Conversation and agent memory storage
-  Utils: Pagination context tracking
+Problem: "ModuleNotFoundError: No module named 'X'"
+Solution:
+  Activate venv and reinstall dependencies:
+  $ source .venv/bin/activate
+  $ pip install -r requirements.txt
 
-PHASE 8: Indexes
-  Creates 60+ indexes optimized for:
-    - Full text search (GIN trigram indexes)
-    - Vector similarity (IVFFlat for embeddings)
-    - Standard lookups (B-tree indexes)
-    - Foreign key constraints
-
-PHASE 9: Functions & Triggers
-  Functions: 30+ PostgreSQL functions for:
-    - Availability checking
-    - Email queue management
-    - Memory retrieval
-    - Pagination
-  Triggers: Auto-update timestamps, enforce constraints
-
-PHASE 10: Seed Data
-  Loads: 90 products with embeddings
-  Status: Products include AI-generated semantic vectors
+Problem: "Permission denied" when running scripts
+Solution:
+  $ chmod +x scripts/*.sh
+  $ chmod +x SQL/scripts/*.sh
 
 
-▶️  DEPLOYMENT CONFIGURATION
+▶️  TESTING ISSUES
 ────────────────────────────────────────────────────────────────────────────
 
-Environment variables (.env file):
+Problem: "Tests fail with database connection errors"
+Solution:
+  1. Ensure PostgreSQL is running
+  2. Verify DATABASE_URL in .env files
+  3. Check test database is initialized
 
-DATABASE_URL
-  Format: postgresql://user:pass@host:port/database
-  Example: postgresql://mcp_user:password@localhost:5434/mcpdb
-  Required: Yes
+Problem: "Vector search tests fail"
+Solution:
+  1. Verify embeddings loaded:
+     $ docker exec mcp-postgres psql -U mcp_user -d mcpdb \
+       -c "SELECT COUNT(*) FROM test.products WHERE embedding IS NOT NULL;"
+  2. If count is 0, reload data with embeddings:
+     $ cd SQL/src && python3 populate.py --db --embeddings
 
-GOOGLE_API_KEY
-  For: Generating product embeddings
-  Source: https://ai.google.dev/
-  Required: Only for product embeddings
-
-SCHEMA_NAME
-  Value: test (default)
-  Purpose: PostgreSQL schema name (dynamic, read from .env)
-  Required: Yes
-
-  IMPORTANT: All SQL deployment scripts use this variable!
-  - Schema creation uses: CREATE SCHEMA :SCHEMA_NAME
-  - Table creation uses: CREATE TABLE :SCHEMA_NAME.table_name
-  - All indexes use: ON :SCHEMA_NAME.table_name
-  - All functions use: CREATE FUNCTION :SCHEMA_NAME.function_name
-
-  Multi-Environment Support:
-  - Development: SCHEMA_NAME=dev
-  - Testing: SCHEMA_NAME=test
-  - Staging: SCHEMA_NAME=staging
-  - Production: SCHEMA_NAME=prod
-  - Custom: SCHEMA_NAME=my_schema
-
-  How It Works:
-  1. Shell scripts (deploy.sh, verify.sh) read .env
-  2. SCHEMA_NAME value passed to psql with -v flag
-  3. SQL files reference variable as :SCHEMA_NAME
-  4. PostgreSQL substitutes actual schema name at runtime
-
-  Change Log Example:
-  $ vi .env                    # Edit SCHEMA_NAME=test to SCHEMA_NAME=production
-  $ ./scripts/deploy.sh        # Deploys to 'production' schema automatically
-
-EMBEDDING_MODEL
-  Value: gemini-embedding-001
-  Purpose: Google Gemini model for embeddings
-  Required: Only if generating embeddings
-  Note: Other options: text-embedding-004 (1536-dim)
-
-OUTPUT_DIMENSIONALITY
-  Value: 768
-  Purpose: Embedding vector dimension
-  Required: Yes (when using embeddings)
-  Note: Use 1536 for text-embedding-004 model
-
-BATCH_SIZE
-  Value: 8
-  Purpose: Records processed per embedding batch
-  Required: No (default: 8)
+Problem: "Coverage too low"
+Solution:
+  This is a warning, not an error. Tests still passed.
+  To improve coverage, add more tests in test/ directory.
 
 
-▶️  PERFORMANCE EXPECTATIONS
-────────────────────────────────────────────────────────────────────────────
+════════════════════════════════════════════════════════════════════════════
+QUICK REFERENCE
+════════════════════════════════════════════════════════════════════════════
 
-PHASE 1 - DDL Deployment: 5-10 seconds ⚡
-  - Extension installation
-  - Schema creation
-  - Table creation (14 tables)
-  - Index creation (80+ indexes)
-  - Function creation (31 functions)
+INITIAL SETUP (First Time)
+$ make validate                          # Validate environment (89 checks)
+$ make docker-start                      # Start Docker infrastructure
+$ cd SQL && ./scripts/deploy.sh          # Deploy database
+$ make deploy                            # Full deployment
 
-PHASE 2 - DML Deployment: ~60 seconds ⭐
-  - Python dependency check: ~2 seconds
-  - Product loading: ~50 seconds (includes Google Gemini API calls)
-    • 90 products in 12 batches (8 products/batch)
-    • Embedding generation: 768-dimensional vectors
-    • API latency: ~0.7s per batch
-  - Service types: ~1 second (5 records)
-  - Business hours: ~1 second (6 records)
-  - Blocked times: ~2 seconds (25 records)
+DAILY OPERATIONS
+$ make start                             # Start all services
+$ make stop                              # Stop all services
+$ make status                            # Show service status
+$ make test                              # Run test suite
 
-PHASE 3 - Validation: ~2 seconds
-  - Schema verification
-  - Table count checks
-  - Data integrity validation
+DATABASE
+$ cd SQL && ./scripts/verify.sh          # Verify database health
+$ cd SQL && ./scripts/verify.sh --quick  # Quick health check
+$ docker exec -it mcp-postgres psql -U mcp_user -d mcpdb  # Direct access
 
-PHASE 4 - Health Checks: ~5 seconds
-  - Function testing
-  - Index verification
-  - Query performance checks
+MONITORING
+$ tail -f logs/mcp_server.log            # MCP Server logs
+$ tail -f logs/odiseo_bot.log            # Odiseo Bot logs
+$ docker logs mcp-postgres -f            # PostgreSQL logs
+$ make docker-logs                       # All Docker logs
 
-Total Full Deployment: ~70-80 seconds ⚡
-(Previously: 4-6 minutes - 85% faster!)
-
-Storage Usage:
-  - Database size: ~200 MB (with products and 768-dim embeddings)
-  - Table space: ~120 MB
-  - Index space: ~60 MB
-  - Vector indexes (IVFFlat): ~15 MB
+TROUBLESHOOTING
+$ make validate                          # Environment validation
+$ docker ps                              # Check Docker containers
+$ curl http://localhost:8009/health      # MCP Server health
+$ ./scripts/deploy.sh status             # Service status
 
 
-▶️  NEXT STEPS AFTER DEPLOYMENT
-────────────────────────────────────────────────────────────────────────────
+════════════════════════════════════════════════════════════════════════════
+ARCHITECTURE OVERVIEW
+════════════════════════════════════════════════════════════════════════════
 
-1. Test Connectivity
-   $ cd client_mcp
-   $ npm install
-   $ npm run dev
+Lab01-MCP Microservices Architecture:
 
-2. Load Additional Data (if needed)
-   $ cd SQL/src
-   $ python3 populate.py --db --table appointments
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                         CLIENT LAYER                            │
+  ├─────────────────────────────────────────────────────────────────┤
+  │  Odiseo Bot (client_mcp)                                        │
+  │  - Conversational AI interface                                  │
+  │  - Multi-agent routing                                          │
+  │  - User interaction management                                  │
+  └────────────────────────┬────────────────────────────────────────┘
+                          │
+                          ▼
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                      APPLICATION LAYER                          │
+  ├─────────────────────────────────────────────────────────────────┤
+  │  MCP Server (mcp_server)            Agent Service (agent)       │
+  │  - FastMCP framework                - Gemini integration        │
+  │  - Tool exposure via MCP            - Advanced reasoning        │
+  │  - Product search (vector)          - Function calling          │
+  │  - Booking management                                           │
+  │  - Memory management                                            │
+  └────────────────────────┬────────────────────────┬───────────────┘
+                          │                        │
+                          ▼                        ▼
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                       WORKER LAYER                              │
+  ├─────────────────────────────────────────────────────────────────┤
+  │  Email Worker (email_service)                                   │
+  │  - Async email queue processing                                 │
+  │  - SMTP integration                                             │
+  │  - Booking notifications                                        │
+  └────────────────────────┬───────────────────────────────────────┘
+                          │
+                          ▼
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                         DATA LAYER                              │
+  ├─────────────────────────────────────────────────────────────────┤
+  │  PostgreSQL + pgvector (mcp-postgres)                           │
+  │  - Product catalog (90 items)                                   │
+  │  - Vector embeddings (768-dim, Gemini)                          │
+  │  - Booking system (appointments, hours, blocks)                 │
+  │  - Email queue                                                  │
+  │  - Memory system (conversations, agents, users)                 │
+  │  - Pagination contexts                                          │
+  └─────────────────────────────────────────────────────────────────┘
 
-3. Monitor Database
-   $ docker logs mcp-postgres -f
+Ports:
+  5434  - PostgreSQL
+  8009  - MCP Server (FastMCP)
+  8000  - Agent Service
+  8090  - pgAdmin (optional UI)
 
-4. Backup Initial State
-   $ docker exec mcp-postgres pg_dump -U mcp_user mcpdb | gzip > backup.sql.gz
-
-5. Review Documentation
-   $ cat SQL/README.md              # Full technical reference
-   $ cat SQL/src/USAGE.md           # Data loading documentation
-   $ cat docs/NOTAS_CLAUDE.md       # Project implementation notes
-
-
-▶️  QUICK REFERENCE COMMANDS
-────────────────────────────────────────────────────────────────────────────
-
-Full deployment with validation:
-$ cd SQL && ./scripts/deploy.sh
-
-Quick health check:
-$ cd SQL && ./scripts/verify.sh --quick
-
-Detailed diagnostics:
-$ cd SQL && ./scripts/verify.sh --detailed
-
-Validate existing database:
-$ cd SQL && ./scripts/deploy.sh --validate-only
-
-Manual deployment without verification:
-$ cd SQL && ./scripts/deploy.sh --no-verify
-
-Manual phase deployment:
-$ cd SQL && docker exec mcp-postgres psql -U mcp_user -d mcpdb \
-  -f 05_orchestration/01_deploy.sql
-
-Check container status:
-$ docker ps | grep mcp-postgres
-
-Connect to database directly:
-$ docker exec -it mcp-postgres psql -U mcp_user -d mcpdb
-
-View database logs:
-$ docker logs mcp-postgres
-
-Query product count:
-$ docker exec mcp-postgres psql -U mcp_user -d mcpdb -c "SELECT COUNT(*) FROM test.products;"
-
-Reload data (after deployment):
-$ cd SQL/src && python3 populate.py --db
+Communication:
+  - All services connect to PostgreSQL on localhost:5434
+  - Odiseo Bot → MCP Server (HTTP REST API)
+  - MCP Server → PostgreSQL (psycopg2)
+  - Email Worker → PostgreSQL (queue polling)
+  - All services use Google Gemini API for AI capabilities
 
 
-▶️  SUPPORT & DEBUGGING
-────────────────────────────────────────────────────────────────────────────
+════════════════════════════════════════════════════════════════════════════
+VERSION & UPDATES
+════════════════════════════════════════════════════════════════════════════
 
-For detailed help:
-  $ cd SQL/scripts && ./deploy.sh --help
-  $ cd SQL/scripts && ./verify.sh --help
-
-For technical documentation:
-  → SQL/README.md (architecture, file structure, workflow)
-  → SQL/src/USAGE.md (data loading guide)
-  → docs/NOTAS_CLAUDE.md (implementation notes)
-
-Common issues:
-  Run validation to identify problems:
-  $ ./scripts/deploy.sh --validate-only
-
-  Check database health:
-  $ ./scripts/verify.sh --detailed
-
-  View PostgreSQL logs:
-  $ docker logs mcp-postgres -f
-
-  Test specific functionality:
-  $ docker exec mcp-postgres psql -U mcp_user -d mcpdb \
-    -c "SELECT test.is_slot_available(CURRENT_DATE, '09:00'::TIME, 60);"
-
-▶️  WHAT'S NEW IN VERSION 2.1 (2025-10-19) ⭐
-────────────────────────────────────────────────────────────────────────────
-
-MAJOR UPDATE: Python-Based Data Loading Integration
-
-Before (v2.0):
-  • Manual 2-step process: deploy.sh (DDL) + populate.py (DML)
-  • Embeddings either NULL or pre-generated from SQL files
-  • Required manual intervention
-  • Total time: 4-6 minutes
-
-After (v2.1):
-  ✅ Single command deployment: ./scripts/deploy.sh
-  ✅ Automatic Python dependency installation
-  ✅ Fresh embeddings generated on-the-fly (Google Gemini API)
-  ✅ Environment-driven configuration (.env)
-  ✅ Direct database insertion (no intermediate SQL files)
-  ✅ Total time: ~70 seconds (85% faster!)
-
-Key Changes:
-  1. deploy.sh now includes Phase 2: Data Loading
-     - Auto-checks Python3 and required packages
-     - Auto-installs: psycopg2, google-generativeai, pgvector, etc.
-     - Executes: python3 populate.py --db --embeddings
-
-  2. 01_deploy.sql updated
-     - Phase 10 (seed data) now handled by Python
-     - SQL seed files kept for reference only
-
-  3. populate.py unchanged
-     - Already supported --db mode
-     - Works with .env configuration
-
-  4. Performance improved
-     - DDL: 5-10 seconds (vs 30-60 seconds)
-     - DML: ~60 seconds (vs 3-5 minutes)
-     - Embeddings: 768-dim vectors (gemini-embedding-001)
-
-Benefits:
-  • Zero manual intervention required
-  • Fresh embeddings every deployment
-  • Environment-specific configurations
-  • Faster deployment (85% reduction)
-  • Production-ready automation
-
-Migration from v2.0 to v2.1:
-  1. Update .env with new variables:
-     EMBEDDING_MODEL=gemini-embedding-001
-     OUTPUT_DIMENSIONALITY=768
-
-  2. Run deployment as usual:
-     ./scripts/deploy.sh
-
-  That's it! Everything else is automatic.
-
-────────────────────────────────────────────────────────────────────────────
-Created: 2025-10-18
-Version: 2.1 (Automated Python Data Loading Integration)
-Last Updated: 2025-10-19
+Version: 3.0 (Complete System Deployment)
+Created: 2025-10-28
+Last Updated: 2025-10-28
 Status: Production Ready
+
+What's New in v3.0:
+  ✅ Complete system deployment guide (zero to production)
+  ✅ Comprehensive environment validation (89 checks)
+  ✅ Microservices architecture documentation
+  ✅ All services startup procedures
+  ✅ End-to-end testing guide
+  ✅ Advanced troubleshooting
+  ✅ Daily operations reference
+  ✅ Quick reference commands
+  ✅ Architecture overview
+
+Previous Versions:
+  v2.1 - Python-based data loading integration
+  v2.0 - Automated database deployment
+  v1.0 - Initial manual deployment guide
+
+For detailed technical documentation:
+  - SQL/README.md - Database architecture
+  - docs/NOTAS_CLAUDE.md - Implementation notes
+  - email_service/docs/NOTAS_CLAUDE.md - Architectural decisions
+
+
+════════════════════════════════════════════════════════════════════════════
+SUPPORT
+════════════════════════════════════════════════════════════════════════════
+
+Documentation:
+  - This file: SQL/QUICK_START.txt (complete deployment guide)
+  - SQL/README.md (database technical reference)
+  - docs/* (project documentation)
+  - email_service/docs/NOTAS_CLAUDE.md (architectural notes)
+
+Commands for Help:
+  $ make help                              # Show all available commands
+  $ ./scripts/deploy.sh --help             # Deployment script options
+  $ cd SQL && ./scripts/deploy.sh --help   # Database deployment options
+
+Common Issues:
+  Run validation to identify problems:
+  $ make validate
+
+  Check service health:
+  $ ./scripts/deploy.sh status
+
+  View logs:
+  $ tail -f logs/*.log
+  $ docker logs mcp-postgres
+
 ────────────────────────────────────────────────────────────────────────────
+END OF QUICK START GUIDE
+════════════════════════════════════════════════════════════════════════════

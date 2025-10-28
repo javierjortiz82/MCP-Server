@@ -14,7 +14,7 @@
 # ✓ Error messages: Clear, colored error messages on failure
 # ============================================================================
 
-.PHONY: help install test clean deploy start stop status lint format check docs db docker-start docker-stop docker-build docker-restart docker-logs docker-ps docker-clean review review-fix review-report
+.PHONY: help install test clean deploy start stop status lint format check docs db docker-start docker-stop docker-build docker-restart docker-logs docker-ps docker-clean review review-fix review-report validate validate-strict validate-quiet validate-pydantic docker-start-safe
 
 # Variables
 PYTHON := python3
@@ -38,6 +38,13 @@ help:
 	@echo "$(GREEN)test$(NC)              - Run all tests with coverage"
 	@echo "$(GREEN)clean$(NC)             - Remove cache files and build artifacts"
 	@echo "$(GREEN)docs$(NC)              - Generate documentation"
+	@echo ""
+	@echo "$(YELLOW)Environment Validation (Pre-Deploy):$(NC)"
+	@echo "$(GREEN)validate$(NC)          - Validate complete environment (files, vars, Docker)"
+	@echo "$(GREEN)validate-strict$(NC)   - Validate with strict mode (warnings = errors)"
+	@echo "$(GREEN)validate-quiet$(NC)    - Validate with minimal output"
+	@echo "$(GREEN)validate-pydantic$(NC) - Validate Pydantic v2 field mapping"
+	@echo "$(GREEN)docker-start-safe$(NC) - Validate then start Docker (safer deploy)"
 	@echo ""
 	@echo "$(YELLOW)Code Quality (Professional):$(NC)"
 	@echo "$(GREEN)review$(NC)            - Professional code review (ruff + mypy + isort + vulture + bandit)"
@@ -295,6 +302,32 @@ docs:
 	@mkdir -p docs/api
 	@$(ACTIVATE) && pdoc --html --output-dir docs/api agent client_mcp || { echo "$(RED)Documentation generation failed$(NC)"; exit 1; }
 	@echo "$(GREEN)✓ Documentation generated in docs/api$(NC)"
+
+# Environment Validation
+validate:
+	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
+	@echo "$(BLUE)Lab01-MCP Environment Validation$(NC)"
+	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
+	@$(PYTHON) scripts/validate_environment.py || { echo "$(RED)Validation failed$(NC)"; exit 1; }
+
+validate-strict:
+	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
+	@echo "$(BLUE)Lab01-MCP Environment Validation (STRICT MODE)$(NC)"
+	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
+	@$(PYTHON) scripts/validate_environment.py --strict || { echo "$(RED)Validation failed (strict mode)$(NC)"; exit 1; }
+
+validate-quiet:
+	@$(PYTHON) scripts/validate_environment.py --quiet
+
+validate-pydantic:
+	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
+	@echo "$(BLUE)Pydantic v2 Field Mapping Validation$(NC)"
+	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
+	@$(PYTHON) scripts/validate_pydantic_mapping.py || { echo "$(RED)Pydantic validation failed$(NC)"; exit 1; }
+
+# Safe Docker deployment (validate before starting)
+docker-start-safe: validate-quiet docker-start
+	@echo "$(GREEN)✓ Environment validated and Docker started safely$(NC)"
 
 # Database
 db:
