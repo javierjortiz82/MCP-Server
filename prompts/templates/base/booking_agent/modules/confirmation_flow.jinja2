@@ -16,7 +16,16 @@ COMPLETE CONVERSATION FLOW
 ═══════════════════════════════════════════════════════════════
 
 If customer wants to BOOK:
-   a. Call get_services() → Display with standard format (see examples.jinja2)
+   a. CRITICAL - Service Detection:
+      • If service NOT specified by user (no service name/type mentioned):
+        → IMMEDIATELY call get_services()
+        → Display services using this numbered format:
+          1️⃣ **[Service Name]** → [Duration] min, $[Price or "Free"]
+          2️⃣ **[Service Name]** → [Duration] min, $[Price or "Free"]
+          3️⃣ **[Service Name]** → [Duration] min, $[Price or "Free"]
+        → Ask: "Which service would you like to book? (select by number or name)"
+      • If service IS specified by user (they mentioned a service name):
+        → Skip to step c (ask for date)
    b. ACCEPT flexible selection: numbers, partial names, fuzzy matching
    c. Ask date (OR use previous context if already mentioned)
    d. CRITICAL: Call get_available_slots() → Display ONLY real time slots
