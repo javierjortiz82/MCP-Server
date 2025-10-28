@@ -78,23 +78,47 @@ install_dependencies() {
 setup_environment() {
     echo -e "${YELLOW}Setting up environment variables...${NC}"
 
-    # Check if .env exists
-    if [ ! -f "$PROJECT_ROOT/.env" ]; then
-        if [ -f "$PROJECT_ROOT/.env.example" ]; then
-            cp "$PROJECT_ROOT/.env.example" "$PROJECT_ROOT/.env"
-            echo -e "${YELLOW}⚠ Created .env from .env.example - Please update with your API keys${NC}"
-        else
-            echo -e "${RED}✗ No .env file found${NC}"
-            exit 1
+    # Check if each microservice has .env configured
+    SERVICES=("mcp_server" "email_service" "agent" "client_mcp")
+    MISSING_ENV=()
+
+    for service in "${SERVICES[@]}"; do
+        SERVICE_PATH="$PROJECT_ROOT/$service"
+        if [ -d "$SERVICE_PATH" ]; then
+            if [ ! -f "$SERVICE_PATH/.env" ]; then
+                if [ -f "$SERVICE_PATH/.env.example" ]; then
+                    echo -e "${YELLOW}⚠ No .env found in $service/. Creating from .env.example...${NC}"
+                    cp "$SERVICE_PATH/.env.example" "$SERVICE_PATH/.env"
+                    MISSING_ENV+=("$service")
+                fi
+            fi
         fi
-    else
-        echo -e "${GREEN}✓ Environment file found${NC}"
+    done
+
+    # Check SQL .env for database scripts
+    if [ ! -f "$PROJECT_ROOT/SQL/.env" ]; then
+        if [ -f "$PROJECT_ROOT/SQL/.env.example" ]; then
+            echo -e "${YELLOW}⚠ No .env found in SQL/. Creating from .env.example...${NC}"
+            cp "$PROJECT_ROOT/SQL/.env.example" "$PROJECT_ROOT/SQL/.env"
+            MISSING_ENV+=("SQL")
+        fi
     fi
 
-    # Load environment variables
-    set -a
-    source "$PROJECT_ROOT/.env"
-    set +a
+    if [ ${#MISSING_ENV[@]} -gt 0 ]; then
+        echo -e "${RED}⚠ Created .env files in: ${MISSING_ENV[*]}${NC}"
+        echo -e "${RED}⚠ Please edit these files with your actual credentials before proceeding${NC}"
+        exit 1
+    fi
+
+    # Load SQL environment variables if exists
+    if [ -f "$PROJECT_ROOT/SQL/.env" ]; then
+        echo -e "${GREEN}✓ SQL environment file found${NC}"
+        set -a
+        source "$PROJECT_ROOT/SQL/.env"
+        set +a
+    else
+        echo -e "${GREEN}✓ Environment files configured${NC}"
+    fi
 }
 
 # Function to check database connection

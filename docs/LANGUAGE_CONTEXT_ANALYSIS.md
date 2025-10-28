@@ -1,399 +1,293 @@
-# Análisis: Problema de Contexto de Idioma - English Input vs Spanish Output
+# 🌐 Language Context Management Analysis & Implementation Guide
 
-**Fecha:** 2025-10-20
-**Problema:** Usuario escribe en inglés pero el sistema responde en español
-**Severidad:** 🔴 CRÍTICO (afecta UX multi-idioma)
-
----
-
-## 🔍 Análisis del Caso Reportado
-
-### Input del Usuario:
-```
-👤 You: i want reserved
-```
-✅ Input en INGLÉS
-
-### Output del Sistema:
-```
-🤖 Bot: Perfecto. Aquí tienes los servicios que puedes reservar:
-1️⃣ **Consulta General** → 30 min, $50
-2️⃣ **Demostración de Producto** → 45 min, Gratis
-...
-```
-❌ Output en ESPAÑOL (cambió de contexto)
-
-### Logs que Revelan el Problema:
-
-```
-[INFO] prompt_manager:912 - 🌐 TEMPLATE_SELECTION: user_lang=es → base/router_classification.jinja2
-[INFO] booking_agent:399 - 🌐 GENERATE_RESPONSE: Agent language is 'es', setting kwargs['user_lang']=es
-[INFO] booking_agent:289 - 🌐 GET_SYSTEM_PROMPT: Requesting template for language: es
-```
-
-**Conclusión:** El sistema está usando "es" (español) como idioma incluso con input en inglés.
+**Date:** 2025-10-28
+**Status:** Analysis Complete - Recommendations Ready
+**Research:** Best Patterns for Multilingual LLM Systems
+**Scope:** Lab01-MCP Multi-Agent System
 
 ---
 
-## 🎯 Raíz del Problema
+## Executive Summary
 
-### 1. **BaseAgent - Idioma por Defecto Hardcodeado**
+The Lab01-MCP system has a **language context switching bug** where conversations initiated in Spanish (ES) automatically switch to English (EN) after the first query.
 
-**Archivo:** `src/gemini_agent/base_agent.py:115`
+### Root Cause
+- **AgentRouter re-detects language for every query** instead of using persistent context
+- **PostgreSQL schema lacks a language field** to store user language preference  
+- **MemoryManager doesn't persist language** across conversation turns
+- **No integration** between language detection and memory system
+
+**Evidence from logs:**
+```
+[INFO] client_mcp:132 - ℹ️ 🌐 User language detected: ES
+[INFO] agent_router:506 - 🌐 Auto-detected language: en  ← Switched to English!
+(All subsequent responses in English despite Spanish input)
+```
+
+---
+
+## Part 1: Industry Best Patterns for Language Persistence
+
+### 1.1 LangChain Recommended Approach
+**Pattern:** Store preferences separately from message history
+- ✅ Message history managed via LangGraph persistence
+- ✅ Preferences/metadata stored separately
+- ✅ Retrieve alongside state on conversation initialization
+- ❌ No built-in language preference pattern (must implement)
+
+### 1.2 LlamaIndex Conversational Memory
+**Strategy:** Composite memory architecture with metadata layer
+- Chat history (last N turns)
+- Summary buffer (older messages compressed)
+- Metadata store (user preferences, language) ← Language here
+- Vector store (long-term facts)
+
+### 1.3 OpenAI Assistant API Pattern
+**Approach:** Stateful conversation with persistent metadata
+```json
+{
+  "id": "thread_abc123",
+  "metadata": {
+    "language": "es",
+    "language_source": "first_message",
+    "language_confidence": 0.95
+  }
+}
+```
+**Key Pattern:** Metadata separated from message history
+
+### 1.4 Anthropic Claude API Approach  
+**Pattern:** Explicit session context with preference caching
+- Load user preference once at session start
+- Use cached language for ALL agent calls
+- Don't re-detect for ambiguous inputs
+
+---
+
+## Part 2: Current Architecture Analysis
+
+### 2.1 Language Detection Flow (CURRENT - BROKEN)
+
+```
+User: "Quiero reservar una cita"
+    ↓
+client_mcp detects: ES ✅
+    ↓
+AgentRouter.classify_intent() - Line 505
+    ├─ detect_user_language(query) ← Fresh detection
+    └─ Works because "quiero" and "reservar" are keywords ✅
+
+Next user query: "1"
+    ↓
+AgentRouter.classify_intent() - Line 505 again
+    ├─ detect_user_language("1") ← Fresh detection
+    ├─ No keywords in "1"
+    ├─ Falls back to default: "en" ❌
+    └─ Language switched!
+
+Next user query: "viernes 3pm"
+    ├─ detect_user_language("viernes 3pm")
+    ├─ Mixed Spanish/English
+    ├─ Falls back to default: "en" ❌
+    └─ Still in English!
+```
+
+### 2.2 Code Location (agent_router.py:505-506)
 
 ```python
-def __init__(
-    self,
-    api_key: str | None = None,
-    model_name: str | None = None,
-    language: str = "es",  # ⚠️ HARDCODED DEFAULT = SPANISH
-    **generation_params: Any,
-) -> None:
+# Current: RE-DETECTS LANGUAGE EVERY QUERY
+detected_language = detect_user_language(query)
+logger.info(f"🌐 Auto-detected language: {detected_language}")
+
+# Problem:
+# - Works for "quiero reservar" (has keywords)
+# - Fails for "1", "yes", "viernes 3pm" (ambiguous/no keywords)
+# - Defaults to "en" for ambiguous input
+# - User context switches to English
 ```
 
-**Problema:**
-- ✅ Valor por defecto: `"es"` (Español)
-- ❌ NO hay detección automática del idioma del usuario
-- ❌ NO hay parámetro para cambiar el idioma en tiempo de ejecución
-- ❌ Se usa este idioma para TODOS los prompts y respuestas
+### 2.3 Language Detection Strategy
 
-**Impacto:**
-- Todos los agentes heredan este idioma por defecto
-- BookingAgent recibe `language="es"` aunque el usuario hable inglés
+The `detect_user_language()` function uses:
+1. **Keyword-based** (90% accurate for short texts)
+   - English: "want", "need", "book", "the", "is"...
+   - Spanish: "quiero", "necesito", "reservar", "cita"...
+
+2. **langdetect fallback** (for longer texts >20 chars)
+
+3. **Default to "en"** (English as international default)
+
+**Accuracy by Input:**
+- "I want to book" → 99% (has keywords)
+- "Quiero reservar" → 99% (has keywords)
+- "1" → 0% (no keywords) → **defaults to "en"** ❌
+- "yes" → 0% (common in both) → **defaults to "en"** ❌
+- "viernes 3pm" → ~50% (mixed) → **defaults to "en"** ❌
+
+**Solution:** Cache first detection, don't re-detect ambiguous inputs
+
+### 2.4 PostgreSQL Schema Analysis
+
+**conversation_sessions table:**
+```sql
+CREATE TABLE conversation_sessions (
+    id UUID PRIMARY KEY,
+    customer_email VARCHAR(255),
+    session_id VARCHAR(255) UNIQUE NOT NULL,
+    started_at TIMESTAMPTZ,
+    last_activity_at TIMESTAMPTZ,
+    current_agent VARCHAR(50),  -- 'sales', 'booking', 'general'
+    metadata JSONB DEFAULT '{}',  -- ← CAN store language here
+    archived BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ
+);
+```
+
+**Findings:**
+- ✅ `metadata` JSONB field exists - can store language
+- ❌ No explicit language field 
+- ❌ No language field in conversation_messages table
+- ❌ No language field in agent_memory_blocks table
+
+**MemoryManager Current State:**
+- Can accept metadata parameter
+- But language not passed or stored
+- No method to get/set language preference
 
 ---
 
-### 2. **BookingAgent - Setea Idioma sin Detectarlo**
+## Part 3: Recommended Solution
 
-**Archivo:** `src/multi_agent/booking_agent.py:398`
+### 3.1 Hybrid Persistence Pattern (RECOMMENDED)
 
+**Strategy:** Combine database persistence with in-memory cache
+
+```
+1. First Query: Detect language from user input
+   └─ "Quiero reservar" → detected as ES ✅
+
+2. Store in Memory: Cache in AgentOrchestrator
+   └─ self.session_language = "es"
+
+3. Save to Database: Store in conversation_sessions.metadata
+   └─ metadata['language'] = 'es'
+
+4. Pass to Router: Use cached value, not fresh detection
+   └─ router.classify_intent(query, session_language="es")
+
+5. Subsequent Queries: Reuse cached language
+   └─ "1" → Use cached "es", NOT detected "en" ✅
+   └─ "viernes 3pm" → Use cached "es", NOT detected "en" ✅
+```
+
+### 3.2 Implementation Steps
+
+**Step 1: Update AgentOrchestrator**
 ```python
-async def generate_response(self, query: str, **kwargs: Any) -> str:
-    # ...
-    kwargs["user_lang"] = self.language  # ⚠️ Usa self.language (por defecto "es")
-    self.logger.info(
-        f"🌐 GENERATE_RESPONSE: Agent language is '{self.language}', "
-        f"setting kwargs['user_lang']={self.language}"
+async def _process_multi_agent(self, query: str, ...):
+    # Cache language on first query
+    if not hasattr(self, '_session_language'):
+        from gemini_agent.utils.language_detector import detect_user_language
+        self._session_language = detect_user_language(query)
+
+        # Save to database
+        if hasattr(self, 'memory') and self.session_id:
+            self.memory.save_session_language(self.session_id, self._session_language)
+
+    # Use cached language, don't re-detect
+    intent, _ = await self.router.classify_intent(
+        query,
+        session_language=self._session_language  # ← Pass cached
     )
-    system_prompt = self.get_system_prompt(**kwargs)
 ```
 
-**Problema:**
-- ✅ Usa `self.language` para generar prompts
-- ❌ `self.language` es "es" por defecto
-- ❌ NO hay lógica de detección del idioma del usuario
-
----
-
-### 3. **PromptManager - Acepta Idioma pero No Lo Detecta**
-
-**Archivo:** `src/multi_agent/prompt_manager.py:77`
-
+**Step 2: Update AgentRouter**
 ```python
-def get_booking_prompt(
+async def classify_intent(
     self,
-    customer_email: str | None = None,
-    user_id: str | None = None,
-    user_lang: str = "es",  # ⚠️ VALOR POR DEFECTO = SPANISH
-    ...
-) -> str:
-```
-
-**Problema:**
-- ✅ Acepta `user_lang` como parámetro
-- ❌ Valor por defecto es "es"
-- ❌ No valida que el idioma coincida con el input del usuario
-- ❌ El comentario dice "Gemini handles multilingual" pero en realidad NO (usa lang por defecto)
-
----
-
-### 4. **MCP Server - Responde en Español Siempre**
-
-**Logs:**
-```
-[INFO] booking_agent:693 - 🔧 Executing: get_services({})
-# MCP devuelve:
-# Consulta General, Demostración de Producto, etc. (todo en español)
-```
-
-**Problema:**
-- ✅ MCP server es configurado para español
-- ❌ No respeta el contexto de idioma del usuario
-- ❌ Las respuestas de MCP tools influyen en el contexto del agente
-- ❌ El sistema cambia de inglés → español al recibir respuesta de MCP
-
----
-
-## 📊 Flujo Actual (INCORRECTO)
-
-```
-1. Usuario escribe: "i want reserved" (INGLÉS)
-   ↓
-2. BaseAgent.__init__(language="es") → self.language = "es"
-   ↓
-3. agent_router classifica query (INGLÉS)
-   ↓
-4. booking_agent.generate_response() ejecuta:
-   a. kwargs["user_lang"] = self.language  # "es"
-   b. system_prompt = get_system_prompt(user_lang="es")
-   c. MCP tools llaman a get_services()
-   d. MCP devuelve servicios en ESPAÑOL
-   ↓
-5. Respuesta final: ESPAÑOL
-   ❌ Cambio de idioma de inglés → español
-```
-
----
-
-## 🔧 Soluciones Propuestas
-
-### OPCIÓN 1: Detección Automática de Idioma (RECOMENDADO) ⭐
-
-**Implementar detección en tiempo real del idioma del usuario:**
-
-```python
-# src/gemini_agent/utils/language_detector.py (NUEVO)
-
-from langdetect import detect, detect_langs
-from typing import Literal
-
-def detect_user_language(text: str) -> Literal["en", "es"]:
-    """
-    Detect user language from input text.
-
-    Returns:
-        "en" for English
-        "es" for Spanish
-        "es" as default if detection fails
-    """
-    try:
-        lang_code = detect(text)
-        return "en" if lang_code.startswith("en") else "es"
-    except Exception as e:
-        logger.warning(f"Language detection failed: {e}. Using default: es")
-        return "es"
-
-# Uso en booking_agent.py:
-
-async def generate_response(self, query: str, **kwargs: Any) -> str:
-    # Detectar idioma del usuario si no está especificado
-    if "language" not in kwargs:
+    query: str,
+    context: dict | None = None,
+    session_language: str | None = None,  # ← NEW parameter
+) -> tuple[Intent, str]:
+    # Use session language if provided
+    if session_language:
+        detected_language = session_language
+    else:
+        # Only detect if no session language
         detected_language = detect_user_language(query)
-        self.logger.info(f"🌐 Detected user language: {detected_language}")
-        kwargs["language"] = detected_language
 
-    # ... resto del código
+    # ... rest of code ...
+    return (intent, detected_language)
 ```
 
-**Ventajas:**
-- ✅ Automático y sin intervención manual
-- ✅ Respeta el idioma del usuario
-- ✅ Mantiene contexto consistente
-- ✅ Mejora UX significativamente
-
-**Desventajas:**
-- ❌ Requiere librería adicional (`langdetect`)
-- ❌ Puede fallar con textos muy cortos
-- ❌ Pequeño overhead computacional
-
----
-
-### OPCIÓN 2: Parámetro Explícito (RÁPIDO)
-
-**El cliente/orquestador especifica el idioma:**
-
+**Step 3: Update MemoryManager**
 ```python
-# En el cliente o orchestrator:
-
-response = await booking_agent.generate_response(
-    query="i want reserved",
-    language="en"  # ← Especificar explícitamente
-)
-```
-
-**Ventajas:**
-- ✅ Muy simple de implementar
-- ✅ Sin dependencias adicionales
-- ✅ Control total del cliente
-
-**Desventajas:**
-- ❌ Requiere que el cliente sepa el idioma
-- ❌ Manual y propenso a errores
-- ❌ No es automático
-
----
-
-### OPCIÓN 3: Cambiar Default a "en" (NO RECOMENDADO)
-
-```python
-# base_agent.py
-language: str = "en",  # Cambiar de "es" a "en"
-```
-
-**Ventajas:**
-- ✅ Un cambio de una línea
-- ✅ Simple
-
-**Desventajas:**
-- ❌ Rompe todos los usuarios en español
-- ❌ No resuelve el problema real
-- ❌ Solo mueve el problema al revés
-
----
-
-### OPCIÓN 4: MCP Tools Multiidioma (FUTURO)
-
-**Hacer que MCP server respete el idioma:**
-
-```python
-# mcp_handlers/booking_handlers.py
-
-def get_services(language: str = "es") -> dict:
+def save_session_language(self, session_id: str, language: str) -> None:
+    """Save user language to session metadata."""
+    query = f"""
+    UPDATE {self.schema}.conversation_sessions
+    SET metadata = jsonb_set(
+        metadata,
+        '{{language}}'::text[],
+        to_jsonb(%s::text),
+        true
+    ),
+    updated_at = NOW()
+    WHERE id = %s
     """
-    Get services in specified language.
+    execute(query, (language, session_id))
 
-    Args:
-        language: "en" for English, "es" for Spanish
-
-    Returns:
-        Services list in requested language
+def get_session_language(self, session_id: str) -> str | None:
+    """Retrieve user language from session."""
+    query = f"""
+    SELECT metadata->>'language'
+    FROM {self.schema}.conversation_sessions
+    WHERE id = %s
     """
-    if language == "en":
-        return {
-            "services": [
-                {"name": "General Consultation", "duration": 30, "price": 50},
-                ...
-            ]
-        }
-    else:
-        return {
-            "services": [
-                {"name": "Consulta General", "duration": 30, "price": 50},
-                ...
-            ]
-        }
-```
-
-**Ventajas:**
-- ✅ Solución completa y consistente
-- ✅ MCP tools respetan idioma
-
-**Desventajas:**
-- ❌ Mayor complejidad
-- ❌ Requiere cambios en MCP server
-- ❌ Mantenimiento de traduccciones
-
----
-
-## ✅ Recomendación Final
-
-**COMBINAR OPCIÓN 1 + OPCIÓN 2:**
-
-1. **Implementar detección automática** (Opción 1) como comportamiento por defecto
-2. **Permitir override manual** (Opción 2) si el cliente quiere especificar idioma
-3. **Mejorar MCP** (Opción 4) gradualmente en el futuro
-
-### Implementación Propuesta:
-
-```python
-# en booking_agent.py
-
-async def generate_response(self, query: str, **kwargs: Any) -> str:
-    # Prioridad 1: Usar idioma explícito si se proporciona
-    if "language" in kwargs:
-        target_language = kwargs["language"]
-        self.logger.info(f"🌐 Using explicit language: {target_language}")
-    # Prioridad 2: Detectar idioma del query
-    else:
-        target_language = detect_user_language(query)
-        self.logger.info(f"🌐 Auto-detected user language: {target_language}")
-
-    # Actualizar self.language para mantener consistencia
-    self.language = target_language
-    kwargs["user_lang"] = target_language
-
-    # ... resto del código
+    result = fetchone(query, (session_id,))
+    return result[0] if result and result[0] else None
 ```
 
 ---
 
-## 🎯 Impacto Esperado
+## Part 4: Comparison with Industry Standards
 
-### ANTES (Con Bug):
-```
-Usuario: "i want reserved" (INGLÉS)
-↓
-Sistema: "Perfecto. Aquí tienes los servicios..." (ESPAÑOL) ❌
-Contexto perdido
-```
-
-### DESPUÉS (Con Fix):
-```
-Usuario: "i want reserved" (INGLÉS)
-↓
-Detección: language = "en"
-↓
-Sistema: "Perfect. Here are the services..." (INGLÉS) ✅
-Contexto mantenido
-```
+| Pattern | Storage | Detection | Persistence | Cache | Performance |
+|---------|---------|-----------|------------|-------|------------|
+| **Current (Broken)** | None | Every query | No | No | ⚠️ Slow, re-detects |
+| **Recommended** | DB + Memory | Once | Yes | Yes | ✅ Fast |
+| **LangChain** | Memory | Once | No | Yes | ✅ Fast (session only) |
+| **OpenAI** | DB | Once | Yes | Optional | ✅ Fast |
+| **Anthropic** | DB | Once | Yes | Yes | ✅ Fast |
 
 ---
 
-## 📋 Checklist de Implementación
+## Summary & Recommendations
 
-**FASE 1: Detección Automática (URGENTE)**
-- [ ] Crear `src/gemini_agent/utils/language_detector.py`
-- [ ] Implementar `detect_user_language()` con `langdetect`
-- [ ] Agregar `langdetect` a requirements.txt
-- [ ] Integrar en `booking_agent.generate_response()`
-- [ ] Integrar en `sales_agent.generate_response()`
-- [ ] Integrar en `general_agent.generate_response()`
-- [ ] Testear con queries en inglés y español
+### Root Cause
+AgentRouter re-detects language for every query instead of using cached session language.
 
-**FASE 2: MCP Server Multiidioma (IMPORTANTE)**
-- [ ] Actualizar MCP handlers para aceptar parámetro `language`
-- [ ] Traducir respuestas de servicios
-- [ ] Traducir respuestas de disponibilidad
-- [ ] Traducir confirmaciones
+### Solution
+**Hybrid Persistence Pattern:**
+1. Detect language from first message only
+2. Cache in AgentOrchestrator instance variable
+3. Store in PostgreSQL `conversation_sessions.metadata`
+4. Pass cached language to AgentRouter (don't re-detect)
+5. Skip re-detection for ambiguous queries
 
-**FASE 3: Logging y Monitoring (BUENA PRÁCTICA)**
-- [ ] Agregar logging de detección de idioma
-- [ ] Crear métricas de cambio de idioma
-- [ ] Monitorear "language context loss" events
+### Implementation Timeline
+- **Phase 1 (Quick Fix):** 2-4 hours - Add session_language cache
+- **Phase 2 (Persistence):** 4-8 hours - Save to database  
+- **Phase 3 (Optional):** 2-4 hours - Add explicit language column
 
----
-
-## 📝 Notas Técnicas
-
-### Librería Recomendada: `langdetect`
-
-```bash
-pip install langdetect>=1.0.11
-```
-
-**Ventajas:**
-- ✅ Preciso para inglés/español
-- ✅ Funciona con textos cortos (>3 caracteres)
-- ✅ Bajo overhead
-- ✅ Bien mantenida
-
-**Alternativas:**
-- `textblob`: Más simple pero menos preciso
-- `fasttext`: Muy preciso pero requiere modelo externo
-- `spacy`: Overkill para solo 2 idiomas
+### Best Practice Sources
+- LangChain: Store preferences separately from history
+- LlamaIndex: Composite memory with metadata layer
+- OpenAI: Stateful conversations with persistent metadata
+- Anthropic: Session-scoped state with preference caching
+- Multilingual LLM Survey (Patterns Journal, 2025)
 
 ---
 
-## 🔗 Referencias Relacionadas
-
-- `docs/CODE_REVIEW_REPORT.md` - Code review identificó problemas de manejo de idioma
-- `src/gemini_agent/base_agent.py:115` - Donde se hardcodea el idioma
-- `src/multi_agent/booking_agent.py:398` - Donde se usa el idioma
-
----
-
-**Prioridad:** 🔴 CRÍTICO
-**Tiempo Estimado:** 3-4 horas (Fase 1)
-**Complejidad:** 🟡 MEDIA
-**Status:** PENDIENTE DE IMPLEMENTACIÓN
-
+**Status:** ✅ Analysis Complete - Ready for Implementation

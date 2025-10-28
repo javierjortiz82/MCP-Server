@@ -225,17 +225,33 @@ class TestValidation:
             pytest.fail(f"Import failed: {e}")
 
     def test_environment_variables(self):
-        """Test that required environment variables are documented."""
-        env_example = Path(__file__).parents[1] / ".env.example"
-        assert env_example.exists(), ".env.example not found"
+        """Test that required environment variables are documented in microservice templates."""
+        project_root = Path(__file__).parents[1]
 
-        with open(env_example) as f:
-            content = f.read()
+        # Check that DockerConfig/.env.example exists (infrastructure)
+        docker_env = project_root / "DockerConfig" / ".env.example"
+        assert docker_env.exists(), "DockerConfig/.env.example not found"
 
-        required_vars = ["GOOGLE_API_KEY", "MCP_HOST", "MCP_PORT", "DB_HOST", "DB_PORT"]
+        # Check that each microservice has .env.example
+        services = ["mcp_server", "email_service", "agent", "client_mcp", "SQL"]
+        for service in services:
+            service_env = project_root / service / ".env.example"
+            assert service_env.exists(), f"{service}/.env.example not found"
 
-        for var in required_vars:
-            assert var in content, f"{var} not found in .env.example"
+        # Check that required vars are in appropriate .env.example files
+        with open(docker_env) as f:
+            docker_content = f.read()
+
+        with open(project_root / "mcp_server" / ".env.example") as f:
+            mcp_content = f.read()
+
+        # Infrastructure vars
+        assert "POSTGRES_PASSWORD" in docker_content, "POSTGRES_PASSWORD not in DockerConfig/.env.example"
+        assert "PGADMIN_PASSWORD" in docker_content, "PGADMIN_PASSWORD not in DockerConfig/.env.example"
+
+        # Service-specific vars
+        assert "GOOGLE_API_KEY" in mcp_content, "GOOGLE_API_KEY not in mcp_server/.env.example"
+        assert "DATABASE_URL" in mcp_content, "DATABASE_URL not in mcp_server/.env.example"
 
     def test_project_structure(self):
         """Test that project structure is correct."""
@@ -264,8 +280,9 @@ class TestValidation:
         key_files = [
             "README.md",
             "requirements.txt",
-            ".env.example",
-            "agent/gemini_agent.py",
+            "DockerConfig/.env.example",  # Infrastructure config template
+            "mcp_server/.env.example",    # MCP Server config template
+            "email_service/.env.example", # Email service config template
             "agent/__init__.py",
             "scripts/deploy.sh",
         ]

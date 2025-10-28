@@ -53,18 +53,21 @@ COPY --from=dependencies /usr/local/lib/python3.11/site-packages /usr/local/lib/
 COPY --from=dependencies /usr/local/bin /usr/local/bin
 
 # Copy application code as a proper Python package
-COPY . /app/email_service/
+COPY . /app/
 
-# Create logs directory
-RUN mkdir -p /app/email_service/logs && \
+# Create logs directory and set permissions
+RUN mkdir -p /app/logs && \
     chown -R emailworker:emailworker /app
+
+# Set PYTHONPATH so email_service module can be found
+ENV PYTHONPATH=/app
 
 # Switch to non-root user
 USER emailworker
 
-# Health check (optional - can check database connectivity)
+# Health check - verify SMTP can be configured (doesn't need actual connection)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "from email_service.config import settings; print('healthy')" || exit 1
+    CMD python -c "from email_service.config import EmailConfig; EmailConfig(); print('healthy')" || exit 1
 
 # Expose port (optional - for future metrics endpoint)
 EXPOSE 8080

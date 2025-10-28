@@ -374,8 +374,7 @@ class PromptManager:
             logger.info("✅ Using explicitly provided services (external source)")
         else:
             logger.info(
-                "🔄 Services will be loaded dynamically via get_services() MCP tool "
-                "(DEPRECATED: services.yaml is no longer used)"
+                "🔄 Services will be loaded dynamically via get_services() MCP tool"
             )
 
         # Inject current date/time for relative date calculations

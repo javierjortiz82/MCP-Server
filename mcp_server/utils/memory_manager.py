@@ -236,6 +236,68 @@ class MemoryManager:
         execute(query, (agent_name, session_id))
         logger.debug(f"Session {session_id[:8]} agent updated to: {agent_name}")
 
+    def save_session_language(self, session_id: str, language: str) -> None:
+        """Save user language to session metadata.
+
+        Stores the detected language (es or en) in the session's metadata JSONB field
+        for persistence across conversation turns and sessions.
+
+        Args:
+            session_id: Session UUID
+            language: Language code ('es' or 'en')
+
+        Example:
+            >>> memory.save_session_language(session_id, "es")
+        """
+        query = f"""
+        UPDATE {self.schema}.conversation_sessions
+        SET metadata = jsonb_set(
+            metadata,
+            '{{language}}'::text[],
+            to_jsonb(%s::text),
+            true
+        ),
+        updated_at = NOW()
+        WHERE id = %s
+        """
+        try:
+            execute(query, (language, session_id))
+            logger.debug(f"Language '{language}' saved to session {session_id[:8]}")
+        except Exception as e:
+            logger.error(f"Failed to save language to session: {e}")
+            raise
+
+    def get_session_language(self, session_id: str) -> str | None:
+        """Retrieve user language from session metadata.
+
+        Retrieves the stored language (es or en) from the session's metadata JSONB field.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            str: Language code ('es' or 'en'), or None if not set
+
+        Example:
+            >>> language = memory.get_session_language(session_id)
+            >>> print(language)  # 'es'
+        """
+        query = f"""
+        SELECT metadata->>'language' as language
+        FROM {self.schema}.conversation_sessions
+        WHERE id = %s
+        """
+        try:
+            result = fetchone(query, (session_id,))
+            if result and result.get("language"):
+                language = result["language"]
+                logger.debug(f"Retrieved language '{language}' from session {session_id[:8]}")
+                return language
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to retrieve language from session: {e}")
+            return None
+
     # ========================================================================
     # Message Management
     # ========================================================================

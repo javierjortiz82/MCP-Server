@@ -453,6 +453,7 @@ NO agregues explicaciones ni puntuación adicional."""
         *,
         context: dict[str, Any] | None = None,
         persist_intent: bool = True,
+        session_language: str | None = None,
     ) -> Intent:
         """Classify user query into sales, booking, or general intent.
 
@@ -470,11 +471,14 @@ NO agregues explicaciones ni puntuación adicional."""
                     - last_bot_message: str - Last bot response
             persist_intent: If True and memory is enabled, persist classified intent
                           to database for analytics (default: True).
+            session_language: Optional language from session ("es" or "en").
+                            If provided, uses this language instead of auto-detecting.
+                            This ensures language consistency across conversation turns.
 
         Returns:
             Tuple of (Intent, detected_language) where:
                 - Intent: enum value (SALES, BOOKING, or GENERAL)
-                - detected_language: str ("en" or "es") auto-detected from query
+                - detected_language: str ("en" or "es") from session or auto-detected
 
         Raises:
             ValueError: If query is empty or whitespace.
@@ -485,8 +489,8 @@ NO agregues explicaciones ni puntuación adicional."""
             >>> await router.initialize()
             >>> intent, lang = await router.classify_intent("Busco una laptop gaming")
             >>> print(intent, lang)  # Intent.SALES, "es"
-            >>> intent, lang = await router.classify_intent("I want to book an appointment")
-            >>> print(intent, lang)  # Intent.BOOKING, "en"
+            >>> intent, lang = await router.classify_intent("1", session_language="es")
+            >>> print(intent, lang)  # Intent.BOOKING, "es" (uses session language)
         """
         if not self.client:
             logger.error("AgentRouter not initialized - call initialize() first")
@@ -501,9 +505,14 @@ NO agregues explicaciones ni puntuación adicional."""
         try:
             logger.info(f"Classifying query: '{query[:100]}...'")
 
-            # Auto-detect user language from query to maintain language context
-            detected_language = detect_user_language(query)
-            logger.info(f"🌐 Auto-detected language: {detected_language}")
+            # Use session language if provided, otherwise auto-detect from query
+            if session_language:
+                detected_language = session_language
+                logger.info(f"🌐 Using session language: {detected_language}")
+            else:
+                # Auto-detect user language from query (first message or when session_language not provided)
+                detected_language = detect_user_language(query)
+                logger.info(f"🌐 Auto-detected language: {detected_language}")
 
             # Get classification prompt using PromptManager with detected language
             classification_prompt = self._get_classification_prompt_with_language(

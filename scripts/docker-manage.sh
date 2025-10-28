@@ -25,13 +25,31 @@ print_header() {
 }
 
 check_env_file() {
-    if [ ! -f "$ENV_FILE" ]; then
-        echo -e "${YELLOW}Warning: .env file not found!${NC}"
-        echo -e "${YELLOW}Creating .env from .env.example...${NC}"
-        cp .env.example .env
-        echo -e "${RED}Please edit .env file with your configuration!${NC}"
-        exit 1
+    # Check for DockerConfig/.env (infrastructure configuration)
+    if [ ! -f "DockerConfig/$ENV_FILE" ]; then
+        echo -e "${YELLOW}Warning: DockerConfig/.env file not found!${NC}"
+        if [ -f "DockerConfig/.env.example" ]; then
+            echo -e "${YELLOW}Creating DockerConfig/.env from .env.example...${NC}"
+            cp DockerConfig/.env.example DockerConfig/.env
+            echo -e "${RED}Please edit DockerConfig/.env with your database credentials!${NC}"
+            exit 1
+        else
+            echo -e "${RED}Error: DockerConfig/.env.example not found!${NC}"
+            exit 1
+        fi
     fi
+
+    # Check if services have their .env files (they'll load automatically)
+    SERVICES=("mcp_server" "email_service")
+    for service in "${SERVICES[@]}"; do
+        if [ ! -f "$service/.env" ]; then
+            echo -e "${YELLOW}Warning: $service/.env not found${NC}"
+            if [ -f "$service/.env.example" ]; then
+                echo -e "${YELLOW}Creating $service/.env from .env.example...${NC}"
+                cp "$service/.env.example" "$service/.env"
+            fi
+        fi
+    done
 }
 
 check_docker() {

@@ -14,7 +14,7 @@
 # ✓ Error messages: Clear, colored error messages on failure
 # ============================================================================
 
-.PHONY: help install test clean deploy start stop status lint format check docs db docker-start docker-stop docker-build docker-restart docker-logs docker-ps docker-clean review review-fix review-report validate validate-strict validate-quiet validate-pydantic docker-start-safe
+.PHONY: help install setup-env env-check test clean deploy start stop status lint format check docs db docker-start docker-stop docker-build docker-restart docker-logs docker-ps docker-clean review review-fix review-report validate validate-strict validate-quiet validate-pydantic docker-start-safe
 
 # Variables
 PYTHON := python3
@@ -27,50 +27,96 @@ RED := \033[0;31m
 GREEN := \033[0;32m
 YELLOW := \033[1;33m
 BLUE := \033[0;34m
+CYAN := \033[0;36m
 NC := \033[0m # No Color
 
 # Default target
 help:
-	@echo "$(BLUE)Lab01-MCP Makefile Commands$(NC)"
-	@echo "$(BLUE)=============================$(NC)"
-	@echo "$(GREEN)install$(NC)           - Set up virtual environment and install all dependencies"
-	@echo "$(GREEN)db$(NC)                - Initialize database (DDL + DML + seed data)"
-	@echo "$(GREEN)test$(NC)              - Run all tests with coverage"
-	@echo "$(GREEN)clean$(NC)             - Remove cache files and build artifacts"
-	@echo "$(GREEN)docs$(NC)              - Generate documentation"
 	@echo ""
-	@echo "$(YELLOW)Environment Validation (Pre-Deploy):$(NC)"
-	@echo "$(GREEN)validate$(NC)          - Validate complete environment (files, vars, Docker)"
-	@echo "$(GREEN)validate-strict$(NC)   - Validate with strict mode (warnings = errors)"
-	@echo "$(GREEN)validate-quiet$(NC)    - Validate with minimal output"
-	@echo "$(GREEN)validate-pydantic$(NC) - Validate Pydantic v2 field mapping"
-	@echo "$(GREEN)docker-start-safe$(NC) - Validate then start Docker (safer deploy)"
+	@echo "$(BLUE)╔════════════════════════════════════════════════════════════════════════════════╗$(NC)"
+	@echo "$(BLUE)║                     Lab01-MCP Quick Start Guide                                ║$(NC)"
+	@echo "$(BLUE)╚════════════════════════════════════════════════════════════════════════════════╝$(NC)"
 	@echo ""
-	@echo "$(YELLOW)Code Quality (Professional):$(NC)"
-	@echo "$(GREEN)review$(NC)            - Professional code review (ruff + mypy + isort + vulture + bandit)"
-	@echo "$(GREEN)review-fix$(NC)        - Auto-fix code issues (ruff + isort)"
-	@echo "$(GREEN)review-report$(NC)     - Generate detailed review report"
-	@echo "$(GREEN)lint$(NC)              - Run code linting (ruff check)"
-	@echo "$(GREEN)format$(NC)            - Format code (ruff format)"
-	@echo "$(GREEN)check$(NC)             - Run type checking (mypy with modern type hints)"
+	@echo "$(YELLOW)🚀 QUICK START - Choose your deployment method:$(NC)"
 	@echo ""
-	@echo "$(YELLOW)Services:$(NC)"
-	@echo "$(GREEN)deploy$(NC)            - Full deployment (install + start services)"
-	@echo "$(GREEN)start$(NC)             - Start all services"
-	@echo "$(GREEN)stop$(NC)              - Stop all services"
-	@echo "$(GREEN)status$(NC)            - Show service status"
+	@echo "$(CYAN)OPTION A: Docker Deployment (Recommended)$(NC)"
+	@echo "  1. make setup-env              # Create .env files from templates"
+	@echo "  2. make env-check              # Verify all .env files exist"
+	@echo "  3. nano DockerConfig/.env      # Edit: POSTGRES_PASSWORD, PGADMIN_PASSWORD"
+	@echo "  4. nano mcp_server/.env        # Edit: GOOGLE_API_KEY, DATABASE_URL"
+	@echo "  5. nano email_service/.env     # Edit: GOOGLE_API_KEY, SMTP_*"
+	@echo "  6. make docker-start-safe      # Validate + Start Docker"
+	@echo "  7. make db                     # Initialize database"
 	@echo ""
-	@echo "$(YELLOW)Docker:$(NC)"
-	@echo "$(GREEN)docker-start$(NC)      - Start all Docker containers"
-	@echo "$(GREEN)docker-stop$(NC)       - Stop all Docker containers"
-	@echo "$(GREEN)docker-build$(NC)      - Build all Docker images"
-	@echo "$(GREEN)docker-restart$(NC)    - Restart all Docker containers"
-	@echo "$(GREEN)docker-logs$(NC)       - Show Docker logs (follow)"
-	@echo "$(GREEN)docker-ps$(NC)         - Show Docker container status"
-	@echo "$(GREEN)docker-clean$(NC)      - Clean up Docker (volumes, images, etc)"
+	@echo "$(CYAN)OPTION B: Local Development (No Docker)$(NC)"
+	@echo "  1. make setup-env              # Create .env files from templates"
+	@echo "  2. make env-check              # Verify all .env files exist"
+	@echo "  3. make install                # Install dependencies"
+	@echo "  4. nano mcp_server/.env        # Edit: GOOGLE_API_KEY, DATABASE_URL (local PostgreSQL)"
+	@echo "  5. nano email_service/.env     # Edit: SMTP_*, GOOGLE_API_KEY"
+	@echo "  6. make db                     # Initialize database"
+	@echo "  7. make dev                    # Start all services"
 	@echo ""
-	@echo "$(YELLOW)Development:$(NC)"
-	@echo "$(GREEN)dev$(NC)               - Start development environment"
+	@echo "$(CYAN)OPTION C: Quick Test (Skip Docker/Local Setup)$(NC)"
+	@echo "  1. make install                # Install dependencies"
+	@echo "  2. make test                   # Run tests"
+	@echo "  3. make lint                   # Check code quality"
+	@echo ""
+	@echo ""
+	@echo "$(YELLOW)📋 DETAILED COMMAND REFERENCE:$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Setup & Configuration:$(NC)"
+	@echo "  $(GREEN)make setup-env$(NC)          Create .env files from .env.example (required first)"
+	@echo "  $(GREEN)make env-check$(NC)          Check if all .env files exist + next steps"
+	@echo "  $(GREEN)make install$(NC)           Set up venv + install all dependencies"
+	@echo "  $(GREEN)make validate$(NC)          Check environment configuration"
+	@echo "  $(GREEN)make validate-quiet$(NC)    Validate without verbose output"
+	@echo ""
+	@echo "$(YELLOW)Database:$(NC)"
+	@echo "  $(GREEN)make db$(NC)                Initialize database (DDL + DML + seed)"
+	@echo ""
+	@echo "$(YELLOW)Deployment (All-in-One):$(NC)"
+	@echo "  $(GREEN)make deploy$(NC)            Full deployment (setup-env + install + start)"
+	@echo "  $(GREEN)make docker-start-safe$(NC) Safe Docker (setup-env + validate + docker-start)"
+	@echo ""
+	@echo "$(YELLOW)Docker Operations:$(NC)"
+	@echo "  $(GREEN)make docker-start$(NC)      Start all containers"
+	@echo "  $(GREEN)make docker-stop$(NC)       Stop all containers"
+	@echo "  $(GREEN)make docker-restart$(NC)    Restart all containers"
+	@echo "  $(GREEN)make docker-build$(NC)      Build Docker images"
+	@echo "  $(GREEN)make docker-ps$(NC)         Show container status"
+	@echo "  $(GREEN)make docker-logs$(NC)       Show Docker logs (follow mode)"
+	@echo "  $(GREEN)make docker-clean$(NC)      Remove containers + volumes + prune"
+	@echo ""
+	@echo "$(YELLOW)Services (Local):$(NC)"
+	@echo "  $(GREEN)make start$(NC)             Start all local services"
+	@echo "  $(GREEN)make stop$(NC)              Stop all local services"
+	@echo "  $(GREEN)make status$(NC)            Show service status"
+	@echo "  $(GREEN)make dev$(NC)               Start dev environment (interactive)"
+	@echo ""
+	@echo "$(YELLOW)Code Quality & Testing:$(NC)"
+	@echo "  $(GREEN)make test$(NC)              Run all tests with coverage"
+	@echo "  $(GREEN)make lint$(NC)              Run linter (ruff)"
+	@echo "  $(GREEN)make format$(NC)            Format code (ruff)"
+	@echo "  $(GREEN)make check$(NC)             Type checking (mypy)"
+	@echo "  $(GREEN)make review$(NC)            Full code review (ruff + mypy + vulture + bandit)"
+	@echo "  $(GREEN)make review-fix$(NC)        Auto-fix code issues"
+	@echo "  $(GREEN)make review-report$(NC)     Detailed review report"
+	@echo ""
+	@echo "$(YELLOW)Documentation & Utilities:$(NC)"
+	@echo "  $(GREEN)make docs$(NC)              Generate API documentation"
+	@echo "  $(GREEN)make clean$(NC)             Remove cache files + build artifacts"
+	@echo "  $(GREEN)make ci$(NC)                Run CI pipeline (lint + test + check)"
+	@echo ""
+	@echo "$(YELLOW)Shortcuts:$(NC)"
+	@echo "  $(GREEN)i$(NC)  = install    $(GREEN)t$(NC)  = test    $(GREEN)c$(NC)  = clean"
+	@echo "  $(GREEN)d$(NC)  = deploy     $(GREEN)s$(NC)  = start   $(GREEN)st$(NC) = stop"
+	@echo ""
+	@echo "$(BLUE)═══════════════════════════════════════════════════════════════════════════════════$(NC)"
+	@echo "$(YELLOW)📖 For detailed setup guide, see: docs/ENVIRONMENT_SETUP.md$(NC)"
+	@echo "$(YELLOW)✅ For validation tips, see: VALIDATION_GUIDE.md$(NC)"
+	@echo "$(BLUE)═══════════════════════════════════════════════════════════════════════════════════$(NC)"
+	@echo ""
 
 # Setup and Installation
 install:
@@ -86,6 +132,100 @@ install:
 	@echo "$(YELLOW)Installing code review tools...$(NC)"
 	@$(ACTIVATE) && $(PIP) install -q vulture bandit isort || { echo "$(RED)Failed to install review tools$(NC)"; exit 1; }
 	@echo "$(GREEN)✓ Installation complete (including review tools)$(NC)"
+
+# Environment Setup
+setup-env:
+	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
+	@echo "$(BLUE)Setting up .env files from templates$(NC)"
+	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
+	@echo "$(YELLOW)Creating .env files from .env.example templates...$(NC)"
+	@test -f DockerConfig/.env.example || { echo "$(RED)DockerConfig/.env.example not found$(NC)"; exit 1; }
+	@test -f mcp_server/.env.example || { echo "$(RED)mcp_server/.env.example not found$(NC)"; exit 1; }
+	@test -f email_service/.env.example || { echo "$(RED)email_service/.env.example not found$(NC)"; exit 1; }
+	@# Create .env files if they don't exist
+	@if [ ! -f DockerConfig/.env ]; then \
+		cp DockerConfig/.env.example DockerConfig/.env; \
+		echo "$(GREEN)✓ Created DockerConfig/.env$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠ DockerConfig/.env already exists (skipped)$(NC)"; \
+	fi
+	@if [ ! -f mcp_server/.env ]; then \
+		cp mcp_server/.env.example mcp_server/.env; \
+		echo "$(GREEN)✓ Created mcp_server/.env$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠ mcp_server/.env already exists (skipped)$(NC)"; \
+	fi
+	@if [ ! -f email_service/.env ]; then \
+		cp email_service/.env.example email_service/.env; \
+		echo "$(GREEN)✓ Created email_service/.env$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠ email_service/.env already exists (skipped)$(NC)"; \
+	fi
+	@if [ ! -f agent/.env ]; then \
+		test -f agent/.env.example && cp agent/.env.example agent/.env && echo "$(GREEN)✓ Created agent/.env$(NC)" || echo "$(YELLOW)⚠ agent/.env.example not found (optional)$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠ agent/.env already exists (skipped)$(NC)"; \
+	fi
+	@if [ ! -f client_mcp/.env ]; then \
+		test -f client_mcp/.env.example && cp client_mcp/.env.example client_mcp/.env && echo "$(GREEN)✓ Created client_mcp/.env$(NC)" || echo "$(YELLOW)⚠ client_mcp/.env.example not found (optional)$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠ client_mcp/.env already exists (skipped)$(NC)"; \
+	fi
+	@if [ ! -f SQL/.env ]; then \
+		test -f SQL/.env.example && cp SQL/.env.example SQL/.env && echo "$(GREEN)✓ Created SQL/.env$(NC)" || echo "$(YELLOW)⚠ SQL/.env.example not found (optional)$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠ SQL/.env already exists (skipped)$(NC)"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)⚠️  IMPORTANT: Edit the created .env files with your actual credentials:$(NC)"
+	@echo "   • DockerConfig/.env - Database passwords"
+	@echo "   • mcp_server/.env - Google API Key, Database URL"
+	@echo "   • email_service/.env - SMTP credentials, Google API Key"
+	@echo "   • agent/.env, client_mcp/.env - API keys (if needed)"
+	@echo ""
+	@echo "$(GREEN)✓ Environment setup complete$(NC)"
+
+# Environment Check
+env-check:
+	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
+	@echo "$(BLUE)Checking environment files configuration$(NC)"
+	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
+	@echo ""
+	@MISSING=0; \
+	TOTAL=0; \
+	for dir in DockerConfig mcp_server email_service agent client_mcp SQL; do \
+		TOTAL=$$((TOTAL + 1)); \
+		if [ -d "$$dir" ]; then \
+			if [ -f "$$dir/.env" ]; then \
+				echo "$(GREEN)✓$$dir/.env$(NC)                 - Found"; \
+			else \
+				echo "$(RED)✗ $$dir/.env$(NC)               - Missing (run: make setup-env)"; \
+				MISSING=$$((MISSING + 1)); \
+			fi; \
+		fi; \
+	done; \
+	echo ""; \
+	if [ $$MISSING -eq 0 ]; then \
+		echo "$(GREEN)✓ All .env files are present!$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)Next steps:$(NC)"; \
+		echo "  1. Edit .env files with your credentials:"; \
+		echo "     - DockerConfig/.env: POSTGRES_PASSWORD, PGADMIN_PASSWORD"; \
+		echo "     - mcp_server/.env: GOOGLE_API_KEY, DATABASE_URL"; \
+		echo "     - email_service/.env: GOOGLE_API_KEY, SMTP_*"; \
+		echo ""; \
+		echo "  2. Validate configuration:"; \
+		echo "     $(GREEN)make validate$(NC)"; \
+		echo ""; \
+		echo "  3. Start Docker:"; \
+		echo "     $(GREEN)make docker-start-safe$(NC) (or make docker-start)"; \
+	else \
+		echo "$(YELLOW)⚠ $$MISSING .env file(s) missing!$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)To create them, run:$(NC)"; \
+		echo "  $(GREEN)make setup-env$(NC)"; \
+	fi
+	@echo ""
 
 # Testing
 test:
@@ -260,7 +400,7 @@ docker-clean:
 	@echo "$(GREEN)✓ Docker cleanup complete$(NC)"
 
 # Deployment
-deploy:
+deploy: setup-env
 	@echo "$(BLUE)Starting full deployment...$(NC)"
 	@chmod +x scripts/deploy.sh && bash scripts/deploy.sh deploy || { echo "$(RED)Deployment failed$(NC)"; exit 1; }
 
@@ -325,9 +465,9 @@ validate-pydantic:
 	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
 	@$(PYTHON) scripts/validate_pydantic_mapping.py || { echo "$(RED)Pydantic validation failed$(NC)"; exit 1; }
 
-# Safe Docker deployment (validate before starting)
-docker-start-safe: validate-quiet docker-start
-	@echo "$(GREEN)✓ Environment validated and Docker started safely$(NC)"
+# Safe Docker deployment (setup-env → validate → start)
+docker-start-safe: setup-env validate-quiet docker-start
+	@echo "$(GREEN)✓ Environment setup, validated and Docker started safely$(NC)"
 
 # Database
 db:

@@ -89,14 +89,21 @@ services:
     environment:
       # Override only Docker-specific variables (internal hostnames)
       DATABASE_URL: postgresql://${POSTGRES_USER:-mcp_user}:${POSTGRES_PASSWORD:-mcp_password}@postgres:5432/${POSTGRES_DB:-mcpdb}
+      # Disable file logging in Docker (handle logs via container logging)
+      LOG_TO_FILE: "false"
     volumes:
-      - ../email_service:/app/email_service
-      - email_logs:/app/email_service/logs
+      - email_logs:/app/logs
     networks:
       - mcp-network
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from email_service.config import EmailConfig; EmailConfig(); print('healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 volumes:
   postgres_data:

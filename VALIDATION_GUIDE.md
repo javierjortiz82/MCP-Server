@@ -47,12 +47,12 @@ make validate-pydantic
 
 ### 3. Environment Files
 - ✓ All `.env` files exist and are readable:
-  - `.env` (root)
   - `mcp_server/.env`
   - `client_mcp/.env`
   - `agent/.env`
-  - `DockerConfig/.env`
-  - `SQL/.env`
+  - `email_service/.env`
+  - `DockerConfig/.env` (Docker infrastructure)
+  - `SQL/.env` (Database scripts)
 
 ### 4. Critical Variables
 - ✓ `GOOGLE_API_KEY` is configured (not placeholder)

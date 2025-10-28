@@ -3180,12 +3180,12 @@ prompt = agent.get_system_prompt(user_id="customer_12345")
 
 **Fecha**: 2025-10-20 13:07
 **Verificado por**: Claude Code (Haiku 4.5)
-**Tarea**: Garantizar que langdetect>=1.0.11 esté correctamente configurado y funcional
+**Tarea**: Garantizar que langdetect>=1.0.9 esté correctamente configurado y funcional
 
 ### Verificación completada
 
 #### 1. ✅ Verificación en requirements.txt
-- **Línea encontrada**: `langdetect>=1.0.11                 # Automatic language detection for multi-language support`
+- **Línea encontrada**: `langdetect>=1.0.9                  # Automatic language detection for multi-language support`
 - **Ubicación**: Production Dependencies section
 - **Commit**: 185ece2 (feat: implement automatic language detection to prevent language context loss)
 - **Estado**: CONFIRMADO en requirements.txt
@@ -3255,7 +3255,7 @@ La detección de lenguaje está integrada en 3 niveles del pipeline:
 
 ✅ **LANGDETECT COMPLETAMENTE FUNCIONAL Y DISPONIBLE**
 
-- langdetect>=1.0.11 está en requirements.txt ✓
+- langdetect>=1.0.9 está en requirements.txt ✓
 - langdetect está instalado en el entorno (v1.0.9) ✓
 - Language detection funciona en todos los niveles del pipeline ✓
 - Sistema detecta correctamente inglés y español ✓

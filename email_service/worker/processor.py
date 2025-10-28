@@ -53,12 +53,15 @@ class EmailWorker:
         Raises:
             EmailServiceError: If initialization fails.
         """
+        # Load config first to get logging preferences
+        self.config = EmailConfig()
+
         # Setup logging system (console + file rotation)
         setup_logging(
-            log_level="INFO",
+            log_level=self.config.LOG_LEVEL,
             file_level="DEBUG",
-            console_level="INFO",
-            enable_file=True,
+            console_level=self.config.LOG_LEVEL,
+            enable_file=self.config.LOG_TO_FILE,
         )
 
         logger.info("=" * 80)
@@ -66,7 +69,6 @@ class EmailWorker:
         logger.info("=" * 80)
 
         try:
-            self.config = EmailConfig()
             logger.debug("📋 Email configuration loaded")
 
             self.config.validate_smtp_config()
@@ -77,6 +79,14 @@ class EmailWorker:
 
             self.smtp_client = SMTPClient()
             logger.debug("✓ SMTP client initialized")
+
+            # Validate SMTP connection on startup
+            if not self.smtp_client.validate_connection():
+                raise EmailServiceError(
+                    "SMTP connection validation failed. Check SMTP configuration "
+                    "(host, port, credentials, TLS settings)."
+                )
+            logger.debug("✓ SMTP connection validated successfully")
 
             self.template_renderer = TemplateRenderer()
             logger.debug("✓ Template renderer initialized")
