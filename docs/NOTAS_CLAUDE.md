@@ -36702,3 +36702,195 @@ Se ejecutó test de creación de booking con el código refactorizado:
 ✅ Test de integración completado exitosamente
 
 ---
+
+---
+
+## 🔧 FIX: BookingAgent Proactive Service Listing (2025-10-28)
+
+### Objective
+Enable BookingAgent to proactively display the list of available services when a user wants to book an appointment without specifying which service they want.
+
+### Problem Identified
+
+**Issue:**
+When a user says "quiero reservar un servicio para el próximo viernes a las 3pm" (wants to book without specifying service), the bot asks "¿Qué servicio te gustaría?" WITHOUT showing the available services list.
+
+**Current Flow (Incorrect):**
+```
+User: "quiero reservar un servicio para el viernes a las 3pm"
+  ↓
+Agent: "¿Qué servicio te gustaría reservar?"
+  ↓
+[STOPS - waits for user to specify]
+[DOES NOT call get_services() automatically]
+```
+
+**Desired Flow:**
+```
+User: "quiero reservar un servicio para el viernes a las 3pm"
+  ↓
+Agent: [AUTOMATICALLY calls get_services()]
+  ↓
+Agent: "¡Perfecto! Estos son nuestros servicios:
+        1️⃣ Consulta General → 30 min, $50
+        2️⃣ Demostración → 45 min, Gratis
+        3️⃣ Instalación → 120 min, $150
+        ¿Cuál te interesa?"
+```
+
+### Root Cause Analysis
+
+1. **Module `ux_conversational.jinja2` is DISABLED** (line 156-158 in booking_agent.jinja2)
+   - This module contained the exact proactive service listing logic
+   - Was disabled for "simplification" purposes
+
+2. **Vague instructions in `confirmation_flow.jinja2`**
+   - Says "Call get_services()" but doesn't specify WHEN to call it
+   - No explicit trigger condition for proactive calling
+
+3. **No explicit decision tree**
+   - Prompt lacks clear "IF service missing THEN call get_services()" instruction
+
+### Solution Implemented
+
+**Approach:** Lightweight modification (surgical changes to existing prompts)
+
+#### 1. Modified `confirmation_flow.jinja2` (Lines 18-30)
+
+**Added explicit service detection logic:**
+
+```jinja
+If customer wants to BOOK:
+   a. CRITICAL - Service Detection:
+      • If service NOT specified by user (no service name/type mentioned):
+        → IMMEDIATELY call get_services()
+        → Display services using this numbered format:
+          1️⃣ **[Service Name]** → [Duration] min, $[Price or "Free"]
+          2️⃣ **[Service Name]** → [Duration] min, $[Price or "Free"]
+          3️⃣ **[Service Name]** → [Duration] min, $[Price or "Free"]
+        → Ask: "Which service would you like to book? (select by number or name)"
+      • If service IS specified by user (they mentioned a service name):
+        → Skip to step c (ask for date)
+   b. ACCEPT flexible selection: numbers, partial names, fuzzy matching
+   c. Ask date (OR use previous context if already mentioned)
+```
+
+**Changes:**
+- ✅ Added explicit condition: "If service NOT specified"
+- ✅ Added instruction: "IMMEDIATELY call get_services()"
+- ✅ Added inline format example for displaying services
+- ✅ Added branching logic: skip to date if service already specified
+
+#### 2. Modified `tool_usage_rules.jinja2` (After Line 41)
+
+**Added new section: "PROACTIVE TOOL CALLING"**
+
+```jinja
+═══════════════════════════════════════════════════════════════
+🔄 PROACTIVE TOOL CALLING (CRITICAL FOR UX)
+═══════════════════════════════════════════════════════════════
+
+AUTOMATIC SCENARIOS - Call tools IMMEDIATELY when these conditions are met:
+
+1️⃣ USER WANTS TO BOOK BUT NO SERVICE SPECIFIED:
+   Trigger: User says "I want to book", "reserve", "appointment", "schedule"
+            WITHOUT mentioning a specific service name
+   Action: → IMMEDIATELY call get_services()
+           → Display services as numbered list (see format below)
+           → Ask: "Which service would you like?"
+
+   ❌ ANTI-PATTERN: DON'T just ask "What service?" without showing options
+   ✅ CORRECT: Always show the menu when user needs to choose
+
+2️⃣ USER ASKS ABOUT THEIR BOOKINGS:
+   Trigger: "my bookings", "my appointments", "what do I have scheduled"
+   Action: → IMMEDIATELY call list_customer_bookings(customer_email)
+           → Display formatted list with booking details
+           → Offer actions: reschedule, cancel, more info
+
+3️⃣ SERVICE SELECTED BUT NO DATE SPECIFIED:
+   Trigger: Service is known, but date is missing
+   Action: → Ask for date (ACCEPT flexible formats)
+           → DO NOT call get_available_slots() yet (need date first)
+
+4️⃣ SERVICE + DATE KNOWN BUT NO TIME SPECIFIED:
+   Trigger: Service ID and date are both available
+   Action: → IMMEDIATELY call get_available_slots(service_id, date)
+           → Display time slots as numbered list
+           → Ask: "Which time works for you?"
+
+5️⃣ USER ASKS "WHAT SERVICES DO YOU OFFER?":
+   Trigger: Direct question about services
+   Action: → IMMEDIATELY call get_services()
+           → Display full service catalog
+           → Ask if they want to book
+
+KEY PRINCIPLE:
+When user needs to make a choice, ALWAYS call the tool and show options.
+NEVER ask open-ended questions when you can provide a menu.
+```
+
+**Changes:**
+- ✅ Added 5 automatic scenarios with clear trigger-action patterns
+- ✅ Included anti-patterns to avoid
+- ✅ Emphasized proactive tool calling over asking open-ended questions
+- ✅ Covered full booking workflow (service → date → time)
+
+### Files Modified
+
+1. **`/home/javort/borrar/MCP-Server/prompts/templates/base/booking_agent/modules/confirmation_flow.jinja2`**
+   - Lines 18-30: Added explicit service detection and proactive get_services() call logic
+   - Impact: ~12 new lines
+
+2. **`/home/javort/borrar/MCP-Server/prompts/templates/base/booking_agent/modules/tool_usage_rules.jinja2`**
+   - After line 41: Added "PROACTIVE TOOL CALLING" section with trigger-action patterns
+   - Impact: ~46 new lines
+
+### Expected Results
+
+**Before Fix:**
+```
+User: "quiero reservar un servicio para el viernes a las 3pm"
+Bot: "Para poder agendar tu servicio, necesito:
+      • ¿Qué tipo de servicio te gustaría reservar?
+      • ¿Cuál es tu nombre completo?
+      • ¿Cuál es tu número de teléfono?"
+```
+
+**After Fix:**
+```
+User: "quiero reservar un servicio para el viernes a las 3pm"
+Bot: "¡Perfecto! Aquí están nuestros servicios disponibles:
+      1️⃣ **Consulta General** → 30 min, $50.00
+      2️⃣ **Soporte Técnico** → 45 min, $75.00
+      3️⃣ **Demostración de Producto** → 60 min, Gratis
+      ¿Cuál servicio te interesa? (puedes seleccionar por número o nombre)"
+```
+
+### Benefits
+
+1. **Improved UX** - Users see options immediately instead of having to ask
+2. **Reduced friction** - One less back-and-forth in conversation
+3. **Better guidance** - Users know exactly what services are available
+4. **Consistent behavior** - Same pattern for services, time slots, and bookings list
+5. **Minimal impact** - Only ~58 lines added, no performance degradation
+6. **Maintainable** - Clear, documented rules in existing modules
+
+### Testing Recommendation
+
+Test with these scenarios:
+1. "quiero reservar un servicio para mañana" (no service specified)
+2. "agendar una cita el viernes a las 3pm" (no service specified)
+3. "reservar una consulta para el lunes" (service specified: "consulta")
+4. "¿qué servicios tienen?" (direct service question)
+
+Expected: Scenarios 1, 2, 4 should trigger automatic get_services() call.
+          Scenario 3 should skip directly to asking for date/time.
+
+### Status
+
+✅ confirmation_flow.jinja2 modified with explicit service detection
+✅ tool_usage_rules.jinja2 enhanced with proactive calling rules
+✅ Changes documented in NOTAS_CLAUDE.md
+⏳ Pending: Test with real user interactions
+
