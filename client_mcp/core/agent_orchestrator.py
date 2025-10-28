@@ -151,6 +151,7 @@ class AgentOrchestrator:
 
         # Language preference (es or en, default: es)
         self.language: str = "es"
+        self._session_language_detected: bool = False  # Track if we've detected language for this session
 
         logger.info(
             f"AgentOrchestrator initialized - "
@@ -348,10 +349,40 @@ class AgentOrchestrator:
             raise RuntimeError("AgentRouter not initialized")
 
         logger.debug(f"Processing query in MULTI-AGENT mode: '{query[:50]}...'")
-        logger.debug(f"🌐 Agent configured for language: {self.language.upper()} (Gemini handles auto-detection)")
+        logger.debug(f"🌐 Session language: {self.language.upper()}")
 
         # Step 1: Classify intent with context
         try:
+            # PHASE 1: Detect language on first query and cache it
+            if not self._session_language_detected:
+                from gemini_agent.utils.language_detector import detect_user_language
+
+                # Try to retrieve language from existing session first (persistence)
+                retrieved_language = None
+                if self.memory_manager and self.session_id:
+                    try:
+                        retrieved_language = self.memory_manager.get_session_language(self.session_id)
+                        if retrieved_language:
+                            self.language = retrieved_language
+                            logger.info(f"🌐 Language retrieved from session: {self.language.upper()}")
+                    except Exception as retrieve_error:
+                        logger.debug(f"Could not retrieve language from session: {retrieve_error}")
+
+                # If not found in session, detect from first query
+                if not retrieved_language:
+                    self.language = detect_user_language(query)
+                    logger.info(f"🌐 Language detected on first query: {self.language.upper()}")
+
+                    # PHASE 2: Save language to database for persistence
+                    if self.memory_manager and self.session_id:
+                        try:
+                            self.memory_manager.save_session_language(self.session_id, self.language)
+                            logger.debug(f"💾 Language '{self.language}' saved to session {self.session_id[:8]}")
+                        except Exception as lang_save_error:
+                            logger.warning(f"⚠️ Failed to save language to DB: {lang_save_error}")
+
+                self._session_language_detected = True
+
             # Build context for router
             context = {}
             if self.last_intent:
@@ -359,9 +390,14 @@ class AgentOrchestrator:
             if self.last_bot_message:
                 context["last_bot_message"] = self.last_bot_message
 
-            intent, detected_language = await self.router.classify_intent(query, context=context if context else None)
+            # Pass cached session language to router (prevents re-detection of ambiguous queries)
+            intent, detected_language = await self.router.classify_intent(
+                query,
+                context=context if context else None,
+                session_language=self.language  # ← Use cached language, don't re-detect
+            )
             logger.info(f"Intent classified: {intent.value}")
-            logger.info(f"🌐 Detected language from router: {detected_language}")
+            logger.info(f"🌐 Language (from session cache): {detected_language}")
 
             # Save current intent for next iteration
             self.last_intent = intent

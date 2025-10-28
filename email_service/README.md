@@ -37,6 +37,7 @@ Built with **PostgreSQL**, **Jinja2**, **Pydantic v2**, and **async Python** for
 | 🔁 **Auto Retry Logic** | Exponential backoff with configurable max retries |
 | 🎨 **Template Rendering** | Jinja2-based HTML & plaintext email templates |
 | 📨 **SMTP Compatibility** | Gmail, SendGrid, AWS SES, or any SMTP server |
+| ✅ **SMTP Startup Validation** | Validates email config & tests connection before worker starts |
 | ⏰ **Scheduled Emails** | Send emails at specific times (future sends) |
 | 📊 **Priority Levels** | Process emails by priority (1=highest, 10=lowest) |
 | 📈 **Status Tracking** | Complete lifecycle: pending → processing → sent/failed |
@@ -264,8 +265,19 @@ cp .env.example .env
 # Edit with your credentials
 nano .env
 
-# Validate configuration
-python scripts/validate_env.py
+# For Gmail users with app passwords
+# Spaces are AUTOMATICALLY REMOVED by the validator!
+# You can paste directly from Gmail:
+# SMTP_PASSWORD=wrce fmkh xlvn jiht  ✅ Spaces OK - will be cleaned automatically
+# OR without spaces:
+# SMTP_PASSWORD=wrcefmkhxlvnjiht      ✅ Also works
+
+# Validate SMTP configuration (before starting worker)
+# Works from any directory - .env is loaded from email_service/ automatically
+python -m email_service.scripts.validate_smtp --verbose
+
+# Optionally send a test email
+python -m email_service.scripts.validate_smtp --test-email your-email@example.com
 ```
 
 **Required Environment Variables:**
@@ -279,8 +291,8 @@ SMTP_PASSWORD=your-app-password
 ### 🏃 Run Email Worker
 
 ```bash
-# Direct Python
-python -m email_service.worker.processor
+# Works from any directory - config is loaded from email_service/ automatically
+python -m email_service.worker
 
 # Docker Compose
 docker-compose up email_worker
@@ -289,9 +301,15 @@ docker-compose up email_worker
 from email_service import EmailWorker
 import asyncio
 
-worker = EmailWorker()
+worker = EmailWorker()  # SMTP validation happens here
 await worker.run()
 ```
+
+> ⚠️ **IMPORTANT**:
+> - The email worker validates SMTP connection on startup
+> - If validation fails, the worker exits with error
+> - Configuration is automatically loaded from `email_service/.env` regardless of working directory
+> - Fix your `.env` SMTP credentials and try again
 
 ---
 
@@ -325,7 +343,25 @@ email_id = queue.enqueue_email(
 print(f"✅ Email #{email_id} enqueued")
 ```
 
-### 📧 Send Test Email
+### 🔐 Validate SMTP Configuration
+
+The email worker automatically validates SMTP connection on startup. You can also manually validate before deployment:
+
+```bash
+# Quick validation (test SMTP connection only)
+python -m email_service.scripts.validate_smtp
+
+# Verbose output with detailed debug info
+python -m email_service.scripts.validate_smtp --verbose
+
+# Send a test email to verify everything works
+python -m email_service.scripts.validate_smtp --test-email admin@example.com
+
+# Quiet mode (minimal output, useful for automation)
+python -m email_service.scripts.validate_smtp --quiet
+```
+
+**Python API:**
 
 ```python
 from email_service import SMTPClient
@@ -340,6 +376,10 @@ if client.validate_connection():
 if client.send_test_email("admin@example.com"):
     print("✅ Test email sent")
 ```
+
+**Exit Codes:**
+- `0`: All validations passed
+- `1`: SMTP connection failed or test email delivery failed
 
 ### 🎨 Render Templates
 
@@ -467,6 +507,7 @@ email_service/
 │   ├── processor.py        # EmailWorker async processor
 │   └── __init__.py
 ├── scripts/                 # Utility scripts
+│   ├── validate_smtp.py    # SMTP connection validator & tester
 │   ├── validate_env.py     # Configuration validator
 │   └── __init__.py
 ├── .env.example            # Configuration template
@@ -613,38 +654,96 @@ pytest email_service/tests/ --cov
 # Test imports
 python -c "from email_service import EmailWorker; print('✅ OK')"
 
-# Validate config
+# Validate SMTP configuration
+python -m email_service.scripts.validate_smtp
+
+# Validate config (legacy)
 python email_service/scripts/validate_env.py
 
 # Send test email
-python -c "
-from email_service import SMTPClient
-client = SMTPClient()
-if client.validate_connection():
-    print('✅ SMTP OK')
-"
+python -m email_service.scripts.validate_smtp --test-email your-email@example.com
+```
+
+### SMTP Validation Testing
+
+```bash
+# Test SMTP connection with current environment
+python -m email_service.scripts.validate_smtp
+
+# Expected output on success:
+# ================================================================================
+#   📧 SMTP Email Service Configuration Validator
+# ================================================================================
+#
+# 📋 Loaded Configuration:
+#   SMTP Host:      smtp.gmail.com
+#   SMTP Port:      587
+#   SMTP Username:  your-email@gmail.com
+#   ...
+#
+# 🧪 Testing SMTP Connection...
+# ✅ SMTP connection test PASSED
+#
+# ✅ All validations passed! Ready for production.
 ```
 
 ---
 
 ## 🆘 Troubleshooting
 
-### Issue: "SMTP authentication failed"
+### Issue: "SMTP connection validation failed" (Worker won't start)
 
 **Solution:**
 ```bash
-# 1. Check credentials in .env
+# 1. Use SMTP validation script to diagnose
+python -m email_service.scripts.validate_smtp --verbose
+
+# 2. Check your .env file
 nano .env
 
-# 2. For Gmail: Use App Passwords, not your Gmail password
+# 3. Verify SMTP credentials and settings
+# SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_USE_TLS
+
+# 4. For Gmail users: Use app-specific password
 # https://support.google.com/accounts/answer/185833
 
-# 3. Test connection
-python -c "
-from email_service import SMTPClient
-client = SMTPClient()
-print(client.validate_connection())
-"
+# 5. Verify firewall/network allows outbound SMTP
+# Try: telnet smtp.gmail.com 587
+
+# 6. Send a test email once SMTP validates
+python -m email_service.scripts.validate_smtp --test-email your-email@example.com
+```
+
+### Issue: "SMTP authentication failed" or "Username and Password not accepted" (Error 535)
+
+**Solution:**
+```bash
+# NOTE: Spaces in SMTP_PASSWORD are now AUTOMATICALLY REMOVED by the validator!
+# You can paste directly from Gmail without editing:
+
+# 1. For Gmail: Use App Passwords, not your Gmail password
+# https://support.google.com/accounts/answer/185833
+# - Enable 2-factor authentication
+# - Go to: https://myaccount.google.com/apppasswords
+# - Select "Mail" and "Windows Computer"
+# - Copy the 16-character password (spaces are OK)
+
+# 2. Paste into .env (spaces will be automatically cleaned):
+nano .env
+# SMTP_PASSWORD=wrce fmkh xlvn jiht  ✅ With spaces - auto-cleaned by validator
+
+# 3. Test connection:
+python -m email_service.scripts.validate_smtp --verbose
+
+# 4. Verify SMTP settings match your provider:
+# Gmail: smtp.gmail.com:587 (TLS)
+# SendGrid: smtp.sendgrid.net:587 (TLS)
+# AWS SES: email-smtp.[region].amazonaws.com:587 (TLS)
+
+# If still failing:
+# - Check credentials in .env
+# - Verify app password is current (regenerate if needed)
+# - Check firewall allows outbound TCP 587
 ```
 
 ### Issue: "Connection pool exhausted"

@@ -174,7 +174,7 @@ def detect_user_language(text: str) -> Literal["en", "es"]:
     if not LANGDETECT_AVAILABLE:
         logger.warning(
             "langdetect not available for language detection. "
-            "Install with: pip install langdetect>=1.0.11. "
+            "Install with: pip install langdetect>=1.0.9. "
             "Defaulting to English."
         )
         return "en"

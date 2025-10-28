@@ -22,26 +22,54 @@ Get up and running in 5 minutes:
 git clone https://github.com/yourusername/Lab01-MCP.git
 cd Lab01-MCP
 
-# 2. Set up environment
+# 2. Set up Docker infrastructure environment
+cd DockerConfig
 cp .env.example .env
-# Edit .env and add your GOOGLE_API_KEY
+# Edit .env: Add POSTGRES_PASSWORD, PGADMIN_PASSWORD, POSTGRES_PORT (if needed)
 
 # 3. Start Docker services
-cd DockerConfig
 docker-compose up -d
 # ⏳ Wait for PostgreSQL to be healthy (healthcheck ~30s)
 
-# 4. Initialize database (REQUIRED STEP)
+# 4. Configure microservices (choose one option below)
+
+# OPTION A: Docker Deployment (Recommended)
+# - Docker automatically loads each service's .env from their respective directories
+# - No additional setup needed if services have .env files
+
+# OPTION B: Local Development (without Docker)
+cd ../mcp_server
+cp .env.example .env
+# Edit .env: Add GOOGLE_API_KEY, DATABASE_URL, etc.
+
+cd ../email_service
+cp .env.example .env
+# Edit .env: Add GOOGLE_API_KEY, SMTP_* credentials, DATABASE_URL
+
+cd ../agent
+cp .env.example .env
+# Edit .env: Add GOOGLE_API_KEY, MODEL
+
+cd ../client_mcp
+cp .env.example .env
+# Edit .env: Add GOOGLE_API_KEY, DATABASE_URL, etc.
+
+# 5. Initialize database (REQUIRED STEP)
 cd ../SQL
+cp .env.example .env
+# Edit .env: Add GOOGLE_API_KEY, DATABASE_URL
 ./scripts/deploy.sh
 # This creates schema, tables, functions, and loads seed data
 
-# 5. Run the AI sales agent
+# 6. Run the AI sales agent
 cd ..
 python -m client_mcp
 ```
 
-⚠️ **Important:** Step 4 (`./scripts/deploy.sh`) is required after `docker-compose up`. The database is not automatically initialized.
+⚠️ **Important Notes:**
+- Step 5 (`./scripts/deploy.sh`) is required after `docker-compose up`. The database is not automatically initialized.
+- Each microservice loads configuration from its own `.env` file (mcp_server/.env, email_service/.env, etc.)
+- For Docker deployment, ensure each service directory has a .env file with required credentials
 
 **First Conversation:**
 ```
@@ -861,21 +889,73 @@ python -m client_mcp.cli.health_check
 
 ## ⚙️ Configuration
 
-### 1. Environment Setup
+### 1. Environment File Structure
 
-```bash
-# Copy environment template
-cp .env.example .env
+Each microservice has its own `.env.example` template:
 
-# Edit configuration
-nano .env  # or your preferred editor
+```
+📁 Project Root
+├── 📁 DockerConfig/
+│   └── .env.example          ← Infrastructure (PostgreSQL, pgAdmin)
+├── 📁 mcp_server/
+│   └── .env.example          ← MCP Server config
+├── 📁 email_service/
+│   └── .env.example          ← Email service config
+├── 📁 agent/
+│   └── .env.example          ← Agent service config
+├── 📁 client_mcp/
+│   └── .env.example          ← Client config
+└── 📁 SQL/
+    └── .env.example          ← Database scripts
 ```
 
-### 2. Required Variables
+### 2. Docker Deployment Setup
+
+```bash
+# Step 1: Configure Docker infrastructure
+cd DockerConfig
+cp .env.example .env
+# Edit .env: Set POSTGRES_PASSWORD, PGADMIN_PASSWORD
+
+# Step 2: Start Docker services
+docker-compose up -d
+
+# Step 3: Services load their own .env automatically
+# Docker mounts each service's .env file from its directory
+# (docker-compose.yml has env_file directives pointing to them)
+```
+
+### 3. Local Development Setup
+
+```bash
+# Configure each microservice individually
+
+# MCP Server
+cd mcp_server
+cp .env.example .env
+nano .env  # Edit with your settings
+
+# Email Service
+cd ../email_service
+cp .env.example .env
+nano .env
+
+# Agent
+cd ../agent
+cp .env.example .env
+nano .env
+
+# Client
+cd ../client_mcp
+cp .env.example .env
+nano .env
+```
+
+### 4. Required Variables (All Services)
 
 ```bash
 # ============================================
-# Google Gemini API (REQUIRED)
+# Google Gemini API (REQUIRED for all services)
 # ============================================
 GOOGLE_API_KEY=your-google-api-key-here
 
@@ -883,21 +963,17 @@ GOOGLE_API_KEY=your-google-api-key-here
 # https://aistudio.google.com/app/apikey
 
 # ============================================
-# MCP Server (REQUIRED)
+# Database (REQUIRED for Docker & mcp_server)
 # ============================================
-MCP_HOST=localhost
-MCP_PORT=3000
+DATABASE_URL=postgresql://mcp_user:PASSWORD@localhost:5434/mcpdb
+SCHEMA_NAME=test
 
-# ============================================
-# Database Configuration (REQUIRED if not using Docker)
-# ============================================
-POSTGRES_USER=mcp_user
+# For DockerConfig (Docker infrastructure only)
 POSTGRES_PASSWORD=CHANGE_ME_STRONG_PASSWORD
-POSTGRES_DB=mcp_db
 POSTGRES_PORT=5434
 ```
 
-### 3. Optional Configuration
+### 5. Optional Configuration
 
 ```bash
 # ============================================

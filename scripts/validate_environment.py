@@ -1069,8 +1069,6 @@ class EnvironmentValidator:
             return 2
         if warning_count > 0 and self.strict:
             return 1
-        if warning_count > 0:
-            return 1
         return 0
 
     # =========================================================================
