@@ -37142,3 +37142,219 @@ make docker-ps SERVICE=postgres
 ✅ Ayuda actualizada con todos los comandos
 ✅ Documentación completa en NOTAS_CLAUDE.md
 ✅ Validación de sintaxis exitosa
+
+---
+
+## 2025-10-28 - Corrección de configuración de Google Calendar credentials
+
+### Problema identificado
+
+El servidor MCP no podía encontrar las credenciales de Google Calendar:
+```
+FileNotFoundError: Credenciales de cuenta de servicio no encontradas: /credentials/service-account.json
+```
+
+### Causa raíz
+
+1. El archivo `service-account.json` estaba en `mcp_server/credentials/` 
+2. El volumen de Docker no montaba el directorio de credenciales
+3. La configuración esperaba la ruta relativa al proyecto root: `credentials/service-account.json`
+
+### Solución implementada
+
+#### 1. Reestructuración de directorios
+
+**Antes:**
+```
+MCP-Server/
+└── mcp_server/
+    └── credentials/
+        └── service-account.json  ❌ Ubicación incorrecta
+```
+
+**Después:**
+```
+MCP-Server/
+├── credentials/  ✅ Nueva ubicación (root del proyecto)
+│   ├── README.md
+│   └── service-account.json
+└── mcp_server/
+    └── .env (apunta a credentials/service-account.json)
+```
+
+#### 2. Actualización de docker-compose.yml
+
+Agregado volumen de credenciales en el servicio `mcp-server`:
+
+```yaml
+volumes:
+  - mcp_logs:/app/logs
+  - ../email_service:/app/email_service:ro
+  - ../credentials:/app/credentials:ro  # ✅ Google Calendar credentials (read-only)
+```
+
+**Ubicación:** `DockerConfig/docker-compose.yml:68`
+
+**Características:**
+- Monta el directorio `credentials/` del host en `/app/credentials/` del contenedor
+- Modo `:ro` (read-only) por seguridad
+- Las credenciales son accesibles pero no modificables desde el contenedor
+
+#### 3. Creación de credentials/README.md
+
+Se creó una guía completa de configuración que incluye:
+
+1. **Prerequisitos:**
+   - Cuenta de Google Cloud Platform
+   - Habilitar Google Calendar API
+   - Crear Service Account
+
+2. **Pasos detallados:**
+   - Crear proyecto en Google Cloud Console
+   - Habilitar Google Calendar API
+   - Crear Service Account con permisos adecuados
+   - Generar clave JSON
+   - Compartir calendario con el service account ⚠️ **PASO CRÍTICO**
+
+3. **Configuración de variables de entorno:**
+   ```bash
+   GOOGLE_CALENDAR_ENABLED=true
+   GOOGLE_CALENDAR_CREDENTIALS_PATH=credentials/service-account.json
+   GOOGLE_CALENDAR_ID=tu-email@gmail.com
+   GOOGLE_CALENDAR_TIMEZONE=America/Costa_Rica
+   ```
+
+4. **Troubleshooting común:**
+   - Credentials file not found
+   - Invalid credentials
+   - Access denied
+   - Quota exceeded
+
+5. **Seguridad:**
+   - Advertencias sobre no subir credenciales a git
+   - El directorio está en `.gitignore`
+
+**Ubicación:** `credentials/README.md`
+
+#### 4. Verificación de configuración
+
+La configuración actual en `mcp_server/.env`:
+```bash
+GOOGLE_CALENDAR_ENABLED=true
+GOOGLE_CALENDAR_CREDENTIALS_PATH=credentials/service-account.json  ✅ Correcto
+GOOGLE_CALENDAR_ID=javierjortiz82@gmail.com
+GOOGLE_CALENDAR_TIMEZONE=America/Costa_Rica
+```
+
+La configuración en `mcp_server/.env.example` ya era correcta:
+```bash
+GOOGLE_CALENDAR_CREDENTIALS_PATH=credentials/service-account.json
+```
+
+### Cómo funciona la resolución de rutas
+
+En `mcp_server/config/settings.py:416-434`:
+
+```python
+@property
+def google_calendar_credentials_path(self) -> Path:
+    """Get absolute path to Google Calendar service account credentials."""
+    creds_path = Path(self.GOOGLE_CALENDAR_CREDENTIALS_PATH)
+    if not creds_path.is_absolute():
+        # Resolve relative to project root
+        # Path(__file__).parent.parent.parent = project root
+        return Path(__file__).parent.parent.parent / creds_path
+    return creds_path
+```
+
+Con la configuración `credentials/service-account.json`:
+1. Se detecta como ruta relativa (no es absoluta)
+2. Se resuelve desde el project root: `/home/javort/borrar/MCP-Server/credentials/service-account.json`
+3. En Docker, esto se traduce a: `/app/credentials/service-account.json` (gracias al volumen montado)
+
+### Flujo de montaje en Docker
+
+```
+Host                                    →  Container
+─────────────────────────────────────────────────────────────
+../credentials/                         →  /app/credentials/
+../credentials/service-account.json     →  /app/credentials/service-account.json
+../credentials/README.md                →  /app/credentials/README.md
+```
+
+### Ventajas de esta estructura
+
+1. **Separación clara:** 
+   - Credenciales en root (credentials/)
+   - Código fuente en subdirectorios (mcp_server/, agent/, etc.)
+
+2. **Seguridad:**
+   - Directorio completo en `.gitignore`
+   - Volumen Docker en modo read-only
+   - Documentación incluida en el mismo directorio
+
+3. **Mantenibilidad:**
+   - Una única ubicación para todas las credenciales del proyecto
+   - Fácil de localizar y gestionar
+   - README.md con instrucciones completas
+
+4. **Docker-friendly:**
+   - Volumen simple de montar
+   - Ruta consistente en host y contenedor
+   - No requiere modificar el código
+
+### Comandos para reiniciar y verificar
+
+```bash
+# Reiniciar el servicio MCP con la nueva configuración
+make docker-restart SERVICE=mcp-server
+
+# Ver logs para verificar que las credenciales se cargan correctamente
+make docker-logs SERVICE=mcp-server
+
+# Buscar en los logs el mensaje de éxito:
+# "✅ Google Calendar client initialized"
+```
+
+### Troubleshooting
+
+Si después de estos cambios sigues viendo el error:
+
+1. **Verificar que el archivo existe:**
+   ```bash
+   ls -la /home/javort/borrar/MCP-Server/credentials/service-account.json
+   ```
+
+2. **Verificar configuración en .env:**
+   ```bash
+   grep GOOGLE_CALENDAR /home/javort/borrar/MCP-Server/mcp_server/.env
+   ```
+
+3. **Reiniciar Docker completamente:**
+   ```bash
+   make docker-stop
+   make docker-start
+   ```
+
+4. **Verificar que el volumen está montado en el contenedor:**
+   ```bash
+   docker exec mcp-server ls -la /app/credentials/
+   ```
+
+### Archivos modificados
+
+- ✅ `DockerConfig/docker-compose.yml:68` - Agregado volumen de credentials
+- ✅ `credentials/README.md` - Creado (guía completa)
+- ✅ `credentials/service-account.json` - Movido desde mcp_server/credentials/
+- ✅ `mcp_server/.env` - Ya tenía la configuración correcta
+- ✅ `mcp_server/.env.example` - Ya tenía la configuración correcta
+
+### Status
+
+✅ Directorio credentials/ creado en project root
+✅ Archivo service-account.json movido a la ubicación correcta
+✅ README.md con guía completa de configuración
+✅ Volumen de Docker configurado correctamente
+✅ Variables de entorno verificadas
+✅ Documentación completa en NOTAS_CLAUDE.md
+⏳ Pendiente: Reiniciar servicio Docker para aplicar cambios

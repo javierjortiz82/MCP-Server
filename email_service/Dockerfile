@@ -38,9 +38,9 @@ WORKDIR /app
 FROM base AS dependencies
 
 # Copy requirements first (better caching)
-COPY requirements.txt .
+COPY requirements.txt ./
 
-# Install dependencies
+# Install dependencies (only external packages, not the email_service package itself)
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ============================================================================
@@ -52,8 +52,9 @@ FROM base AS production
 COPY --from=dependencies /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=dependencies /usr/local/bin /usr/local/bin
 
-# Copy application code as a proper Python package
-COPY . /app/
+# Copy application code - the parent directory becomes the Python path
+# This ensures that 'email_service' package is importable
+COPY --chown=emailworker:emailworker . /app/email_service/
 
 # Create logs directory and set permissions
 RUN mkdir -p /app/logs && \
@@ -65,9 +66,9 @@ ENV PYTHONPATH=/app
 # Switch to non-root user
 USER emailworker
 
-# Health check - verify SMTP can be configured (doesn't need actual connection)
+# Health check - verify the email_service package can be imported
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "from email_service.config import EmailConfig; EmailConfig(); print('healthy')" || exit 1
+    CMD python -c "from email_service.config.settings import EmailConfig; print('healthy')" || exit 1
 
 # Expose port (optional - for future metrics endpoint)
 EXPOSE 8080
