@@ -439,8 +439,8 @@ def create_booking(
     service_type: str,
     booking_date: str,  # YYYY-MM-DD
     booking_time: str,  # HH:MM
+    notes: str,
     duration_minutes: int = 60,
-    notes: str = "",
 ) -> dict[str, Any]:
     """Create a new booking/reservation.
 
@@ -453,8 +453,8 @@ def create_booking(
         service_type: Type of service being booked.
         booking_date: Booking date in YYYY-MM-DD format.
         booking_time: Booking time in HH:MM format (24-hour).
+        notes: REQUIRED. Reason or purpose of the appointment.
         duration_minutes: Appointment duration (default: 60).
-        notes: Additional notes/comments (optional).
 
     Returns:
         Dict with booking details:
@@ -494,6 +494,15 @@ def create_booking(
     if not is_valid_email:
         logger.warning(f"❌ Email validation failed: {email_error}")
         raise ValueError(email_error)
+
+    # Validate notes are provided (mandatory field)
+    if not notes or not notes.strip():
+        logger.warning(
+            f"❌ Notes validation failed: Notes/motivo is required for booking"
+        )
+        raise ValueError(
+            "Notes are required. Please provide the reason or purpose of the appointment."
+        )
 
     # Validate availability using database function
     # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup

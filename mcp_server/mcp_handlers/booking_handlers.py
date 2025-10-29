@@ -127,8 +127,8 @@ def register_booking_tools():
         service_type: str,
         booking_date: str,
         booking_time: str,
+        notes: str,
         duration_minutes: int = 60,
-        notes: str = "",
     ) -> dict[str, Any]:
         """Create a new booking/reservation appointment.
 
@@ -151,7 +151,7 @@ def register_booking_tools():
         ❌ Customer is just checking availability (use get_available_slots)
         ❌ Customer wants to modify existing booking (use reschedule_booking)
         ❌ Customer wants to cancel booking (use cancel_booking)
-        ❌ Missing required information (name, email, phone, service, date, time)
+        ❌ Missing required information (name, email, phone, service, date, time, notes)
         ❌ Customer asks: "¿Cuánto cuesta?" or "¿Hay descuento?" → NOT booking scope
 
         ** WHAT IT DOES **:
@@ -178,9 +178,12 @@ def register_booking_tools():
                          training_session, installation, custom.
             booking_date: Appointment date in YYYY-MM-DD format (e.g., "2025-10-15").
             booking_time: Appointment time in HH:MM format 24-hour (e.g., "15:00" for 3pm).
+            notes: REQUIRED. Notes, reason, or purpose of the appointment.
+                  This field is mandatory to understand the customer's needs.
+                  Examples: "Primera consulta", "Problema con el producto X",
+                  "Quiero conocer las funcionalidades".
             duration_minutes: Appointment duration in minutes (default: 60).
                              Typical values: 30, 60, 90, 120.
-            notes: Optional notes or special requests from customer (default: "").
 
         Returns:
             Booking confirmation dict with:
