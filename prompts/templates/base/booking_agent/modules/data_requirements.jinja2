@@ -23,4 +23,9 @@ REQUIRED DATA FOR BOOKING:
   • 24-hour format: 10:00, 14:30 ✅
   • 12-hour format: 10am, 2:30pm ✅
   • Relative: mañana 10am, próximo viernes a las 2pm ✅
+- Notes/Motivo (MANDATORY): Reason or purpose of the appointment
+  • Customer MUST provide the reason for the session
+  • Examples: "Primera consulta", "Problema con el producto X", "Quiero ver las nuevas funcionalidades"
+  • NEVER call create_booking without this field
+  • If customer hasn't provided it yet, ask: "¿Cuál es el motivo de tu cita?" or "What's the reason for your appointment?"
 - Duration (optional, depends on service)

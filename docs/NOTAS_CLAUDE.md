@@ -37714,3 +37714,70 @@ File '/app/README.md' cannot be found
 - ✅ Conexión SMTP verificada
 - ✅ Procesando emails de la cola exitosamente
 
+
+---
+
+## 2025-10-28 - Implementar campo "Motivo/Notas" obligatorio en creación de reservas
+
+**Objetivo**: Hacer obligatorio que el usuario proporcione un motivo o notas al crear una cita en Google Calendar.
+
+**Cambios implementados**:
+
+1. **MCP Tool Handler** (`mcp_server/mcp_handlers/booking_handlers.py`)
+   - Línea 130: Cambió `notes: str = ""` a `notes: str` (obligatorio)
+   - Línea 154: Actualizado DON'T USE para incluir "notes" en campos requeridos
+   - Líneas 181-186: Actualizada documentación del parámetro como REQUIRED con ejemplos
+
+2. **Business Logic** (`mcp_server/tools/bookings.py`)
+   - Línea 442: Cambió `notes: str = ""` a `notes: str` (obligatorio)
+   - Línea 456: Actualizada documentación del parámetro como REQUIRED
+   - Líneas 498-505: Agregada validación que lanza ValueError si notes está vacío o solo espacios
+     ```python
+     if not notes or not notes.strip():
+         raise ValueError("Notes are required. Please provide the reason or purpose of the appointment.")
+     ```
+
+3. **System Prompt del Agente** (`prompts/templates/base/booking_agent/modules/data_requirements.jinja2`)
+   - Líneas 26-30: Agregado campo "Notes/Motivo (MANDATORY)" con instrucciones claras:
+     - Ejemplos en español e inglés
+     - Instrucción explícita: "NEVER call create_booking without this field"
+     - Pregunta sugerida: "¿Cuál es el motivo de tu cita?" o "What's the reason for your appointment?"
+
+**Orden de parámetros**:
+Se reorganizó el orden para cumplir con sintaxis de Python (parámetros sin default antes de parámetros con default):
+```python
+# Antes (error):
+duration_minutes: int = 60,  # con default
+notes: str,                   # sin default ❌
+
+# Después (correcto):
+notes: str,                   # sin default ✅
+duration_minutes: int = 60,  # con default
+```
+
+**Validación**:
+- La validación se ejecuta después de validar el email
+- Verifica que notes no sea None, cadena vacía o solo espacios
+- Error devuelto: "Notes are required. Please provide the reason or purpose of the appointment."
+- Log de warning: "❌ Notes validation failed: Notes/motivo is required for booking"
+
+**Integración con Google Calendar**:
+El campo `notes` se incluye en la descripción del evento de Google Calendar (línea 541 de `mcp_server/tools/bookings.py`):
+```python
+description=f"Service: {service_type}\nCustomer: {customer_name}\nNotes: {notes}"
+```
+
+**Resultado**:
+- ✅ Campo obligatorio a nivel de herramienta MCP
+- ✅ Validación a nivel de business logic
+- ✅ Instrucción clara al agente para preguntar por el motivo
+- ✅ Se almacena en base de datos (campo `notes` en tabla `appointments`)
+- ✅ Aparece en descripción del evento de Google Calendar
+- ✅ Servidor MCP iniciado correctamente sin errores
+- ✅ Tests pasados
+
+**Archivos modificados**:
+- `mcp_server/mcp_handlers/booking_handlers.py`
+- `mcp_server/tools/bookings.py`
+- `prompts/templates/base/booking_agent/modules/data_requirements.jinja2`
+
