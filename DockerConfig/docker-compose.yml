@@ -60,6 +60,8 @@ services:
       # Override only Docker-specific variables (internal hostnames)
       DATABASE_URL: postgresql://${POSTGRES_USER:-mcp_user}:${POSTGRES_PASSWORD:-mcp_password}@postgres:5432/${POSTGRES_DB:-mcpdb}
       LOG_DIR: logs
+      # Override credentials path to match Docker volume mount location
+      GOOGLE_CALENDAR_CREDENTIALS_PATH: /app/credentials/service-account.json
     ports:
       - "8009:8009"
     volumes:
