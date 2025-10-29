@@ -36894,3 +36894,251 @@ Expected: Scenarios 1, 2, 4 should trigger automatic get_services() call.
 ✅ Changes documented in NOTAS_CLAUDE.md
 ⏳ Pending: Test with real user interactions
 
+
+---
+
+## 2025-10-28 - Mejora de comandos Docker en Makefile
+
+### Cambio realizado
+
+Se agregó soporte para operaciones en servicios específicos de Docker en el Makefile:
+
+### Comandos modificados
+
+1. **docker-restart** - Ahora acepta parámetro SERVICE opcional
+2. **docker-stop** - Ahora acepta parámetro SERVICE opcional  
+3. **docker-logs** - Ahora acepta parámetro SERVICE opcional
+
+### Uso
+
+```bash
+# Reiniciar todos los servicios
+make docker-restart
+
+# Reiniciar un servicio específico
+make docker-restart SERVICE=postgres
+make docker-restart SERVICE=mcp-server
+make docker-restart SERVICE=email-worker
+make docker-restart SERVICE=pgadmin
+
+# Ver logs de todos los servicios
+make docker-logs
+
+# Ver logs de un servicio específico
+make docker-logs SERVICE=mcp-server
+
+# Detener todos los servicios
+make docker-stop
+
+# Detener un servicio específico
+make docker-stop SERVICE=postgres
+```
+
+### Servicios disponibles
+
+- **postgres** - Base de datos PostgreSQL
+- **pgadmin** - Interfaz web de administración de PostgreSQL
+- **mcp-server** - Servidor MCP principal
+- **email-worker** - Worker de procesamiento de emails
+
+### Características
+
+1. **Sin parámetro SERVICE**: Ejecuta la operación en todos los servicios
+2. **Con parámetro SERVICE**: Ejecuta la operación solo en el servicio especificado
+3. **Mensajes informativos**: Muestra recomendaciones y servicios disponibles
+4. **Validación**: Verifica que Docker esté instalado y el directorio exista
+5. **Manejo de errores**: Mensajes de error claros en caso de falla
+
+### Ubicación de cambios
+
+- **Makefile:81-90** - Actualización de ayuda con nueva funcionalidad
+- **Makefile:361-372** - Modificación de docker-stop
+- **Makefile:381-394** - Modificación de docker-restart
+- **Makefile:396-408** - Modificación de docker-logs
+
+### Beneficios
+
+1. **Flexibilidad** - Permite reiniciar/detener/ver logs de servicios individuales
+2. **Eficiencia** - No es necesario reiniciar todo si solo un servicio tiene problemas
+3. **Experiencia mejorada** - Mensajes claros con sugerencias de uso
+4. **Mantenibilidad** - Código limpio y bien estructurado
+
+### Status
+
+✅ docker-restart modificado con soporte SERVICE
+✅ docker-stop modificado con soporte SERVICE
+✅ docker-logs modificado con soporte SERVICE
+✅ Ayuda actualizada en make help
+✅ Validación de sintaxis exitosa
+
+---
+
+## 2025-10-28 - Extensión completa de soporte SERVICE en comandos Docker
+
+### Cambios adicionales realizados
+
+Se extendió el soporte del parámetro SERVICE a TODOS los comandos Docker relevantes:
+
+### Comandos modificados (adicionales)
+
+1. **docker-start** - Ahora acepta parámetro SERVICE opcional
+2. **docker-build** - Ahora acepta parámetro SERVICE opcional  
+3. **docker-ps** - Ahora acepta parámetro SERVICE opcional (filtrado)
+4. **docker-clean** - Ahora acepta parámetro SERVICE opcional (limpieza selectiva)
+
+### Ejemplos de uso completos
+
+```bash
+# ============================================
+# INICIAR SERVICIOS
+# ============================================
+# Iniciar todos los servicios
+make docker-start
+
+# Iniciar solo un servicio específico
+make docker-start SERVICE=postgres
+make docker-start SERVICE=mcp-server
+
+# ============================================
+# CONSTRUIR IMÁGENES
+# ============================================
+# Construir todas las imágenes
+make docker-build
+
+# Reconstruir solo un servicio específico
+make docker-build SERVICE=mcp-server
+make docker-build SERVICE=email-worker
+
+# ============================================
+# VER ESTADO
+# ============================================
+# Ver estado de todos los servicios
+make docker-ps
+
+# Ver estado de un servicio específico
+make docker-ps SERVICE=postgres
+make docker-ps SERVICE=pgadmin
+
+# ============================================
+# LIMPIAR RECURSOS
+# ============================================
+# Limpiar todo (down -v + prune)
+make docker-clean
+
+# Remover solo un servicio específico
+make docker-clean SERVICE=email-worker
+make docker-clean SERVICE=mcp-server
+
+# ============================================
+# REINICIAR SERVICIOS
+# ============================================
+# Reiniciar todos
+make docker-restart
+
+# Reiniciar uno específico
+make docker-restart SERVICE=postgres
+
+# ============================================
+# VER LOGS
+# ============================================
+# Ver logs de todos
+make docker-logs
+
+# Ver logs de uno específico
+make docker-logs SERVICE=mcp-server
+
+# ============================================
+# DETENER SERVICIOS
+# ============================================
+# Detener todos
+make docker-stop
+
+# Detener uno específico
+make docker-stop SERVICE=pgadmin
+```
+
+### Comandos Docker con soporte SERVICE
+
+| Comando | Sin SERVICE | Con SERVICE | Descripción |
+|---------|-------------|-------------|-------------|
+| `docker-start` | Inicia todos | Inicia uno específico | up -d [SERVICE] |
+| `docker-stop` | Detiene todos | Detiene uno específico | stop [SERVICE] |
+| `docker-restart` | Reinicia todos | Reinicia uno específico | restart [SERVICE] |
+| `docker-build` | Construye todos | Construye uno específico | build [SERVICE] |
+| `docker-ps` | Muestra todos | Muestra uno específico | ps [SERVICE] |
+| `docker-logs` | Logs de todos | Logs de uno específico | logs -f [SERVICE] |
+| `docker-clean` | Limpia todo (down -v + prune) | Remueve uno (rm -sfv) | down -v / rm [SERVICE] |
+
+### Comportamiento especial de docker-clean
+
+- **Sin SERVICE**: Ejecuta `docker-compose down -v` + `docker system prune -f` (destructivo, limpia todo)
+- **Con SERVICE**: Ejecuta `docker-compose rm --stop --force -v SERVICE` (solo remueve ese servicio y sus volúmenes)
+
+⚠️ **Advertencia**: `docker-clean SERVICE=postgres` eliminará los volúmenes de datos de PostgreSQL. Para recrear, usa `docker-start SERVICE=postgres`.
+
+### Mensajes informativos mejorados
+
+Todos los comandos ahora muestran:
+1. ✅ Confirmación de acción realizada
+2. 💡 Tip de uso con SERVICE (cuando aplica)
+3. 📋 Lista de servicios disponibles
+
+### Ubicación de cambios en Makefile
+
+- **Línea 83-90**: Actualización de ayuda (help)
+- **Línea 355-368**: docker-start modificado
+- **Línea 383-396**: docker-build modificado
+- **Línea 427-439**: docker-ps modificado
+- **Línea 441-456**: docker-clean modificado
+
+### Casos de uso comunes
+
+#### 1. Reconstruir solo el MCP server después de cambios en código
+```bash
+make docker-build SERVICE=mcp-server
+make docker-restart SERVICE=mcp-server
+make docker-logs SERVICE=mcp-server
+```
+
+#### 2. Reiniciar solo la base de datos
+```bash
+make docker-restart SERVICE=postgres
+```
+
+#### 3. Limpiar y recrear el email worker
+```bash
+make docker-clean SERVICE=email-worker
+make docker-start SERVICE=email-worker
+```
+
+#### 4. Monitorear logs de un servicio específico
+```bash
+make docker-logs SERVICE=mcp-server
+# Presiona Ctrl+C para salir
+```
+
+#### 5. Verificar estado de un servicio
+```bash
+make docker-ps SERVICE=postgres
+```
+
+### Beneficios adicionales
+
+1. **Desarrollo ágil** - Reconstruir solo el servicio modificado
+2. **Debugging eficiente** - Ver logs de un solo servicio
+3. **Recursos optimizados** - Limpiar servicios individuales sin afectar otros
+4. **Flexibilidad total** - Control granular sobre cada servicio
+5. **Menos downtime** - Reiniciar solo lo necesario
+
+### Status
+
+✅ docker-start con soporte SERVICE
+✅ docker-stop con soporte SERVICE
+✅ docker-restart con soporte SERVICE
+✅ docker-build con soporte SERVICE
+✅ docker-ps con soporte SERVICE
+✅ docker-logs con soporte SERVICE
+✅ docker-clean con soporte SERVICE
+✅ Ayuda actualizada con todos los comandos
+✅ Documentación completa en NOTAS_CLAUDE.md
+✅ Validación de sintaxis exitosa

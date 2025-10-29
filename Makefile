@@ -80,13 +80,14 @@ help:
 	@echo "  $(GREEN)make docker-start-safe$(NC) Safe Docker (setup-env + validate + docker-start)"
 	@echo ""
 	@echo "$(YELLOW)Docker Operations:$(NC)"
-	@echo "  $(GREEN)make docker-start$(NC)      Start all containers"
-	@echo "  $(GREEN)make docker-stop$(NC)       Stop all containers"
-	@echo "  $(GREEN)make docker-restart$(NC)    Restart all containers"
-	@echo "  $(GREEN)make docker-build$(NC)      Build Docker images"
-	@echo "  $(GREEN)make docker-ps$(NC)         Show container status"
-	@echo "  $(GREEN)make docker-logs$(NC)       Show Docker logs (follow mode)"
-	@echo "  $(GREEN)make docker-clean$(NC)      Remove containers + volumes + prune"
+	@echo "  $(GREEN)make docker-start$(NC)      Start all containers (or SERVICE=<name>)"
+	@echo "  $(GREEN)make docker-stop$(NC)       Stop all containers (or SERVICE=<name>)"
+	@echo "  $(GREEN)make docker-restart$(NC)    Restart all containers (or SERVICE=<name>)"
+	@echo "  $(GREEN)make docker-build$(NC)      Build Docker images (or SERVICE=<name>)"
+	@echo "  $(GREEN)make docker-ps$(NC)         Show container status (or SERVICE=<name>)"
+	@echo "  $(GREEN)make docker-logs$(NC)       Show Docker logs (follow mode, or SERVICE=<name>)"
+	@echo "  $(GREEN)make docker-clean$(NC)      Remove containers + volumes (or SERVICE=<name>)"
+	@echo "  $(CYAN)💡 Services: postgres, pgadmin, mcp-server, email-worker$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Services (Local):$(NC)"
 	@echo "  $(GREEN)make start$(NC)             Start all local services"
@@ -352,52 +353,107 @@ clean-deep: clean
 
 # Docker Management
 docker-start:
-	@echo "$(YELLOW)Starting Docker containers...$(NC)"
 	@command -v docker >/dev/null || { echo "$(RED)Docker not installed$(NC)"; exit 1; }
 	@test -d DockerConfig || { echo "$(RED)DockerConfig directory not found$(NC)"; exit 1; }
-	@cd DockerConfig && docker-compose up -d || { echo "$(RED)Failed to start Docker containers$(NC)"; exit 1; }
-	@echo "$(GREEN)✓ Docker containers started$(NC)"
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(YELLOW)Starting all Docker containers...$(NC)"; \
+		cd DockerConfig && docker-compose up -d || { echo "$(RED)Failed to start Docker containers$(NC)"; exit 1; }; \
+		echo "$(GREEN)✓ All Docker containers started$(NC)"; \
+		echo "$(CYAN)Tip: Use 'make docker-start SERVICE=<name>' to start a specific service$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+	else \
+		echo "$(YELLOW)Starting service: $(SERVICE)$(NC)"; \
+		cd DockerConfig && docker-compose up -d $(SERVICE) || { echo "$(RED)Failed to start service: $(SERVICE)$(NC)"; exit 1; }; \
+		echo "$(GREEN)✓ Service '$(SERVICE)' started$(NC)"; \
+	fi
 
 docker-stop:
 	@echo "$(YELLOW)Stopping Docker containers...$(NC)"
 	@command -v docker >/dev/null || { echo "$(RED)Docker not installed$(NC)"; exit 1; }
 	@test -d DockerConfig || { echo "$(RED)DockerConfig directory not found$(NC)"; exit 1; }
-	@cd DockerConfig && docker-compose down || { echo "$(RED)Failed to stop Docker containers$(NC)"; exit 1; }
-	@echo "$(GREEN)✓ Docker containers stopped$(NC)"
+	@if [ -z "$(SERVICE)" ]; then \
+		cd DockerConfig && docker-compose down || { echo "$(RED)Failed to stop Docker containers$(NC)"; exit 1; }; \
+		echo "$(GREEN)✓ All Docker containers stopped$(NC)"; \
+	else \
+		cd DockerConfig && docker-compose stop $(SERVICE) || { echo "$(RED)Failed to stop service: $(SERVICE)$(NC)"; exit 1; }; \
+		echo "$(GREEN)✓ Service '$(SERVICE)' stopped$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+	fi
 
 docker-build:
-	@echo "$(YELLOW)Building Docker images...$(NC)"
 	@command -v docker >/dev/null || { echo "$(RED)Docker not installed$(NC)"; exit 1; }
 	@test -d DockerConfig || { echo "$(RED)DockerConfig directory not found$(NC)"; exit 1; }
-	@cd DockerConfig && docker-compose build || { echo "$(RED)Failed to build Docker images$(NC)"; exit 1; }
-	@echo "$(GREEN)✓ Docker images built$(NC)"
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(YELLOW)Building all Docker images...$(NC)"; \
+		cd DockerConfig && docker-compose build || { echo "$(RED)Failed to build Docker images$(NC)"; exit 1; }; \
+		echo "$(GREEN)✓ All Docker images built$(NC)"; \
+		echo "$(CYAN)Tip: Use 'make docker-build SERVICE=<name>' to build a specific service$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+	else \
+		echo "$(YELLOW)Building service: $(SERVICE)$(NC)"; \
+		cd DockerConfig && docker-compose build $(SERVICE) || { echo "$(RED)Failed to build service: $(SERVICE)$(NC)"; exit 1; }; \
+		echo "$(GREEN)✓ Service '$(SERVICE)' built$(NC)"; \
+	fi
 
 docker-restart:
-	@echo "$(YELLOW)Restarting Docker containers...$(NC)"
 	@command -v docker >/dev/null || { echo "$(RED)Docker not installed$(NC)"; exit 1; }
 	@test -d DockerConfig || { echo "$(RED)DockerConfig directory not found$(NC)"; exit 1; }
-	@cd DockerConfig && docker-compose restart || { echo "$(RED)Failed to restart Docker containers$(NC)"; exit 1; }
-	@echo "$(GREEN)✓ Docker containers restarted$(NC)"
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(YELLOW)Restarting all Docker containers...$(NC)"; \
+		cd DockerConfig && docker-compose restart || { echo "$(RED)Failed to restart Docker containers$(NC)"; exit 1; }; \
+		echo "$(GREEN)✓ All Docker containers restarted$(NC)"; \
+		echo "$(CYAN)Tip: Use 'make docker-restart SERVICE=<name>' to restart a specific service$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+	else \
+		echo "$(YELLOW)Restarting service: $(SERVICE)$(NC)"; \
+		cd DockerConfig && docker-compose restart $(SERVICE) || { echo "$(RED)Failed to restart service: $(SERVICE)$(NC)"; exit 1; }; \
+		echo "$(GREEN)✓ Service '$(SERVICE)' restarted$(NC)"; \
+	fi
 
 docker-logs:
-	@echo "$(YELLOW)Following Docker logs...$(NC)"
 	@command -v docker >/dev/null || { echo "$(RED)Docker not installed$(NC)"; exit 1; }
 	@test -d DockerConfig || { echo "$(RED)DockerConfig directory not found$(NC)"; exit 1; }
-	@cd DockerConfig && docker-compose logs -f
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(YELLOW)Following logs for all Docker containers...$(NC)"; \
+		echo "$(CYAN)Tip: Use 'make docker-logs SERVICE=<name>' to view a specific service$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+		echo ""; \
+		cd DockerConfig && docker-compose logs -f; \
+	else \
+		echo "$(YELLOW)Following logs for service: $(SERVICE)$(NC)"; \
+		cd DockerConfig && docker-compose logs -f $(SERVICE) || { echo "$(RED)Failed to get logs for service: $(SERVICE)$(NC)"; exit 1; }; \
+	fi
 
 docker-ps:
-	@echo "$(YELLOW)Docker container status:$(NC)"
 	@command -v docker >/dev/null || { echo "$(RED)Docker not installed$(NC)"; exit 1; }
 	@test -d DockerConfig || { echo "$(RED)DockerConfig directory not found$(NC)"; exit 1; }
-	@cd DockerConfig && docker-compose ps
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(YELLOW)Docker container status (all services):$(NC)"; \
+		cd DockerConfig && docker-compose ps; \
+		echo ""; \
+		echo "$(CYAN)Tip: Use 'make docker-ps SERVICE=<name>' to view a specific service$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+	else \
+		echo "$(YELLOW)Docker container status for service: $(SERVICE)$(NC)"; \
+		cd DockerConfig && docker-compose ps $(SERVICE) || { echo "$(RED)Failed to get status for service: $(SERVICE)$(NC)"; exit 1; }; \
+	fi
 
 docker-clean:
-	@echo "$(YELLOW)Cleaning up Docker resources...$(NC)"
 	@command -v docker >/dev/null || { echo "$(RED)Docker not installed$(NC)"; exit 1; }
 	@test -d DockerConfig || { echo "$(RED)DockerConfig directory not found$(NC)"; exit 1; }
-	@cd DockerConfig && docker-compose down -v || { echo "$(RED)Failed to clean Docker containers$(NC)"; exit 1; }
-	@docker system prune -f || { echo "$(RED)Failed to prune Docker system$(NC)"; exit 1; }
-	@echo "$(GREEN)✓ Docker cleanup complete$(NC)"
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(YELLOW)Cleaning up all Docker resources...$(NC)"; \
+		cd DockerConfig && docker-compose down -v || { echo "$(RED)Failed to clean Docker containers$(NC)"; exit 1; }; \
+		docker system prune -f || { echo "$(RED)Failed to prune Docker system$(NC)"; exit 1; }; \
+		echo "$(GREEN)✓ All Docker resources cleaned$(NC)"; \
+		echo "$(CYAN)Tip: Use 'make docker-clean SERVICE=<name>' to remove a specific service$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+	else \
+		echo "$(YELLOW)Removing service: $(SERVICE)$(NC)"; \
+		cd DockerConfig && docker-compose rm --stop --force -v $(SERVICE) || { echo "$(RED)Failed to remove service: $(SERVICE)$(NC)"; exit 1; }; \
+		echo "$(GREEN)✓ Service '$(SERVICE)' removed$(NC)"; \
+		echo "$(YELLOW)Note: Volumes for $(SERVICE) have been removed. Use 'docker-start SERVICE=$(SERVICE)' to recreate.$(NC)"; \
+	fi
 
 # Deployment
 deploy: setup-env
