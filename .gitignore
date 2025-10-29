@@ -99,7 +99,10 @@ borrar/
 backups/
 
 # Credentials and secrets (never commit)
-credentials/
+# Note: credentials/ directory structure is committed, but not the actual credential files
+credentials/service-account.json
+credentials/*.json
+!credentials/*.json.example
 */credentials/
 *.key
 *.pem

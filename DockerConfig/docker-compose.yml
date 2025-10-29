@@ -65,6 +65,7 @@ services:
     volumes:
       - mcp_logs:/app/logs
       - ../email_service:/app/email_service:ro
+      - ../credentials:/app/credentials:ro  # Google Calendar credentials (read-only)
     networks:
       - mcp-network
     depends_on:
