@@ -50,7 +50,7 @@ class EmailConfig(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=str(Path(__file__).parent.parent / ".env"),
+        env_file=None,  # Don't load from file in Docker (uses env_file from docker-compose.yml)
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
@@ -209,34 +209,40 @@ class EmailConfig(BaseSettings):
             raise ValueError("SMTP_HOST cannot be empty")
         return v.strip()
 
-    @field_validator("SMTP_USER", "SMTP_PASSWORD")
+    @field_validator("SMTP_PASSWORD")
     @classmethod
-    def validate_smtp_credentials(cls, v: str, info) -> str:
-        """Validate and clean SMTP credentials.
+    def validate_smtp_password(cls, v: str) -> str:
+        """Validate and clean SMTP password.
 
-        For SMTP_PASSWORD, automatically removes spaces (Gmail app passwords
+        Automatically removes spaces from SMTP password (Gmail app passwords
         are displayed with spaces for readability but must be used without spaces).
 
         Args:
-            v: Credential value to validate.
-            info: Validation context info containing field name.
+            v: Password value to validate.
 
         Returns:
-            Validated and cleaned credential.
-
-        Raises:
-            ValueError: If credential is empty.
+            Validated and cleaned password (spaces removed).
 
         Examples:
             >>> # Gmail generates: "REDACTED_SMTP_APP_PASSWORD"
             >>> # Automatically converted to: "REDACTED_SMTP_APP_PASSWORD"
         """
-        # Remove spaces from SMTP_PASSWORD for Gmail compatibility
-        # Gmail app passwords are displayed with spaces but need to be used without them
-        if info.field_name == "SMTP_PASSWORD":
-            v = v.replace(" ", "")
+        # Remove all spaces from password
+        # Gmail app passwords are displayed with spaces but must be used without them
+        return v.replace(" ", "")
 
-        # Note: Credentials can be empty during initialization,
+    @field_validator("SMTP_USER")
+    @classmethod
+    def validate_smtp_user(cls, v: str) -> str:
+        """Validate SMTP username.
+
+        Args:
+            v: Username value to validate.
+
+        Returns:
+            Validated username.
+        """
+        # Note: Username can be empty during initialization,
         # but will be validated later when needed
         return v
 

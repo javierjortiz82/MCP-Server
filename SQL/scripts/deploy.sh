@@ -230,9 +230,6 @@ run_deployment() {
     if docker exec -w /tmp/sql_deploy/05_orchestration mcp-postgres \
         psql -U mcp_user -d mcpdb -v "SCHEMA_NAME=$SCHEMA_NAME" -f 01_deploy.sql; then
         success "Deployment completed successfully"
-
-        # Cleanup temporary files in container
-        docker exec mcp-postgres rm -rf /tmp/sql_deploy 2>/dev/null || true
         return 0
     else
         error "Deployment failed"
@@ -311,10 +308,14 @@ run_data_loading() {
 
 run_validation() {
     step "Running deployment validation..."
-    echo "  Executing: $VALIDATE_SQL"
+    echo "  Executing: 02_validate_deployment.sql"
     echo ""
 
-    if docker exec mcp-postgres psql -U mcp_user -d mcpdb -v "SCHEMA_NAME=$SCHEMA_NAME" -f "$VALIDATE_SQL"; then
+    # Use the temporary container path where files were copied
+    VALIDATE_SQL_CONTAINER="/tmp/sql_deploy/05_orchestration/02_validate_deployment.sql"
+
+    if docker exec -w /tmp/sql_deploy/05_orchestration mcp-postgres \
+        psql -U mcp_user -d mcpdb -v "SCHEMA_NAME=$SCHEMA_NAME" -f 02_validate_deployment.sql; then
         success "Validation completed"
         return 0
     else
@@ -330,7 +331,7 @@ run_validation() {
 run_verification() {
     step "Running health checks..."
     echo ""
-    
+
     if bash "$VERIFY_SCRIPT"; then
         success "All health checks passed"
         return 0
@@ -338,6 +339,16 @@ run_verification() {
         warning "Some health checks failed (see above)"
         return 1
     fi
+}
+
+# ============================================================================
+# CLEANUP PHASE
+# ============================================================================
+
+cleanup_temporary_files() {
+    step "Cleaning up temporary files..."
+    docker exec mcp-postgres rm -rf /tmp/sql_deploy 2>/dev/null || true
+    success "Temporary files cleaned up"
 }
 
 # ============================================================================
@@ -367,19 +378,22 @@ main() {
                 ;;
         esac
     done
-    
+
+    # Ensure cleanup runs at the end (even on error)
+    trap cleanup_temporary_files EXIT
+
     print_header "LAB01-MCP DATABASE DEPLOYMENT"
-    
+
     # Prerequisite checks
     if ! check_prerequisites; then
         error "Prerequisites check failed"
         exit 1
     fi
-    
+
     echo ""
     success "All prerequisites passed"
     echo ""
-    
+
     # Validate only mode
     if [ "$VALIDATE_ONLY" = true ]; then
         print_header "VALIDATION ONLY MODE"
@@ -391,7 +405,7 @@ main() {
             exit 1
         fi
     fi
-    
+
     # Full deployment
     print_header "PHASE 1: DATABASE DEPLOYMENT (DDL)"
     if ! run_deployment; then
@@ -420,7 +434,7 @@ main() {
             warning "Some health checks failed"
         fi
     fi
-    
+
     # Final summary
     echo ""
     print_header "DEPLOYMENT SUMMARY"
