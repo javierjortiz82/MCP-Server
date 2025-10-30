@@ -95,6 +95,7 @@ class EnvironmentValidator:
         self._validate_error_pattern_consistency()
         self._validate_retry_strategy_consistency()
         self._validate_google_api_key_existence()
+        self._validate_google_calendar_config()
         self._validate_rate_limiting_consistency()
 
         # Print results
@@ -945,6 +946,95 @@ class EnvironmentValidator:
             )
 
         # Note: We do NOT compare API key values - different keys per service is intentional
+
+    def _validate_google_calendar_config(self):
+        """Validate Google Calendar configuration when enabled.
+
+        If GOOGLE_CALENDAR_ENABLED=true, ensures GOOGLE_CALENDAR_ID is properly configured
+        (not just 'primary') and looks like a valid email address or calendar ID.
+        """
+        mcp_server_env = self.env_vars.get("mcp_server", {})
+
+        google_calendar_enabled = mcp_server_env.get("GOOGLE_CALENDAR_ENABLED", "").lower() in ["true", "1", "yes"]
+
+        if not google_calendar_enabled:
+            self._add_issue(
+                ValidationIssue(
+                    "info",
+                    "Google Calendar",
+                    "Google Calendar integration is disabled"
+                )
+            )
+            return
+
+        # Google Calendar is enabled - validate configuration
+        self._add_issue(
+            ValidationIssue(
+                "success",
+                "Google Calendar",
+                "Google Calendar is enabled"
+            )
+        )
+
+        calendar_id = mcp_server_env.get("GOOGLE_CALENDAR_ID", "").strip()
+
+        # Check if GOOGLE_CALENDAR_ID is set
+        if not calendar_id:
+            self._add_issue(
+                ValidationIssue(
+                    "error",
+                    "Google Calendar",
+                    "GOOGLE_CALENDAR_ID is not configured (empty value)",
+                    variable="GOOGLE_CALENDAR_ID",
+                    suggestion="Set GOOGLE_CALENDAR_ID in mcp_server/.env to your email (e.g., your-email@gmail.com) or calendar ID"
+                )
+            )
+            return
+
+        # Check if GOOGLE_CALENDAR_ID is just 'primary' (problematic for service accounts)
+        if calendar_id.lower() == "primary":
+            self._add_issue(
+                ValidationIssue(
+                    "error",
+                    "Google Calendar",
+                    f"GOOGLE_CALENDAR_ID is set to 'primary' - events will be created in the service account's calendar, not your personal calendar",
+                    variable="GOOGLE_CALENDAR_ID",
+                    suggestion="Set GOOGLE_CALENDAR_ID to your actual email address (e.g., your-email@gmail.com) or a specific calendar ID. See mcp_server/.env comments for details."
+                )
+            )
+            return
+
+        # Validate format: should be email-like or contain @ or alphanumeric calendar ID
+        # Valid formats: user@example.com, calendar123@group.calendar.google.com, or alphanumeric IDs
+        email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        calendar_id_pattern = r"^[a-zA-Z0-9._@-]+$"
+
+        if re.match(email_pattern, calendar_id):
+            self._add_issue(
+                ValidationIssue(
+                    "success",
+                    "Google Calendar",
+                    f"GOOGLE_CALENDAR_ID is set to a valid email: {calendar_id}"
+                )
+            )
+        elif re.match(calendar_id_pattern, calendar_id) and len(calendar_id) > 5:
+            self._add_issue(
+                ValidationIssue(
+                    "success",
+                    "Google Calendar",
+                    f"GOOGLE_CALENDAR_ID is set to a calendar ID: {calendar_id}"
+                )
+            )
+        else:
+            self._add_issue(
+                ValidationIssue(
+                    "warning",
+                    "Google Calendar",
+                    f"GOOGLE_CALENDAR_ID format may be invalid: '{calendar_id}'",
+                    variable="GOOGLE_CALENDAR_ID",
+                    suggestion="GOOGLE_CALENDAR_ID should be your email (user@example.com) or a calendar ID. Verify the format is correct."
+                )
+            )
 
     def _validate_rate_limiting_consistency(self):
         """Validate rate limiting configuration consistency across services."""
