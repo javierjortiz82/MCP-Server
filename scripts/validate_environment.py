@@ -301,7 +301,8 @@ class EnvironmentValidator:
             for var in required_vars:
                 if var in service_env:
                     value = service_env[var]
-                    if value.startswith("your") or value.startswith("CHANGE_ME"):
+                    value_lower = value.lower()
+                    if value_lower.startswith("your") or value_lower.startswith("change_me"):
                         self._add_issue(
                             ValidationIssue(
                                 "error",
@@ -391,16 +392,18 @@ class EnvironmentValidator:
             service_env = self.env_vars.get(service_name, {})
             if "GOOGLE_API_KEY" in service_env:
                 api_key = service_env["GOOGLE_API_KEY"]
+                api_key_lower = api_key.lower()
                 if api_key.startswith("AIza") and len(api_key) > 30:
                     self._add_issue(
                         ValidationIssue("success", "Format", f"{service_name}: GOOGLE_API_KEY format looks valid")
                     )
-                elif not api_key.startswith("your"):
+                elif not (api_key_lower.startswith("your") or api_key_lower.startswith("change_me")):
+                    # Only warn if it's not a placeholder AND not a valid Google key
                     self._add_issue(
                         ValidationIssue(
                             "warning",
                             "Format",
-                            f"{service_name}: GOOGLE_API_KEY format may be invalid"
+                            f"{service_name}: GOOGLE_API_KEY format may be invalid (should start with AIza)"
                         )
                     )
 
@@ -911,7 +914,8 @@ class EnvironmentValidator:
             service_env = self.env_vars.get(service_name, {})
             if "GOOGLE_API_KEY" in service_env:
                 api_key = service_env["GOOGLE_API_KEY"]
-                if api_key and not api_key.startswith("your"):
+                api_key_lower = api_key.lower()
+                if api_key and not (api_key_lower.startswith("your") or api_key_lower.startswith("change_me")):
                     services_with_key.append(service_name)
                 else:
                     services_without_key.append(service_name)
@@ -1083,16 +1087,47 @@ class EnvironmentValidator:
 
     def _print_results(self):
         """Print detailed validation results."""
-        # Group issues by category
-        by_category = defaultdict(list)
-        for issue in self.issues:
-            by_category[issue.category].append(issue)
+        # Separate issues by severity
+        errors = [i for i in self.issues if i.level == "error"]
+        warnings = [i for i in self.issues if i.level == "warning"]
+        successes = [i for i in self.issues if i.level == "success"]
+        infos = [i for i in self.issues if i.level == "info"]
 
-        # Print each category
-        for category in sorted(by_category.keys()):
-            issues = by_category[category]
-            print(f"{Colors.BOLD}{Colors.CYAN}[{category}]{Colors.RESET}")
-            for issue in issues:
+        # Print errors section (if any)
+        if errors:
+            print(f"\n{Colors.BOLD}{Colors.RED}⚠️  CRITICAL ERRORS ({len(errors)}) - Action Required{Colors.RESET}")
+            print(f"{Colors.BOLD}{Colors.RED}{'=' * 70}{Colors.RESET}")
+            for issue in errors:
+                self._print_issue(issue)
+            print()
+
+        # Print warnings section (if any)
+        if warnings:
+            print(f"\n{Colors.BOLD}{Colors.YELLOW}⚠  WARNINGS ({len(warnings)}) - Recommended Actions{Colors.RESET}")
+            print(f"{Colors.BOLD}{Colors.YELLOW}{'=' * 70}{Colors.RESET}")
+            for issue in warnings:
+                self._print_issue(issue)
+            print()
+
+        # Print success section
+        if successes:
+            print(f"\n{Colors.BOLD}{Colors.GREEN}✓ PASSED ({len(successes)}){Colors.RESET}")
+            print(f"{Colors.BOLD}{Colors.GREEN}{'=' * 70}{Colors.RESET}")
+            # Collapse successes to reduce noise
+            by_category = defaultdict(list)
+            for issue in successes:
+                by_category[issue.category].append(issue)
+
+            for category in sorted(by_category.keys()):
+                issues = by_category[category]
+                print(f"  {Colors.BOLD}{Colors.CYAN}[{category}]{Colors.RESET} - {len(issues)} checks passed")
+            print()
+
+        # Print info section
+        if infos:
+            print(f"\n{Colors.BOLD}{Colors.CYAN}ℹ  INFORMATION ({len(infos)}){Colors.RESET}")
+            print(f"{Colors.BOLD}{Colors.CYAN}{'=' * 70}{Colors.RESET}")
+            for issue in infos:
                 self._print_issue(issue)
             print()
 
@@ -1110,29 +1145,95 @@ class EnvironmentValidator:
         else:
             icon = "ℹ"
 
-        print(f"  {icon} {issue.message}")
+        # Build detailed message with file location
+        message = issue.message
+        if issue.file:
+            message = f"{Colors.BOLD}{issue.file}{Colors.RESET}: {message}"
+        elif issue.variable:
+            message = f"{Colors.BOLD}{issue.variable}{Colors.RESET}: {message}"
+
+        print(f"  {icon} {message}")
 
         if issue.suggestion:
-            print(f"    {Colors.CYAN}→ {issue.suggestion}{Colors.RESET}")
+            print(f"     {Colors.CYAN}→ {issue.suggestion}{Colors.RESET}")
 
     def _print_summary(self):
-        """Print validation summary."""
+        """Print validation summary and action plan."""
         errors = sum(1 for i in self.issues if i.level == "error")
         warnings = sum(1 for i in self.issues if i.level == "warning")
         success = sum(1 for i in self.issues if i.level == "success")
 
+        # Print numeric summary
         print(f"\n{Colors.BOLD}{'=' * 70}{Colors.RESET}")
-        print(f"{Colors.BOLD}Summary:{Colors.RESET}")
+        print(f"{Colors.BOLD}SUMMARY:{Colors.RESET}")
         print(f"  {Colors.GREEN}✓ {success} passed{Colors.RESET}")
         if warnings > 0:
             print(f"  {Colors.YELLOW}⚠ {warnings} warnings{Colors.RESET}")
         if errors > 0:
             print(f"  {Colors.RED}✗ {errors} errors{Colors.RESET}")
-        print(f"{Colors.BOLD}{'=' * 70}{Colors.RESET}\n")
+        print(f"{Colors.BOLD}{'=' * 70}{Colors.RESET}")
+
+        # Print action plan if there are issues
+        if errors > 0 or warnings > 0:
+            self._print_action_plan()
 
         # Print variable mapping table
         if self.env_vars:
             self._print_variable_mapping()
+
+    def _print_action_plan(self):
+        """Print action plan grouped by file."""
+        print(f"\n{Colors.BOLD}{Colors.CYAN}ACTION PLAN{Colors.RESET}")
+        print(f"{Colors.BOLD}{'-' * 70}{Colors.RESET}")
+
+        # Group issues by file (and category for those without files)
+        actions_by_file = defaultdict(list)
+
+        # First collect all file-based issues
+        for issue in self.issues:
+            if issue.level in ["error", "warning"]:
+                if issue.file:
+                    actions_by_file[issue.file].append(issue)
+                elif issue.variable and issue.message:
+                    # Try to infer file from variable context
+                    if "email" in issue.message.lower():
+                        actions_by_file["email_service/.env"].append(issue)
+                    elif "mcp" in issue.message.lower() and "client_mcp" in issue.message.lower():
+                        actions_by_file["client_mcp/.env"].append(issue)
+                    elif "mcp_server" in issue.message.lower():
+                        actions_by_file["mcp_server/.env"].append(issue)
+                    elif "agent" in issue.message.lower():
+                        actions_by_file["agent/.env"].append(issue)
+                    elif "docker" in issue.message.lower() or "POSTGRES" in issue.variable:
+                        actions_by_file["DockerConfig/.env"].append(issue)
+                    elif "sql" in issue.message.lower() or "SQL" in issue.message:
+                        actions_by_file["SQL/.env"].append(issue)
+                    else:
+                        actions_by_file["(General Issues)"].append(issue)
+                else:
+                    actions_by_file["(General Issues)"].append(issue)
+
+        # Print each file with its required actions
+        if actions_by_file:
+            for file_path in sorted(actions_by_file.keys()):
+                issues = actions_by_file[file_path]
+                error_count = sum(1 for i in issues if i.level == "error")
+                warning_count = sum(1 for i in issues if i.level == "warning")
+
+                print(f"\n  {Colors.BOLD}📝 {file_path}{Colors.RESET}")
+                if error_count > 0:
+                    print(f"     {Colors.RED}Errors: {error_count}{Colors.RESET}")
+                if warning_count > 0:
+                    print(f"     {Colors.YELLOW}Warnings: {warning_count}{Colors.RESET}")
+
+                for issue in issues:
+                    icon = f"{Colors.RED}✗" if issue.level == "error" else f"{Colors.YELLOW}⚠"
+                    var_info = f" ({issue.variable})" if issue.variable else ""
+                    print(f"       {icon}{Colors.RESET} {issue.message}{var_info}")
+                    if issue.suggestion:
+                        print(f"         {Colors.CYAN}→ {issue.suggestion}{Colors.RESET}")
+
+        print(f"\n{Colors.BOLD}{'-' * 70}{Colors.RESET}\n")
 
     def _print_variable_mapping(self):
         """Print mapping of variables to files and services."""

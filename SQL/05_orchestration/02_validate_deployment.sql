@@ -128,14 +128,14 @@ SELECT
     COUNT(DISTINCT category) as categories,
     COUNT(DISTINCT brand) as brands,
     COUNT(DISTINCT sku) as unique_skus
-FROM :'SCHEMA_NAME'.products;
+FROM :"SCHEMA_NAME".products;
 
 \echo ''
 \echo '✅ 4.2 - Products by Category'
 SELECT
     category,
     COUNT(*) as count
-FROM :'SCHEMA_NAME'.products
+FROM :"SCHEMA_NAME".products
 GROUP BY category
 ORDER BY count DESC, category;
 
@@ -146,14 +146,14 @@ SELECT
     MAX(price) as max_price,
     ROUND(AVG(price)::NUMERIC, 2) as avg_price,
     COUNT(DISTINCT price) as unique_prices
-FROM :'SCHEMA_NAME'.products;
+FROM :"SCHEMA_NAME".products;
 
 \echo ''
 \echo '✅ 4.4 - SKU Format Validation'
 SELECT
     SUBSTRING(sku, 1, 3) as prefix,
     COUNT(*) as count
-FROM :'SCHEMA_NAME'.products
+FROM :"SCHEMA_NAME".products
 GROUP BY SUBSTRING(sku, 1, 3)
 ORDER BY count DESC;
 
@@ -167,7 +167,7 @@ SELECT
     COUNT(*) FILTER (WHERE brand IS NOT NULL) as with_brand,
     COUNT(*) FILTER (WHERE price > 0) as with_valid_price,
     COUNT(*) FILTER (WHERE tags IS NOT NULL AND array_length(tags, 1) > 0) as with_tags
-FROM :'SCHEMA_NAME'.products;
+FROM :"SCHEMA_NAME".products;
 
 \echo ''
 
@@ -250,15 +250,15 @@ SELECT
 \echo '✅ DML Data:'
 SELECT
     '  Products: ' || COUNT(*)::text || ' (expected 90)' as metric
-FROM :'SCHEMA_NAME'.products
+FROM :"SCHEMA_NAME".products
 UNION ALL
 SELECT
     '  Categories: ' || COUNT(DISTINCT category)::text || ' (expected 23)'
-FROM :'SCHEMA_NAME'.products
+FROM :"SCHEMA_NAME".products
 UNION ALL
 SELECT
     '  Brands: ' || COUNT(DISTINCT brand)::text || ' (expected 57+)'
-FROM :'SCHEMA_NAME'.products;
+FROM :"SCHEMA_NAME".products;
 
 \echo ''
 \echo '════════════════════════════════════════════════════════════════════════════════'
