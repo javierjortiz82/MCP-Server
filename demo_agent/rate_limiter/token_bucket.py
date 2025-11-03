@@ -3,9 +3,14 @@
 Implements token-bucket algorithm using PostgreSQL for persistence.
 Used to track and limit tokens per user per day.
 
+FIX 3.2: Async database operations
+- All db calls converted to async/await
+- Non-blocking database I/O
+- Part of PHASE 3 async migration
+
 Author: Lab01-MCP Team
 Created: 2025-10-31
-Version: 1.0.0
+Version: 1.1.0 (Async)
 """
 
 from datetime import datetime, timedelta, timezone
@@ -79,7 +84,7 @@ class TokenBucket:
                 FROM :SCHEMA_NAME.demo_usage
                 WHERE user_key = %s
             """
-            result = self.db.execute_one(query, (user_key,))
+            result = await self.db.execute_one(query, (user_key,))
 
             # Create new record if user not seen before
             if not result:
@@ -88,7 +93,7 @@ class TokenBucket:
                     (user_key, tokens_consumed, requests_count, is_blocked)
                     VALUES (%s, %s, %s, %s)
                 """
-                self.db.execute(insert_query, (user_key, 0, 0, False))
+                await self.db.execute(insert_query, (user_key, 0, 0, False))
                 logger.debug(f"Created new quota record for {user_key}")
                 return True, self.max_tokens - tokens_needed
 
@@ -106,7 +111,7 @@ class TokenBucket:
                         last_reset = %s
                     WHERE user_key = %s
                 """
-                self.db.execute(reset_query, (now, user_key))
+                await self.db.execute(reset_query, (now, user_key))
                 logger.debug(f"Reset daily quota for {user_key}")
                 return True, self.max_tokens - tokens_needed
 
@@ -125,7 +130,7 @@ class TokenBucket:
                         SET is_blocked = false, blocked_until = NULL
                         WHERE user_key = %s
                     """
-                    self.db.execute(unblock_query, (user_key,))
+                    await self.db.execute(unblock_query, (user_key,))
                     logger.info(f"Auto-unblocked user {user_key}")
 
             # Calculate remaining tokens after this request
@@ -177,7 +182,7 @@ class TokenBucket:
                 RETURNING tokens_consumed, is_blocked
             """
             now = datetime.now(timezone.utc)
-            result = self.db.execute_one(query, (tokens_used, now, user_key))
+            result = await self.db.execute_one(query, (tokens_used, now, user_key))
 
             if not result:
                 logger.error(f"User {user_key} not found after deduction")
@@ -195,7 +200,7 @@ class TokenBucket:
                         blocked_until = %s
                     WHERE user_key = %s
                 """
-                self.db.execute(block_query, (blocked_until, user_key))
+                await self.db.execute(block_query, (blocked_until, user_key))
                 logger.warning(
                     f"User {user_key} quota exhausted. "
                     f"Blocked until {blocked_until}"
@@ -238,7 +243,7 @@ class TokenBucket:
                 FROM :SCHEMA_NAME.demo_usage
                 WHERE user_key = %s
             """
-            result = self.db.execute_one(query, (user_key,))
+            result = await self.db.execute_one(query, (user_key,))
 
             # Default status if user not found
             if not result:
@@ -348,7 +353,7 @@ class TokenBucket:
                 RETURNING tokens_consumed, is_blocked
             """
             now = datetime.now(timezone.utc)
-            result = self.db.execute_one(query, (tokens_to_refund, now, user_key))
+            result = await self.db.execute_one(query, (tokens_to_refund, now, user_key))
 
             if not result:
                 logger.error(f"User {user_key} not found after refund")
@@ -370,7 +375,7 @@ class TokenBucket:
                         updated_at = %s
                     WHERE user_key = %s
                 """
-                self.db.execute(unblock_query, (now, user_key))
+                await self.db.execute(unblock_query, (now, user_key))
 
             logger.warning(
                 f"Tokens refunded: {user_key} -> "
@@ -409,7 +414,7 @@ class TokenBucket:
                 WHERE user_key = %s
             """
             now = datetime.now(timezone.utc)
-            self.db.execute(query, (now, user_key))
+            await self.db.execute(query, (now, user_key))
             logger.warning(f"Admin unblocked user: {user_key}")
             return True
 
