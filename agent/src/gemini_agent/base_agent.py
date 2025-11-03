@@ -46,6 +46,18 @@ from gemini_agent.utils.logger import setup_logging
 from google import genai
 from google.genai import types
 
+# Observability imports (OPCIÓN 7)
+try:
+    from email_service.observability.metrics import get_metrics_collector
+    from email_service.observability.structured_logger import get_structured_logger
+    from email_service.observability.context import (
+        create_request_context,
+        clear_request_context,
+    )
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
 
 class MetricsDict(TypedDict):
     """Type definition for agent metrics dictionary."""
@@ -173,13 +185,31 @@ class BaseAgent(ABC):
         # Setup logging with agent-specific name
         self.logger = setup_logging(self.agent_name)
 
+        # Initialize observability (OPCIÓN 7)
+        if OBSERVABILITY_AVAILABLE:
+            self.structured_logger = get_structured_logger(f"agent.{self.agent_name}")
+            self.metrics = get_metrics_collector()
+        else:
+            self.structured_logger = None
+            self.metrics = None
+
         self.logger.info(
             f"Initializing {self.agent_name} - "
             f"Model: {self.model_name}, "
             f"Tools: {len(self.mcp_tools)}, "
             f"Memory: {'✅ Enabled' if self._memory_enabled else '❌ Disabled'}, "
-            f"API Key: {'***REDACTED***' if self.api_key else 'None'}"
+            f"API Key: {'***REDACTED***' if self.api_key else 'None'}, "
+            f"Observability: {'✅ Enabled' if OBSERVABILITY_AVAILABLE else '❌ Disabled'}"
         )
+
+        if self.structured_logger:
+            self.structured_logger.info(
+                "Agent initialization started",
+                agent_type=self.agent_name,
+                model=self.model_name,
+                tools_count=len(self.mcp_tools),
+                memory_enabled=self._memory_enabled
+            )
 
     @property
     @abstractmethod
@@ -259,6 +289,9 @@ class BaseAgent(ABC):
         try:
             self.logger.debug(f"Initializing Gemini client for {self.agent_name}...")
 
+            if self.structured_logger:
+                self.structured_logger.debug("Initializing Gemini client", agent=self.agent_name)
+
             # Initialize Gemini client
             self.client = genai.Client(api_key=self.api_key)
 
@@ -270,8 +303,17 @@ class BaseAgent(ABC):
                 f"({len(self.mcp_tools)} tools available)"
             )
 
+            if self.structured_logger:
+                self.structured_logger.info(
+                    "Agent initialized successfully",
+                    agent=self.agent_name,
+                    tools_available=len(self.mcp_tools)
+                )
+
         except Exception as e:
             self.logger.exception(f"Failed to initialize {self.agent_name}: {e}")
+            if self.structured_logger:
+                self.structured_logger.exception(f"Agent initialization failed", agent=self.agent_name)
             raise RuntimeError(f"{self.agent_name} initialization failed: {e}") from e
 
     @classmethod
@@ -712,8 +754,19 @@ class BaseAgent(ABC):
 
         start_time = time.time()
 
+        # Create request context for this query (OPCIÓN 7)
+        if self.structured_logger:
+            request_ctx = create_request_context(
+                email_id=None,  # Not applicable for agents
+                recipient=None,
+                operation=f"agent_generate_response.{self.agent_name}",
+                custom_fields={"query_preview": query[:50], "include_history": include_history}
+            )
+
         # Track request
         self._metrics["total_requests"] += 1
+        if self.metrics:
+            self.metrics.increment_counter(f"{self.agent_name}_queries", 1)
 
         # Check if initialized
         if not self.client:
@@ -722,6 +775,12 @@ class BaseAgent(ABC):
             self._metrics["errors"][error_type] = self._metrics["errors"].get(error_type, 0) + 1
             elapsed_ms = (time.time() - start_time) * 1000
             self._metrics["total_response_time_ms"] += elapsed_ms
+
+            if self.metrics:
+                self.metrics.increment_counter(f"{self.agent_name}_not_initialized", 1)
+            if self.structured_logger:
+                self.structured_logger.error("Agent not initialized", agent=self.agent_name)
+                clear_request_context()
 
             self.logger.error(f"{self.agent_name} not initialized - call initialize() first")
             raise RuntimeError(f"{self.agent_name} not initialized")
@@ -782,14 +841,27 @@ class BaseAgent(ABC):
 
             dynamic_config = types.GenerateContentConfig(**config_dict)  # type: ignore[arg-type]
 
-            # Generate response with system_instruction in config
-            response = await self.client.aio.models.generate_content(
-                model=self.model_name,
-                contents=contents,  # type: ignore[arg-type]
-                config=dynamic_config,
-            )
+            # Generate response with system_instruction in config (OPCIÓN 7: Track latency)
+            if self.metrics:
+                async with self.metrics.record_latency_async(
+                    f"{self.agent_name}_generate_latency",
+                    tags={"model": self.model_name, "has_tools": len(self.mcp_tools) > 0}
+                ):
+                    response = await self.client.aio.models.generate_content(
+                        model=self.model_name,
+                        contents=contents,  # type: ignore[arg-type]
+                        config=dynamic_config,
+                    )
+            else:
+                response = await self.client.aio.models.generate_content(
+                    model=self.model_name,
+                    contents=contents,  # type: ignore[arg-type]
+                    config=dynamic_config,
+                )
 
             self.logger.debug("Response generated successfully")
+            if self.structured_logger:
+                self.structured_logger.debug("Response generated", agent=self.agent_name)
 
             # Extract response text with safe indexing
             if not response.candidates or not response.candidates[0].content:
@@ -831,9 +903,24 @@ class BaseAgent(ABC):
             self._metrics["total_response_time_ms"] += elapsed_ms
             self._metrics["history_sizes"].append(len(self.conversation_history))
 
+            if self.metrics:
+                self.metrics.increment_counter(f"{self.agent_name}_successful_responses", 1)
+                self.metrics.increment_counter(f"{self.agent_name}_response_tokens", len(response_text))
+                self.metrics.set_gauge(f"{self.agent_name}_history_size", len(self.conversation_history))
+
             self.logger.info(
                 f"✅ Response generated ({len(response_text)} chars, {elapsed_ms:.0f}ms)"
             )
+
+            if self.structured_logger:
+                self.structured_logger.info(
+                    "Response generated successfully",
+                    agent=self.agent_name,
+                    response_length=len(response_text),
+                    elapsed_ms=elapsed_ms
+                )
+                clear_request_context()
+
             return response_text
 
         except Exception as e:
@@ -846,7 +933,21 @@ class BaseAgent(ABC):
             error_type = type(e).__name__
             self._metrics["errors"][error_type] = self._metrics["errors"].get(error_type, 0) + 1
 
+            if self.metrics:
+                self.metrics.increment_counter(f"{self.agent_name}_failed_responses", 1)
+                self.metrics.increment_counter(f"{self.agent_name}_error_{error_type}", 1)
+
             self.logger.exception(f"Error generating response: {e}")
+
+            if self.structured_logger:
+                self.structured_logger.exception(
+                    "Response generation failed",
+                    agent=self.agent_name,
+                    error_type=error_type,
+                    elapsed_ms=elapsed_ms
+                )
+                clear_request_context()
+
             raise
 
     def _build_contents(

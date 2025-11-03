@@ -70,6 +70,18 @@ from google import genai
 from google.genai import types
 from multi_agent.prompt_manager import PromptManager
 
+# Observability imports (OPCIÓN 7)
+try:
+    from email_service.observability.metrics import get_metrics_collector
+    from email_service.observability.structured_logger import get_structured_logger
+    from email_service.observability.context import (
+        create_request_context,
+        clear_request_context,
+    )
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
 # Try to import MCP server settings for memory configuration
 try:
     from mcp_server.config.settings import settings as mcp_settings
@@ -246,6 +258,14 @@ NO agregues explicaciones ni puntuación adicional."""
             memory_manager: Optional MemoryManager for context-aware classification.
             session_id: Optional session ID for memory integration.
         """
+        # Initialize observability (OPCIÓN 7)
+        if OBSERVABILITY_AVAILABLE:
+            self.structured_logger = get_structured_logger("agent_router")
+            self.metrics = get_metrics_collector()
+        else:
+            self.structured_logger = None
+            self.metrics = None
+
         self.api_key = api_key or settings.GOOGLE_API_KEY
         self.model_name = model_name or settings.MODEL
         self.client: genai.Client | None = None
@@ -259,8 +279,16 @@ NO agregues explicaciones ni puntuación adicional."""
         logger.info(
             f"Initializing AgentRouter - Model: {self.model_name}, "
             f"API Key: {'***REDACTED***' if self.api_key else 'None'}, "
-            f"Memory: {'enabled' if self._memory_enabled else 'disabled'}"
+            f"Memory: {'enabled' if self._memory_enabled else 'disabled'}, "
+            f"Observability: {'✅ Enabled' if OBSERVABILITY_AVAILABLE else '❌ Disabled'}"
         )
+
+        if self.structured_logger:
+            self.structured_logger.info(
+                "Router initialization started",
+                model=self.model_name,
+                memory_enabled=self._memory_enabled
+            )
 
     async def initialize(self) -> None:
         """Initialize the Gemini client for intent classification.
@@ -270,6 +298,10 @@ NO agregues explicaciones ni puntuación adicional."""
         """
         try:
             logger.debug("Initializing Gemini client for AgentRouter...")
+
+            if self.structured_logger:
+                self.structured_logger.debug("Initializing Gemini client for AgentRouter")
+
             self.client = genai.Client(api_key=self.api_key)
 
             # Build generation config with temperature=0 for deterministic classification
@@ -283,8 +315,13 @@ NO agregues explicaciones ni puntuación adicional."""
 
             logger.info("✅ AgentRouter initialized successfully (temperature=0)")
 
+            if self.structured_logger:
+                self.structured_logger.info("Router initialized successfully")
+
         except Exception as e:
             logger.exception(f"Failed to initialize AgentRouter: {e}")
+            if self.structured_logger:
+                self.structured_logger.exception("Router initialization failed")
             raise RuntimeError(f"AgentRouter initialization failed: {e}") from e
 
     @staticmethod
@@ -503,7 +540,23 @@ NO agregues explicaciones ni puntuación adicional."""
         query = query.strip()
 
         try:
+            import time
+            start_time = time.time()
+
             logger.info(f"Classifying query: '{query[:100]}...'")
+
+            # Create request context for this classification (OPCIÓN 7)
+            if self.structured_logger:
+                create_request_context(
+                    email_id=None,
+                    recipient=None,
+                    operation="router_classify_intent",
+                    custom_fields={"query_preview": query[:50]}
+                )
+                self.structured_logger.info("Starting intent classification", query_preview=query[:50])
+
+            if self.metrics:
+                self.metrics.increment_counter("router_classifications_attempted", 1)
 
             # Use session language if provided, otherwise auto-detect from query
             if session_language:
@@ -560,12 +613,23 @@ NO agregues explicaciones ni puntuación adicional."""
 
             logger.debug("Generating classification with temperature=0 (deterministic)")
 
-            # Generate classification
-            response = await self.client.aio.models.generate_content(
-                model=self.model_name,
-                contents=contents,
-                config=self.generation_config,
-            )
+            # Generate classification (OPCIÓN 7: Track latency)
+            if self.metrics:
+                async with self.metrics.record_latency_async(
+                    "router_classify_latency",
+                    tags={"language": detected_language}
+                ):
+                    response = await self.client.aio.models.generate_content(
+                        model=self.model_name,
+                        contents=contents,
+                        config=self.generation_config,
+                    )
+            else:
+                response = await self.client.aio.models.generate_content(
+                    model=self.model_name,
+                    contents=contents,
+                    config=self.generation_config,
+                )
 
             # Extract classification result with defensive checks
             if not response.candidates or not response.candidates[0].content:
@@ -620,6 +684,12 @@ NO agregues explicaciones ni puntuación adicional."""
             logger.info(f"✅ Query classified as: {intent.value}")
             logger.debug(f"Query: '{query[:50]}...' → Intent: {intent.value}")
 
+            # Track metrics (OPCIÓN 7)
+            elapsed_ms = (time.time() - start_time) * 1000
+            if self.metrics:
+                self.metrics.increment_counter("router_classifications_successful", 1)
+                self.metrics.increment_counter(f"router_intent_{intent.value}", 1)
+
             # Persist intent to database if memory is enabled
             if persist_intent and self._memory_enabled:
                 try:
@@ -631,6 +701,15 @@ NO agregues explicaciones ni puntuación adicional."""
                 except Exception as e:
                     logger.warning(f"Failed to persist intent: {e}")
 
+            if self.structured_logger:
+                self.structured_logger.info(
+                    "Intent classification successful",
+                    intent=intent.value,
+                    elapsed_ms=elapsed_ms,
+                    language=detected_language
+                )
+                clear_request_context()
+
             return (intent, detected_language)
 
         except ValueError:
@@ -638,7 +717,23 @@ NO agregues explicaciones ni puntuación adicional."""
             raise
 
         except Exception as e:
+            # Track error metrics (OPCIÓN 7)
+            elapsed_ms = (time.time() - start_time) * 1000
+            error_type = type(e).__name__
+
+            if self.metrics:
+                self.metrics.increment_counter("router_classifications_failed", 1)
+                self.metrics.increment_counter(f"router_error_{error_type}", 1)
+
             logger.exception(f"Error classifying query: {e}")
+
+            if self.structured_logger:
+                self.structured_logger.exception(
+                    "Intent classification failed",
+                    error_type=error_type,
+                    elapsed_ms=elapsed_ms
+                )
+                clear_request_context()
 
             # IMPROVED STICKY SESSION: Only use for short/ambiguous queries (likely follow-ups)
             # For longer/complex queries, raise error and require user to repeat/clarify
