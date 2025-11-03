@@ -24,6 +24,8 @@ from demo_agent.models.user import (
     UserRegisterRequest,
     UserResponse,
 )
+from demo_agent.observability.metrics import get_metrics_collector
+from demo_agent.observability.structured_logger import get_structured_logger
 
 
 class UserService:
@@ -43,7 +45,9 @@ class UserService:
     def __init__(self):
         """Initialize UserService with database connection."""
         self.db = get_db()
-        logger.info("UserService initialized")
+        self.logger = get_structured_logger(__name__)
+        self.metrics = get_metrics_collector()
+        self.logger.info("UserService initialized")
 
     async def register_email_user(
         self,
@@ -71,7 +75,11 @@ class UserService:
             Exception: Database errors are logged but not raised.
         """
         try:
-            logger.info(f"Registering email user: {data.email}")
+            self.logger.info(
+                "Registering email user",
+                email=data.email,
+                source=data.registration_source
+            )
 
             # Step 1: Check if email already exists
             existing_user = await self.get_user_by_email(data.email)
@@ -81,15 +89,21 @@ class UserService:
                         "This email was previously deleted. "
                         "Contact support to reactivate."
                     )
+                    self.metrics.increment_counter("registration_email_deleted_account")
                 elif not existing_user.is_email_verified:
                     error_msg = (
                         "This email is already registered but not verified. "
                         "Please check your email for verification code."
                     )
+                    self.metrics.increment_counter("registration_email_unverified")
                 else:
                     error_msg = "This email is already registered."
+                    self.metrics.increment_counter("registration_email_exists")
 
-                logger.warning(f"Email already exists: {data.email}")
+                self.logger.warning(
+                    "Email already exists",
+                    email=data.email
+                )
                 return None, error_msg
 
             # Step 2: Hash password with BCrypt (salt rounds: 12)
@@ -131,17 +145,29 @@ class UserService:
             )
 
             if not result:
-                logger.error(f"Failed to insert user: {data.email}")
+                self.logger.error(
+                    "Failed to insert user",
+                    email=data.email
+                )
+                self.metrics.increment_counter("registration_email_insert_errors")
                 return None, "Failed to create user account. Please try again."
 
             user = UserDB(**result)
-            logger.info(
-                f"User created successfully: {user.email} (ID: {user.id}, pending verification)"
+            self.logger.info(
+                "Email user created successfully",
+                email=user.email,
+                user_id=user.id,
+                status="pending_verification"
             )
+            self.metrics.increment_counter("registrations_email_successful")
             return user, None
 
         except Exception as e:
-            logger.exception(f"Error in register_email_user: {e}")
+            self.logger.exception(
+                "Error in register_email_user",
+                email=data.email
+            )
+            self.metrics.increment_counter("registration_email_errors")
             return None, "An error occurred during registration. Please try again."
 
     async def register_oauth_user(
@@ -171,8 +197,11 @@ class UserService:
             Account is activated immediately (is_active=true).
         """
         try:
-            logger.info(
-                f"Registering OAuth user: {data.email} (provider: {data.auth_provider})"
+            self.logger.info(
+                "Registering OAuth user",
+                email=data.email,
+                provider=data.auth_provider.value,
+                source=data.registration_source
             )
 
             # Step 1: Check if OAuth user already exists
@@ -180,9 +209,12 @@ class UserService:
                 data.auth_provider, data.oauth_provider_id
             )
             if existing_oauth:
-                logger.warning(
-                    f"OAuth user already exists: {data.auth_provider}/{data.oauth_provider_id}"
+                self.logger.warning(
+                    "OAuth user already exists",
+                    provider=data.auth_provider.value,
+                    provider_id=data.oauth_provider_id
                 )
+                self.metrics.increment_counter("registration_oauth_duplicate")
                 return None, "This account is already registered."
 
             # Step 2: Check if email exists with different provider
@@ -193,9 +225,13 @@ class UserService:
                         f"This email is already registered with {existing_email.auth_provider}. "
                         f"Please use {existing_email.auth_provider} to sign in."
                     )
-                    logger.warning(
-                        f"Email exists with different provider: {data.email}"
+                    self.logger.warning(
+                        "Email exists with different provider",
+                        email=data.email,
+                        existing_provider=existing_email.auth_provider,
+                        requested_provider=data.auth_provider.value
                     )
+                    self.metrics.increment_counter("registration_oauth_email_mismatch")
                     return None, error_msg
 
             # Step 3: Insert OAuth user (auto-verified and active)
@@ -234,17 +270,32 @@ class UserService:
             )
 
             if not result:
-                logger.error(f"Failed to insert OAuth user: {data.email}")
+                self.logger.error(
+                    "Failed to insert OAuth user",
+                    email=data.email,
+                    provider=data.auth_provider.value
+                )
+                self.metrics.increment_counter("registration_oauth_insert_errors")
                 return None, "Failed to create user account. Please try again."
 
             user = UserDB(**result)
-            logger.info(
-                f"OAuth user created: {user.email} (ID: {user.id}, provider: {data.auth_provider})"
+            self.logger.info(
+                "OAuth user created successfully",
+                email=user.email,
+                user_id=user.id,
+                provider=data.auth_provider.value,
+                status="active_verified"
             )
+            self.metrics.increment_counter("registrations_oauth_successful")
             return user, None
 
         except Exception as e:
-            logger.exception(f"Error in register_oauth_user: {e}")
+            self.logger.exception(
+                "Error in register_oauth_user",
+                email=data.email,
+                provider=data.auth_provider.value if hasattr(data, 'auth_provider') else None
+            )
+            self.metrics.increment_counter("registration_oauth_errors")
             return None, "An error occurred during registration. Please try again."
 
     async def get_user_by_email(self, email: str) -> UserDB | None:
@@ -273,11 +324,15 @@ class UserService:
             result = await self.db.execute_one(query, (email,))
 
             if result:
+                self.metrics.increment_counter("user_lookup_email_found")
                 return UserDB(**result)
+
+            self.metrics.increment_counter("user_lookup_email_not_found")
             return None
 
         except Exception as e:
-            logger.exception(f"Error in get_user_by_email: {e}")
+            self.logger.exception("Error in get_user_by_email", email=email)
+            self.metrics.increment_counter("user_lookup_email_errors")
             return None
 
     async def get_user_by_oauth(
@@ -312,11 +367,18 @@ class UserService:
             )
 
             if result:
+                self.metrics.increment_counter("user_lookup_oauth_found")
                 return UserDB(**result)
+
+            self.metrics.increment_counter("user_lookup_oauth_not_found")
             return None
 
         except Exception as e:
-            logger.exception(f"Error in get_user_by_oauth: {e}")
+            self.logger.exception(
+                "Error in get_user_by_oauth",
+                provider=auth_provider.value
+            )
+            self.metrics.increment_counter("user_lookup_oauth_errors")
             return None
 
     async def activate_user(self, user_id: int) -> bool:
@@ -349,14 +411,24 @@ class UserService:
             result = await self.db.execute_one(query, (now, now, user_id))
 
             if result:
-                logger.info(f"User activated successfully: ID {user_id}")
+                self.logger.info(
+                    "User activated successfully",
+                    user_id=user_id
+                )
+                self.metrics.increment_counter("user_activations_successful")
                 return True
 
-            logger.warning(f"Failed to activate user: ID {user_id} (already active?)")
+            self.logger.warning(
+                "Failed to activate user",
+                user_id=user_id,
+                reason="already_active"
+            )
+            self.metrics.increment_counter("user_activations_already_active")
             return False
 
         except Exception as e:
-            logger.exception(f"Error in activate_user: {e}")
+            self.logger.exception("Error in activate_user", user_id=user_id)
+            self.metrics.increment_counter("user_activation_errors")
             return False
 
     async def verify_password(self, user: UserDB, password: str) -> bool:
@@ -374,17 +446,32 @@ class UserService:
         """
         try:
             if not user.password_hash:
-                logger.warning(
-                    f"User {user.email} has no password (OAuth user?)"
+                self.logger.warning(
+                    "User has no password (OAuth user?)",
+                    user_id=user.id,
+                    email=user.email
                 )
+                self.metrics.increment_counter("password_verify_no_hash")
                 return False
 
-            return bcrypt.checkpw(
+            is_valid = bcrypt.checkpw(
                 password.encode("utf-8"), user.password_hash.encode("utf-8")
             )
 
+            if is_valid:
+                self.metrics.increment_counter("password_verify_success")
+            else:
+                self.logger.warning(
+                    "Password verification failed",
+                    user_id=user.id
+                )
+                self.metrics.increment_counter("password_verify_failed")
+
+            return is_valid
+
         except Exception as e:
-            logger.exception(f"Error in verify_password: {e}")
+            self.logger.exception("Error in verify_password", user_id=user.id)
+            self.metrics.increment_counter("password_verify_errors")
             return False
 
     async def update_last_login(
@@ -410,9 +497,15 @@ class UserService:
 
             now = datetime.now(timezone.utc)
             await self.db.execute(query, (now, ip_address, now, user_id))
-            logger.debug(f"Updated last login for user ID {user_id}")
+            self.logger.debug(
+                "Updated last login",
+                user_id=user_id,
+                ip_address=ip_address
+            )
+            self.metrics.increment_counter("user_logins_recorded")
             return True
 
         except Exception as e:
-            logger.exception(f"Error in update_last_login: {e}")
+            self.logger.exception("Error in update_last_login", user_id=user_id)
+            self.metrics.increment_counter("user_login_update_errors")
             return False
