@@ -51,6 +51,18 @@ from client_mcp.config.settings import settings  # noqa: E402
 from client_mcp.core.mcp_connector import MCPConnector  # noqa: E402
 from client_mcp.utils.logger import get_logger  # noqa: E402
 
+# Observability imports (OPCIÓN 8)
+try:
+    from email_service.observability.metrics import get_metrics_collector
+    from email_service.observability.structured_logger import get_structured_logger
+    from email_service.observability.context import (
+        create_request_context,
+        clear_request_context,
+    )
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
 # Import language context for setting language in MCP handlers
 try:
     mcp_server_lang_path = Path(__file__).parent.parent.parent / "mcp_server"
@@ -119,6 +131,14 @@ class AgentOrchestrator:
         Reads feature flags to determine operational mode:
         - ENABLE_AGENT_ROUTING: Multi-agent routing vs single-agent mode
         """
+        # Initialize observability (OPCIÓN 8)
+        if OBSERVABILITY_AVAILABLE:
+            self.structured_logger = get_structured_logger("agent_orchestrator")
+            self.metrics = get_metrics_collector()
+        else:
+            self.structured_logger = None
+            self.metrics = None
+
         self.routing_enabled = settings.ENABLE_AGENT_ROUTING
         self.router_temperature = settings.ROUTER_TEMPERATURE
 
@@ -155,8 +175,16 @@ class AgentOrchestrator:
 
         logger.info(
             f"AgentOrchestrator initialized - "
-            f"Routing: {'ENABLED' if self.routing_enabled else 'DISABLED (single-agent mode)'}"
+            f"Routing: {'ENABLED' if self.routing_enabled else 'DISABLED (single-agent mode)'}, "
+            f"Observability: {'✅ Enabled' if OBSERVABILITY_AVAILABLE else '❌ Disabled'}"
         )
+
+        if self.structured_logger:
+            self.structured_logger.info(
+                "Orchestrator initialization started",
+                routing_enabled=self.routing_enabled,
+                mode="multi_agent" if self.routing_enabled else "single_agent"
+            )
 
     async def initialize(self, customer_email: str | None = None) -> None:
         """Initialize orchestrator and agents based on feature flag.
