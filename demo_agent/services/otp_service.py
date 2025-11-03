@@ -28,6 +28,8 @@ from demo_agent.config.settings import config
 from demo_agent.db.connection import get_db
 from demo_agent.logger import logger
 from demo_agent.models.user import OTPDB, OTPPurpose
+from demo_agent.observability.metrics import get_metrics_collector
+from demo_agent.observability.structured_logger import get_structured_logger
 
 
 class OTPService:
@@ -54,6 +56,8 @@ class OTPService:
 
         self.db = get_db()
         self.otp_length = 6
+        self.logger = get_structured_logger(__name__)
+        self.metrics = get_metrics_collector()
 
         # Load from config (environment variables or .env file)
         # FIX: Changed from 24 hours to configurable minutes (NIST/OWASP compliant)
@@ -63,10 +67,11 @@ class OTPService:
         self.cooldown_seconds = config.OTP_RATE_LIMIT_COOLDOWN_SECONDS
         self.max_attempts = config.OTP_MAX_ATTEMPTS
 
-        logger.info(
-            f"OTPService initialized (expiration: {self.expiration_minutes}m, "
-            f"cooldown: {self.cooldown_seconds}s, "
-            f"max_attempts: {self.max_attempts})"
+        self.logger.info(
+            "OTPService initialized",
+            expiration_minutes=self.expiration_minutes,
+            cooldown_seconds=self.cooldown_seconds,
+            max_attempts=self.max_attempts
         )
 
     def generate_otp_code(self) -> str:
@@ -134,41 +139,55 @@ class OTPService:
             1 OTP per minute per email (prevents spam).
         """
         try:
-            # Call PostgreSQL function for rate limiting check
-            query = f"""
-                SELECT {config.SCHEMA_NAME}.can_request_otp(%s, %s, %s)
-            """
-            result = await self.db.execute_one(
-                query, (email, purpose.value, self.cooldown_seconds)
-            )
-
-            if not result:
-                return True, 0
-
-            can_request = result.get("can_request_otp", False)
-
-            if not can_request:
-                # Get last OTP creation time to calculate remaining cooldown
-                last_otp_query = f"""
-                    SELECT created_at
-                    FROM {config.SCHEMA_NAME}.demo_otp_codes
-                    WHERE email = %s
-                      AND purpose = %s
-                    ORDER BY created_at DESC
-                    LIMIT 1
+            async with self.metrics.record_latency_async(
+                "otp_service.can_request_otp",
+                tags={"email": email, "purpose": purpose.value}
+            ):
+                # Call PostgreSQL function for rate limiting check
+                query = f"""
+                    SELECT {config.SCHEMA_NAME}.can_request_otp(%s, %s, %s)
                 """
-                last_otp = await self.db.execute_one(last_otp_query, (email, purpose.value))
+                result = await self.db.execute_one(
+                    query, (email, purpose.value, self.cooldown_seconds)
+                )
 
-                if last_otp:
-                    last_created = last_otp["created_at"]
-                    elapsed = (datetime.now(timezone.utc) - last_created).total_seconds()
-                    remaining = max(0, self.cooldown_seconds - int(elapsed))
-                    return False, remaining
+                if not result:
+                    self.metrics.increment_counter("otp_rate_limit_checks_allowed")
+                    return True, 0
 
-            return can_request, 0
+                can_request = result.get("can_request_otp", False)
+
+                if not can_request:
+                    # Get last OTP creation time to calculate remaining cooldown
+                    last_otp_query = f"""
+                        SELECT created_at
+                        FROM {config.SCHEMA_NAME}.demo_otp_codes
+                        WHERE email = %s
+                          AND purpose = %s
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    """
+                    last_otp = await self.db.execute_one(last_otp_query, (email, purpose.value))
+
+                    if last_otp:
+                        last_created = last_otp["created_at"]
+                        elapsed = (datetime.now(timezone.utc) - last_created).total_seconds()
+                        remaining = max(0, self.cooldown_seconds - int(elapsed))
+                        self.logger.warning(
+                            "OTP rate limit exceeded",
+                            email=email,
+                            remaining_seconds=remaining
+                        )
+                        self.metrics.increment_counter("otp_rate_limit_exceeded")
+                        return False, remaining
+                else:
+                    self.metrics.increment_counter("otp_rate_limit_checks_allowed")
+
+                return can_request, 0
 
         except Exception as e:
-            logger.exception(f"Error in can_request_otp: {e}")
+            self.logger.exception("Error in can_request_otp", email=email)
+            self.metrics.increment_counter("otp_rate_limit_errors")
             # Fail open: allow request but log error
             return True, 0
 
@@ -208,7 +227,12 @@ class OTPService:
             Database stores SHA-256 hash only.
         """
         try:
-            logger.info(f"Creating OTP for {email} (purpose: {purpose.value})")
+            self.logger.info(
+                "Creating OTP",
+                email=email,
+                purpose=purpose.value,
+                user_id=user_id
+            )
 
             # Step 1: Check rate limiting
             can_request, cooldown_remaining = await self.can_request_otp(email, purpose)
@@ -216,9 +240,12 @@ class OTPService:
                 error_msg = (
                     f"Please wait {cooldown_remaining} seconds before requesting a new code."
                 )
-                logger.warning(
-                    f"OTP rate limit exceeded for {email} ({cooldown_remaining}s remaining)"
+                self.logger.warning(
+                    "OTP rate limit exceeded",
+                    email=email,
+                    cooldown_remaining=cooldown_remaining
                 )
+                self.metrics.increment_counter("otp_creation_rate_limited")
                 return None, None, error_msg
 
             # Step 2: Invalidate previous unused OTPs (mark as used)
@@ -269,21 +296,35 @@ class OTPService:
             )
 
             if not result:
-                logger.error(f"Failed to insert OTP for {email}")
+                self.logger.error(
+                    "Failed to insert OTP",
+                    email=email,
+                    user_id=user_id
+                )
+                self.metrics.increment_counter("otp_creation_failures")
                 return None, None, "Failed to generate verification code."
 
             otp_record = OTPDB(**result)
 
-            logger.info(
-                f"OTP created for {email}: ID {otp_record.id}, "
-                f"expires {expires_at.isoformat()}"
+            self.logger.info(
+                "OTP created successfully",
+                email=email,
+                otp_id=otp_record.id,
+                user_id=user_id,
+                expires_at=expires_at.isoformat()
             )
+            self.metrics.increment_counter("otp_codes_created")
 
             # Return plain-text code (for email) and record
             return otp_code, otp_record, None
 
         except Exception as e:
-            logger.exception(f"Error in create_otp: {e}")
+            self.logger.exception(
+                "Error in create_otp",
+                email=email,
+                user_id=user_id
+            )
+            self.metrics.increment_counter("otp_creation_errors")
             return None, None, "Failed to generate verification code."
 
     async def verify_otp(
