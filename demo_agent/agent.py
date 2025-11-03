@@ -5,7 +5,7 @@ with PostgreSQL-backed token-bucket rate limiting and security hardening.
 
 Author: Lab01-MCP Team
 Created: 2025-10-31
-Version: 1.0.0
+Version: 1.1.0 (Async)
 """
 
 from datetime import datetime, timezone
@@ -389,7 +389,7 @@ class DemoAgent:
             # Truncate request_input to 1000 chars
             truncated_input = request_input[:1000] if request_input else None
 
-            self.db.execute(
+            await self.db.execute(
                 query,
                 (
                     user_key,
