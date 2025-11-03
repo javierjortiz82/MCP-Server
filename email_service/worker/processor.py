@@ -23,6 +23,9 @@ from email_service.core.logger import get_logger, setup_logging, log_context
 from email_service.database.queue import EmailQueueManager
 from email_service.models.email import EmailRecord, EmailStatus, EmailType
 from email_service.templates.renderer import TemplateRenderer
+from email_service.observability.metrics import get_metrics_collector
+from email_service.observability.structured_logger import get_structured_logger
+from email_service.observability.context import create_request_context, clear_request_context
 
 logger = get_logger(__name__)
 
@@ -63,6 +66,10 @@ class EmailWorker:
             console_level=self.config.LOG_LEVEL,
             enable_file=self.config.LOG_TO_FILE,
         )
+
+        # Initialize observability (OPCIÓN 6)
+        self.logger = get_structured_logger(__name__)
+        self.metrics = get_metrics_collector()
 
         logger.info("=" * 80)
         logger.info("🚀 INITIALIZING EMAIL WORKER")
@@ -177,19 +184,25 @@ class EmailWorker:
 
             logger.info(f"📬 Processing {len(pending_emails)} pending emails...")
 
-            # Process each email
-            for email in pending_emails:
-                try:
-                    await self._process_email(email)
-                    self.processed_count += 1
-                except Exception as e:
-                    logger.error(
-                        f"❌ Error processing email {email.id}: {e}", exc_info=True
-                    )
-                    self.failed_count += 1
+            # Process each email with metrics tracking
+            async with self.metrics.record_latency_async("batch_processing"):
+                for email in pending_emails:
+                    try:
+                        await self._process_email(email)
+                        self.processed_count += 1
+                    except Exception as e:
+                        logger.error(
+                            f"❌ Error processing email {email.id}: {e}", exc_info=True
+                        )
+                        self.metrics.increment_counter("batch_processing_errors")
+                        self.failed_count += 1
+
+            # Update gauge for queue metrics
+            self.metrics.set_gauge("batch_size_processed", len(pending_emails))
 
         except Exception as e:
             logger.error(f"❌ Batch processing error: {e}", exc_info=True)
+            self.metrics.increment_counter("batch_processing_failures")
 
     async def _process_email(self, email: EmailRecord) -> None:
         """Process a single email record.
@@ -203,6 +216,13 @@ class EmailWorker:
         Raises:
             Exception: If email processing fails.
         """
+        # Create request context for this email (OPCIÓN 6)
+        email_ctx = create_request_context(
+            email_id=email.id,
+            recipient=email.recipient_email,
+            operation="send_email"
+        )
+
         ctx = log_context(
             logger,
             "process_email",
@@ -213,22 +233,33 @@ class EmailWorker:
 
         try:
             logger.info(f"📧 Starting: {ctx}")
+            self.logger.info(
+                "Processing email",
+                email_id=email.id,
+                recipient=email.recipient_email,
+                email_type=email.type.value
+            )
 
             # Mark as processing
             self.queue_manager.update_email_status(email.id, EmailStatus.PROCESSING)
             logger.debug(f"✓ Status marked PROCESSING: {ctx}")
 
             # Determine email content (pre-rendered or render from template)
-            body_html, body_text = self._prepare_email_content(email)
+            async with self.metrics.record_latency_async(
+                "email_processing",
+                tags={"recipient": email.recipient_email}
+            ):
+                body_html, body_text = self._prepare_email_content(email)
 
-            # Send email via SMTP
-            self.smtp_client.send_email(
-                recipient_email=email.recipient_email,
-                recipient_name=email.recipient_name,
-                subject=email.subject,
-                body_html=body_html,
-                body_text=body_text,
-            )
+                # Send email via SMTP
+                self.smtp_client.send_email(
+                    recipient_email=email.recipient_email,
+                    recipient_name=email.recipient_name,
+                    subject=email.subject,
+                    body_html=body_html,
+                    body_text=body_text,
+                )
+
             logger.debug(f"✓ SMTP delivery OK: {ctx}")
 
             # Mark as sent
@@ -237,11 +268,17 @@ class EmailWorker:
             )
 
             logger.info(f"✅ COMPLETED: {ctx}")
+            self.logger.info("Email sent successfully", email_id=email.id)
+            self.metrics.increment_counter("emails_sent")
 
         except Exception as e:
             logger.error(f"❌ FAILED: {ctx} | Error: {str(e)}", exc_info=True)
+            self.logger.exception("Email processing failed", email_id=email.id)
+            self.metrics.increment_counter("emails_failed")
             self._handle_send_failure(email, str(e))
             raise  # Re-raise for outer error handler
+        finally:
+            clear_request_context()
 
     def _prepare_email_content(self, email: EmailRecord) -> tuple[str, str | None]:
         """Prepare email content (render if needed or use pre-rendered).
@@ -323,6 +360,13 @@ class EmailWorker:
                 f"attempt {email.retry_count + 1}/{email.max_retries} | "
                 f"backoff_secs={backoff}"
             )
+            self.logger.warning(
+                "Email retry scheduled",
+                email_id=email.id,
+                retry_count=email.retry_count + 1,
+                max_retries=email.max_retries
+            )
+            self.metrics.increment_counter("emails_retried")
         else:
             # Max retries exceeded - mark as failed
             self.queue_manager.update_email_status(
@@ -333,6 +377,13 @@ class EmailWorker:
                 f"max_retries_exceeded={email.max_retries} | "
                 f"error={error[:100]}"
             )
+            self.logger.critical(
+                "Email permanently failed",
+                email_id=email.id,
+                max_retries=email.max_retries,
+                error=error[:100]
+            )
+            self.metrics.increment_counter("emails_permanently_failed")
 
     def _print_stats(self) -> None:
         """Print worker statistics on shutdown."""

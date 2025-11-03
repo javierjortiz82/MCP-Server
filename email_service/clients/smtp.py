@@ -18,6 +18,8 @@ from email_service.config import EmailConfig
 from email_service.core.exceptions import SMTPClientError
 from email_service.core.logger import get_logger
 from email_service.models.smtp_config import SMTPConfig
+from email_service.observability.metrics import get_metrics_collector
+from email_service.observability.structured_logger import get_structured_logger
 
 logger = get_logger(__name__)
 
@@ -51,6 +53,10 @@ class SMTPClient:
         Raises:
             SMTPClientError: If configuration is invalid.
         """
+        # Initialize observability (OPCIÓN 6)
+        self.logger = get_structured_logger(__name__)
+        self.metrics = get_metrics_collector()
+
         if smtp_config:
             self.config = smtp_config
         else:
@@ -70,6 +76,11 @@ class SMTPClient:
 
         logger.info(
             f"🔧 SMTP Client initialized: {self.config.host}:{self.config.port}"
+        )
+        self.logger.info(
+            "SMTP client initialized",
+            host=self.config.host,
+            port=self.config.port
         )
 
     def send_email(
@@ -105,37 +116,54 @@ class SMTPClient:
             )
         """
         try:
-            # Create multipart message
-            msg = MIMEMultipart("alternative")
-            msg["From"] = f"{self.config.from_name} <{self.config.from_email}>"
-            msg["To"] = (
-                f"{recipient_name} <{recipient_email}>"
-                if recipient_name
-                else recipient_email
-            )
-            msg["Subject"] = subject
+            # Track SMTP send operation (OPCIÓN 6)
+            with self.metrics.record_latency(
+                "smtp_send",
+                tags={"recipient": recipient_email}
+            ):
+                # Create multipart message
+                msg = MIMEMultipart("alternative")
+                msg["From"] = f"{self.config.from_name} <{self.config.from_email}>"
+                msg["To"] = (
+                    f"{recipient_name} <{recipient_email}>"
+                    if recipient_name
+                    else recipient_email
+                )
+                msg["Subject"] = subject
 
-            # Attach plaintext part (if provided)
-            if body_text:
-                part_text = MIMEText(body_text, "plain", "utf-8")
-                msg.attach(part_text)
+                # Attach plaintext part (if provided)
+                if body_text:
+                    part_text = MIMEText(body_text, "plain", "utf-8")
+                    msg.attach(part_text)
 
-            # Attach HTML part (always present)
-            part_html = MIMEText(body_html, "html", "utf-8")
-            msg.attach(part_html)
+                # Attach HTML part (always present)
+                part_html = MIMEText(body_html, "html", "utf-8")
+                msg.attach(part_html)
 
-            # Send via SMTP
-            self._send_via_smtp(msg, recipient_email)
+                # Send via SMTP
+                self._send_via_smtp(msg, recipient_email)
 
             logger.info(
                 f"✅ Email sent to {recipient_email} - " f"Subject: {subject[:50]}..."
             )
+            self.logger.info(
+                "Email sent via SMTP",
+                recipient=recipient_email,
+                subject=subject[:50]
+            )
+            self.metrics.increment_counter("smtp_sends_successful")
 
         except Exception as e:
             logger.error(
                 f"❌ Failed to send email to {recipient_email}: {e}",
                 exc_info=True,
             )
+            self.logger.exception(
+                "SMTP send failed",
+                recipient=recipient_email,
+                subject=subject[:50]
+            )
+            self.metrics.increment_counter("smtp_sends_failed")
             raise SMTPClientError(
                 f"Failed to send email to {recipient_email}: {str(e)}",
                 is_transient=self._is_transient_error(e),
