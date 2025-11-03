@@ -19,8 +19,24 @@ from utils.db import fetchall
 from utils.logger import setup_logging
 from utils.i18n import t
 
+# Observability imports (OPCIÓN 9)
+try:
+    from email_service.observability.metrics import get_metrics_collector
+    from email_service.observability.structured_logger import get_structured_logger
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
 # Setup logger for fuzzy search operations
 logger = setup_logging("mcp_tools_fuzzy_search")
+
+# Initialize observability for fuzzy search (OPCIÓN 9)
+if OBSERVABILITY_AVAILABLE:
+    structured_logger = get_structured_logger("fuzzy_search_tool")
+    metrics = get_metrics_collector()
+else:
+    structured_logger = None
+    metrics = None
 
 
 def fuzzy_search(
