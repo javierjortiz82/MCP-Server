@@ -10,9 +10,24 @@ from psycopg2.pool import SimpleConnectionPool
 from config import settings
 from utils.logger import setup_logging
 
+# Observability imports (OPCIÓN 9)
+try:
+    from email_service.observability.metrics import get_metrics_collector
+    from email_service.observability.structured_logger import get_structured_logger
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
 # Setup logger for database operations
 logger = setup_logging("mcp_db")
 
+# Initialize observability for database (OPCIÓN 9)
+if OBSERVABILITY_AVAILABLE:
+    structured_logger = get_structured_logger("mcp_db")
+    metrics = get_metrics_collector()
+else:
+    structured_logger = None
+    metrics = None
 
 _pool = None
 
@@ -37,20 +52,58 @@ def init_db(minconn: int = 1, maxconn: int = 5) -> None:
     """
     global _pool
     if _pool is None:
-        logger.info("Initializing database connection pool...")
-        _pool = SimpleConnectionPool(minconn, maxconn, dsn=settings.DATABASE_URL)
-        # register vector adapter on a temporary connection
-        conn = _pool.getconn()
         try:
-            register_vector(conn)
-            conn.commit()
-            logger.info("Vector type successfully registered in PostgreSQL")
+            # Track pool initialization with metrics (OPCIÓN 9)
+            if metrics:
+                latency_ctx = metrics.record_latency("db_pool_initialization_latency")
+                latency_ctx.__enter__()
+            else:
+                latency_ctx = None
+
+            if metrics:
+                metrics.increment_counter("db_pool_initialization_attempts", 1)
+
+            logger.info("Initializing database connection pool...")
+            _pool = SimpleConnectionPool(minconn, maxconn, dsn=settings.DATABASE_URL)
+
+            if metrics:
+                metrics.set_gauge("db_pool_min_connections", minconn)
+                metrics.set_gauge("db_pool_max_connections", maxconn)
+
+            # register vector adapter on a temporary connection
+            conn = _pool.getconn()
+            try:
+                register_vector(conn)
+                conn.commit()
+                logger.info("Vector type successfully registered in PostgreSQL")
+                if metrics:
+                    metrics.increment_counter("db_vector_type_registration_success", 1)
+            except Exception as e:
+                logger.error("Error registering vector type: %s", e)
+                if metrics:
+                    metrics.increment_counter("db_vector_type_registration_failed", 1)
+                if structured_logger:
+                    structured_logger.exception("Vector type registration failed")
+                raise
+            finally:
+                _pool.putconn(conn)
+
+            logger.info("Database connection pool initialized successfully")
+            if metrics:
+                metrics.increment_counter("db_pool_initialization_successful", 1)
+            if structured_logger:
+                structured_logger.info("Database pool initialized", minconn=minconn, maxconn=maxconn)
+
         except Exception as e:
-            logger.error("Error registering vector type: %s", e)
+            if metrics:
+                metrics.increment_counter("db_pool_initialization_failed", 1)
+            if structured_logger:
+                structured_logger.exception("Database pool initialization failed")
             raise
+
         finally:
-            _pool.putconn(conn)
-        logger.info("Database connection pool initialized successfully")
+            if latency_ctx:
+                latency_ctx.__exit__(None, None, None)
 
 
 @contextmanager
@@ -103,12 +156,43 @@ def fetchone(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> 
         >>> # INSERT with RETURNING (commit required)
         >>> result = fetchone("INSERT INTO products (...) VALUES (...) RETURNING id", (...), commit=True)
     """
-    with get_conn() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(query, params)
-        if commit:
-            conn.commit()
-        row = cur.fetchone()
-        return dict(row) if row else None
+    try:
+        # Track query execution with metrics (OPCIÓN 9)
+        if metrics:
+            latency_ctx = metrics.record_latency("db_query_fetchone_latency")
+            latency_ctx.__enter__()
+        else:
+            latency_ctx = None
+
+        if metrics:
+            metrics.increment_counter("db_query_fetchone_attempts", 1)
+
+        with get_conn() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(query, params)
+            if commit:
+                conn.commit()
+            row = cur.fetchone()
+
+            if metrics:
+                metrics.increment_counter("db_query_fetchone_success", 1)
+                if row:
+                    metrics.increment_counter("db_query_fetchone_found", 1)
+                else:
+                    metrics.increment_counter("db_query_fetchone_not_found", 1)
+
+            return dict(row) if row else None
+
+    except Exception as e:
+        if metrics:
+            metrics.increment_counter("db_query_fetchone_failure", 1)
+            metrics.increment_counter(f"db_query_error_{type(e).__name__}", 1)
+        if structured_logger:
+            structured_logger.exception("Database fetchone query failed")
+        raise
+
+    finally:
+        if latency_ctx:
+            latency_ctx.__exit__(None, None, None)
 
 
 def fetchall(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> list[dict]:
@@ -128,12 +212,40 @@ def fetchall(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> 
         >>> for product in results:
         ...     print(product['name'], product['price'])
     """
-    with get_conn() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(query, params)
-        if commit:
-            conn.commit()
-        rows = cur.fetchall()
-        return [dict(r) for r in rows]
+    try:
+        # Track query execution with metrics (OPCIÓN 9)
+        if metrics:
+            latency_ctx = metrics.record_latency("db_query_fetchall_latency")
+            latency_ctx.__enter__()
+        else:
+            latency_ctx = None
+
+        if metrics:
+            metrics.increment_counter("db_query_fetchall_attempts", 1)
+
+        with get_conn() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(query, params)
+            if commit:
+                conn.commit()
+            rows = cur.fetchall()
+
+            if metrics:
+                metrics.increment_counter("db_query_fetchall_success", 1)
+                metrics.set_gauge("db_query_fetchall_row_count", len(rows))
+
+            return [dict(r) for r in rows]
+
+    except Exception as e:
+        if metrics:
+            metrics.increment_counter("db_query_fetchall_failure", 1)
+            metrics.increment_counter(f"db_query_error_{type(e).__name__}", 1)
+        if structured_logger:
+            structured_logger.exception("Database fetchall query failed")
+        raise
+
+    finally:
+        if latency_ctx:
+            latency_ctx.__exit__(None, None, None)
 
 
 def execute(query: str, params: tuple[Any, ...] = ()) -> None:
@@ -152,9 +264,35 @@ def execute(query: str, params: tuple[Any, ...] = ()) -> None:
         >>> execute("UPDATE products SET price = %s WHERE id = %s", (99.99, 42))
         >>> execute("DELETE FROM products WHERE sku = %s", ("OLD-001",))
     """
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(query, params)
-        conn.commit()
+    try:
+        # Track query execution with metrics (OPCIÓN 9)
+        if metrics:
+            latency_ctx = metrics.record_latency("db_query_execute_latency")
+            latency_ctx.__enter__()
+        else:
+            latency_ctx = None
+
+        if metrics:
+            metrics.increment_counter("db_query_execute_attempts", 1)
+
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(query, params)
+            conn.commit()
+
+            if metrics:
+                metrics.increment_counter("db_query_execute_success", 1)
+
+    except Exception as e:
+        if metrics:
+            metrics.increment_counter("db_query_execute_failure", 1)
+            metrics.increment_counter(f"db_query_error_{type(e).__name__}", 1)
+        if structured_logger:
+            structured_logger.exception("Database execute query failed")
+        raise
+
+    finally:
+        if latency_ctx:
+            latency_ctx.__exit__(None, None, None)
 
 
 def upsert_product(product: dict) -> None:
