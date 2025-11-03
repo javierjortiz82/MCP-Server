@@ -19,6 +19,8 @@ from email_service.config import EmailConfig
 from email_service.core.exceptions import TemplateRenderError
 from email_service.core.logger import get_logger
 from email_service.models.email import EmailType
+from email_service.observability.metrics import get_metrics_collector
+from email_service.observability.structured_logger import get_structured_logger
 
 logger = get_logger(__name__)
 
@@ -59,13 +61,19 @@ class TemplateRenderer:
         Raises:
             TemplateRenderError: If template directory cannot be created.
         """
+        # Initialize observability (OPCIÓN 6)
+        self.logger = get_structured_logger(__name__)
+        self.metrics = get_metrics_collector()
+
         self.template_dir = Path(template_dir or EmailConfig().TEMPLATE_DIR)
 
         try:
             self.env = self._init_jinja_env()
             logger.info(f"✅ Template renderer initialized: {self.template_dir}")
+            self.logger.info("Template renderer initialized", template_dir=str(self.template_dir))
         except Exception as e:
             logger.error(f"❌ Failed to initialize template renderer: {e}")
+            self.logger.exception("Template renderer initialization failed")
             raise TemplateRenderError(f"Failed to initialize Jinja2: {e}") from e
 
     def _init_jinja_env(self) -> Environment:
@@ -121,14 +129,22 @@ class TemplateRenderer:
         template_name = f"{email_type.value}.html"
 
         try:
-            logger.debug(f"📄 Rendering HTML template: {template_name}")
-            template = self.env.get_template(template_name)
-            rendered = template.render(**context)
-            logger.debug(f"✅ HTML template rendered: {len(rendered)} bytes")
-            return rendered
+            with self.metrics.record_latency("template_render", tags={"type": email_type.value, "format": "html"}):
+                logger.debug(f"📄 Rendering HTML template: {template_name}")
+                self.logger.debug("Rendering HTML template", email_type=email_type.value, template_name=template_name)
+
+                template = self.env.get_template(template_name)
+                rendered = template.render(**context)
+
+                logger.debug(f"✅ HTML template rendered: {len(rendered)} bytes")
+                self.logger.debug("HTML template rendered", email_type=email_type.value, size_bytes=len(rendered))
+                self.metrics.increment_counter("templates_rendered_html")
+                return rendered
 
         except TemplateNotFound:
             logger.error(f"❌ HTML template not found: {template_name}")
+            self.logger.warning("HTML template not found", template_name=template_name)
+            self.metrics.increment_counter("template_render_errors")
             raise TemplateRenderError(
                 f"Template not found: {template_name}",
                 template_name=template_name,
@@ -136,6 +152,8 @@ class TemplateRenderer:
 
         except Exception as e:
             logger.error(f"❌ Failed to render HTML template: {e}")
+            self.logger.exception("HTML template rendering failed", template_name=template_name)
+            self.metrics.increment_counter("template_render_errors")
             raise TemplateRenderError(
                 f"Failed to render {template_name}: {e}",
                 template_name=template_name,
@@ -166,21 +184,32 @@ class TemplateRenderer:
         template_name = f"{email_type.value}.txt"
 
         try:
-            logger.debug(f"📄 Rendering text template: {template_name}")
-            template = self.env.get_template(template_name)
-            rendered = template.render(**context)
-            logger.debug(f"✅ Text template rendered: {len(rendered)} bytes")
-            return rendered
+            with self.metrics.record_latency("template_render", tags={"type": email_type.value, "format": "text"}):
+                logger.debug(f"📄 Rendering text template: {template_name}")
+                self.logger.debug("Rendering text template", email_type=email_type.value, template_name=template_name)
+
+                template = self.env.get_template(template_name)
+                rendered = template.render(**context)
+
+                logger.debug(f"✅ Text template rendered: {len(rendered)} bytes")
+                self.logger.debug("Text template rendered", email_type=email_type.value, size_bytes=len(rendered))
+                self.metrics.increment_counter("templates_rendered_text")
+                return rendered
 
         except TemplateNotFound:
             logger.debug(
                 f"ℹ️ Text template not found: {template_name}, "
                 "using auto-generated fallback"
             )
-            return self._generate_fallback_text(email_type, context)
+            self.logger.debug("Using fallback text template", email_type=email_type.value)
+            fallback = self._generate_fallback_text(email_type, context)
+            self.metrics.increment_counter("templates_rendered_fallback")
+            return fallback
 
         except Exception as e:
             logger.error(f"❌ Failed to render text template: {e}")
+            self.logger.exception("Text template rendering failed", template_name=template_name)
+            self.metrics.increment_counter("template_render_errors")
             raise TemplateRenderError(
                 f"Failed to render {template_name}: {e}",
                 template_name=template_name,
@@ -332,4 +361,11 @@ Lab01 - AI Sales Platform
             f"{'✅' if exists else '❌'} Template check: "
             f"{template_path} ({'exists' if exists else 'not found'})"
         )
+        self.logger.debug(
+            "Template existence check",
+            email_type=email_type.value,
+            format_type=format_type,
+            exists=exists
+        )
+        self.metrics.increment_counter("template_checks")
         return exists
