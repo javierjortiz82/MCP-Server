@@ -32,6 +32,8 @@ from demo_agent.rate_limiter.token_bucket import TokenBucket
 from demo_agent.security.captcha_handler import CaptchaHandler
 from demo_agent.security.fingerprint import FingerprintAnalyzer
 from demo_agent.security.ip_limiter import IPLimiter
+from demo_agent.observability.metrics import get_metrics_collector
+from demo_agent.observability.structured_logger import get_structured_logger
 
 
 class DemoAgent:
@@ -63,7 +65,9 @@ class DemoAgent:
         self.fingerprint_analyzer = FingerprintAnalyzer()
         self.ip_limiter = IPLimiter()
         self.captcha_handler = CaptchaHandler()
-        logger.info("✅ DemoAgent initialized with security modules")
+        self.logger = get_structured_logger(__name__)
+        self.metrics = get_metrics_collector()
+        self.logger.info("DemoAgent initialized with security modules and observability")
 
     async def process_query(
         self,
@@ -104,7 +108,13 @@ class DemoAgent:
         10. Return response with tokens and warning info
         """
         try:
-            logger.info(f"Processing query from {user_key} (lang={language})")
+            self.logger.info(
+                "Processing query",
+                user_key=user_key,
+                language=language,
+                ip_address=ip_address
+            )
+            self.metrics.increment_counter("agent_queries_received")
 
             # Step 1: Check IP rate limiting
             if config.ENABLE_FINGERPRINT and ip_address:
@@ -116,7 +126,12 @@ class DemoAgent:
                         "Rate limit exceeded para tu IP. "
                         f"Máximo {config.IP_RATE_LIMIT_REQUESTS} solicitudes por minuto."
                     )
-                    logger.warning(f"IP rate limit exceeded: {ip_address}")
+                    self.logger.warning(
+                        "IP rate limit exceeded",
+                        ip_address=ip_address,
+                        user_key=user_key
+                    )
+                    self.metrics.increment_counter("agent_queries_blocked_ip_limit")
                     await self._log_audit(
                         user_key=user_key,
                         ip_address=ip_address,
@@ -157,7 +172,12 @@ class DemoAgent:
                     ip_reputation=ip_reputation,
                 )
 
-                logger.debug(f"Abuse score for {user_key}: {abuse_score:.2f}")
+                self.logger.debug(
+                    "Abuse score computed",
+                    user_key=user_key,
+                    abuse_score=round(abuse_score, 2)
+                )
+                self.metrics.set_gauge(f"abuse_score_{user_key}", abuse_score)
 
                 # Block if abuse score is critical (>0.9)
                 if abuse_score > 0.9:
@@ -165,9 +185,12 @@ class DemoAgent:
                         "Actividad sospechosa detectada. "
                         "Tu cuenta ha sido bloqueada temporalmente."
                     )
-                    logger.warning(
-                        f"Critical abuse score for {user_key}: {abuse_score}"
+                    self.logger.warning(
+                        "Critical abuse score",
+                        user_key=user_key,
+                        abuse_score=round(abuse_score, 2)
                     )
+                    self.metrics.increment_counter("agent_queries_blocked_suspicious")
                     await self._log_audit(
                         user_key=user_key,
                         ip_address=ip_address,
@@ -195,9 +218,12 @@ class DemoAgent:
                     "Actividad sospechosa detectada. "
                     "Completa CAPTCHA para continuar."
                 )
-                logger.warning(
-                    f"CAPTCHA required for {user_key}: abuse_score={abuse_score:.2f}"
+                self.logger.warning(
+                    "CAPTCHA required",
+                    user_key=user_key,
+                    abuse_score=round(abuse_score, 2)
                 )
+                self.metrics.increment_counter("agent_queries_blocked_captcha_required")
                 await self._log_audit(
                     user_key=user_key,
                     ip_address=ip_address,
@@ -227,7 +253,11 @@ class DemoAgent:
                     f"Demo bloqueada. Límite de {config.DEMO_MAX_TOKENS:,} "
                     f"tokens alcanzado. Reintenta en {status['next_reset']}."
                 )
-                logger.warning(f"Query rejected - quota exceeded: {user_key}")
+                self.logger.warning(
+                    "Query rejected - quota exceeded",
+                    user_key=user_key
+                )
+                self.metrics.increment_counter("agent_queries_blocked_quota_exceeded")
                 await self._log_audit(
                     user_key=user_key,
                     ip_address=ip_address,
@@ -258,13 +288,18 @@ class DemoAgent:
             tokens_used = 0
             try:
                 # Step 6: Call Gemini API
-                logger.debug(f"Calling Gemini API for {user_key}...")
+                self.logger.debug(
+                    "Calling Gemini API",
+                    user_key=user_key
+                )
                 response_text, tokens_used = await self.gemini_client.generate_response(
                     system_prompt=system_prompt,
                     user_message=user_input,
                     temperature=config.TEMPERATURE,
                     max_output_tokens=config.MAX_OUTPUT_TOKENS,
                 )
+                self.metrics.increment_counter("agent_api_calls_successful")
+                self.metrics.increment_counter("agent_tokens_generated", tokens_used)
 
                 # Step 7: Deduct tokens after response received (accurate count)
                 tokens_remaining = await self.token_bucket.deduct_tokens(
@@ -273,18 +308,23 @@ class DemoAgent:
 
             except Exception as api_error:
                 # FIX 2.2: Refund tokens if API fails
-                logger.warning(
-                    f"Gemini API failed for {user_key}. "
-                    f"Refunding {tokens_used} tokens..."
+                self.logger.warning(
+                    "Gemini API failed - refunding tokens",
+                    user_key=user_key,
+                    tokens_used=tokens_used
                 )
+                self.metrics.increment_counter("agent_api_calls_failed")
                 if tokens_used > 0:
                     tokens_remaining = await self.token_bucket.refund_tokens(
                         user_key, tokens_to_refund=tokens_used
                     )
-                    logger.info(
-                        f"Tokens refunded: {user_key} -> "
-                        f"refunded={tokens_used}, remaining={tokens_remaining}"
+                    self.logger.info(
+                        "Tokens refunded after API failure",
+                        user_key=user_key,
+                        tokens_refunded=tokens_used,
+                        tokens_remaining=tokens_remaining
                     )
+                    self.metrics.increment_counter("agent_tokens_refunded", tokens_used)
                 raise api_error
 
             # Step 5: Check warning threshold
@@ -294,16 +334,19 @@ class DemoAgent:
             warning_msg = None
 
             if is_warning:
+                self.metrics.increment_counter("agent_queries_with_warning")
                 if percentage_used >= 95:
                     warning_msg = (
                         f"🔴 ALERTA: Has usado {percentage_used}% de tu cuota diaria. "
                         f"Quedan {tokens_remaining:,} tokens."
                     )
+                    self.metrics.increment_counter("agent_quota_critical_warning")
                 elif percentage_used >= 85:
                     warning_msg = (
                         f"🟡 Advertencia: Has usado {percentage_used}% de tu cuota diaria. "
                         f"Quedan {tokens_remaining:,} tokens."
                     )
+                    self.metrics.increment_counter("agent_quota_warning")
 
             warning = TokenWarning(
                 is_warning=is_warning,
@@ -325,17 +368,21 @@ class DemoAgent:
                 abuse_score=abuse_score,
             )
 
-            logger.info(
-                f"Query processed: {user_key} -> "
-                f"tokens_used={tokens_used}, "
-                f"remaining={tokens_remaining}, "
-                f"warning={is_warning}"
+            self.logger.info(
+                "Query processed successfully",
+                user_key=user_key,
+                tokens_used=tokens_used,
+                tokens_remaining=tokens_remaining,
+                warning=is_warning,
+                percentage_used=percentage_used
             )
+            self.metrics.increment_counter("agent_queries_successful")
 
             return response_text, tokens_used, warning, None
 
         except Exception as e:
-            logger.exception(f"Error processing query: {e}")
+            self.logger.exception("Error processing query", user_key=user_key)
+            self.metrics.increment_counter("agent_queries_errors")
             await self._log_audit(
                 user_key=user_key,
                 ip_address=ip_address,
@@ -405,10 +452,20 @@ class DemoAgent:
                     abuse_score,
                 ),
             )
-            logger.debug(f"Audit logged: {user_key} -> {action_taken}")
+            self.logger.debug(
+                "Audit logged",
+                user_key=user_key,
+                action_taken=action_taken,
+                is_blocked=is_blocked
+            )
+            self.metrics.increment_counter("audit_logs_recorded")
 
         except Exception as e:
-            logger.error(f"Failed to log audit: {e}")
+            self.logger.error(
+                "Failed to log audit",
+                user_key=user_key
+            )
+            self.metrics.increment_counter("audit_log_errors")
 
     async def get_user_status(self, user_key: str) -> dict:
         """Get user's current quota status.
@@ -420,9 +477,17 @@ class DemoAgent:
             dict with quota status including tokens used, remaining, percentage
         """
         try:
-            return await self.token_bucket.get_quota_status(user_key)
+            status = await self.token_bucket.get_quota_status(user_key)
+            self.logger.debug(
+                "User status retrieved",
+                user_key=user_key,
+                percentage_used=status.get("percentage_used", 0)
+            )
+            self.metrics.increment_counter("user_status_queries")
+            return status
         except Exception as e:
-            logger.exception(f"Error getting user status: {e}")
+            self.logger.exception("Error getting user status", user_key=user_key)
+            self.metrics.increment_counter("user_status_errors")
             return {
                 "tokens_used": 0,
                 "tokens_remaining": config.DEMO_MAX_TOKENS,
