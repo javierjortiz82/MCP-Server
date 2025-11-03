@@ -21,6 +21,9 @@ from demo_agent.agent import DemoAgent
 from demo_agent.config.settings import config
 from demo_agent.db.connection import close_db, get_db, init_db
 from demo_agent.logger import logger
+from demo_agent.observability.context import create_request_context, clear_request_context
+from demo_agent.observability.correlation import CorrelationID
+from demo_agent.observability.metrics import get_metrics_collector
 from demo_agent.models.requests import DemoRequest
 from demo_agent.models.responses import DemoResponse
 from demo_agent.models.user import (
@@ -112,6 +115,62 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=lifespan,
     )
+
+    # ========================================================================
+    # Observability Middleware
+    # ========================================================================
+
+    @app.middleware("http")
+    async def observability_middleware(request: Request, call_next):
+        """Middleware for request-level observability and context management.
+
+        Provides:
+        - Correlation ID generation/extraction
+        - Request context creation
+        - Request latency metrics
+        - Automatic context cleanup
+        """
+        # 1. Extract or generate correlation ID
+        correlation_id = request.headers.get(
+            "X-Correlation-ID",
+            str(uuid4())
+        )
+        CorrelationID.set(correlation_id)
+
+        # 2. Create request context
+        user_key = request.headers.get("X-User-Key")
+        ctx = create_request_context(
+            user_key=user_key,
+            ip_address=request.client.host if request.client else None,
+            method=request.method,
+            path=request.url.path,
+        )
+
+        # 3. Track request with metrics
+        metrics = get_metrics_collector()
+
+        try:
+            # Record operation latency
+            async with metrics.record_latency_async(
+                "http_request",
+                tags={"method": request.method, "path": request.url.path}
+            ):
+                response = await call_next(request)
+
+            # Add correlation ID to response headers
+            response.headers["X-Correlation-ID"] = correlation_id
+            metrics.increment_counter("http_requests_successful")
+            return response
+
+        except Exception as e:
+            logger.exception("Error in request", correlation_id=correlation_id)
+            metrics.increment_counter("http_requests_errors")
+            raise
+
+        finally:
+            # 4. Clean up context
+            clear_request_context()
+            CorrelationID.clear()
 
     # ========================================================================
     # Health Check Endpoint
