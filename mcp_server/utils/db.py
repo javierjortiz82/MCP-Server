@@ -32,6 +32,41 @@ else:
 _pool = None
 
 
+def _validate_schema_name(schema_name: str) -> None:
+    """Validate schema name to prevent SQL injection attacks.
+
+    PostgreSQL schema names must be valid identifiers: alphanumeric characters,
+    underscores, and cannot start with a digit. This function ensures the schema
+    name follows these rules before it's used in SQL queries.
+
+    Args:
+        schema_name: The schema name to validate
+
+    Raises:
+        ValueError: If schema name is invalid or potentially dangerous
+
+    Example:
+        >>> _validate_schema_name("public")  # OK
+        >>> _validate_schema_name("my_schema")  # OK
+        >>> _validate_schema_name("'; DROP TABLE users; --")  # Raises ValueError
+    """
+    import re
+
+    # PostgreSQL identifier rules: max 63 chars, alphanumeric + underscore, can't start with digit
+    if not isinstance(schema_name, str) or len(schema_name) == 0:
+        raise ValueError("Schema name must be a non-empty string")
+
+    if len(schema_name) > 63:
+        raise ValueError("Schema name exceeds PostgreSQL identifier length limit (63 chars)")
+
+    # Only allow alphanumeric characters and underscores, must not start with digit
+    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", schema_name):
+        raise ValueError(
+            f"Invalid schema name '{schema_name}': must start with letter/underscore "
+            "and contain only alphanumeric characters and underscores"
+        )
+
+
 def _validate_connection(conn: psycopg2.extensions.connection) -> bool:
     """Validate if a database connection is alive by executing a simple query.
 
@@ -214,6 +249,7 @@ def fetchone(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> 
     """
     max_retries = 2
     latency_ctx = None
+    attempt = 0  # Initialize for use in outer except block
 
     try:
         for attempt in range(max_retries):
@@ -304,6 +340,7 @@ def fetchall(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> 
     """
     max_retries = 2
     latency_ctx = None
+    attempt = 0  # Initialize for use in outer except block
 
     try:
         for attempt in range(max_retries):
@@ -384,6 +421,7 @@ def execute(query: str, params: tuple[Any, ...] = ()) -> None:
     """
     max_retries = 2
     latency_ctx = None
+    attempt = 0  # Initialize for use in outer except block
 
     try:
         for attempt in range(max_retries):
@@ -475,6 +513,9 @@ def upsert_product(product: dict) -> None:
         ... }
         >>> upsert_product(product)
     """
+    # Validate schema name to prevent SQL injection
+    _validate_schema_name(settings.SCHEMA_NAME)
+
     sql = f"""
     INSERT INTO {settings.SCHEMA_NAME}.products
         (sku, name, description, category, brand, tags, color, size, price, embedding)
