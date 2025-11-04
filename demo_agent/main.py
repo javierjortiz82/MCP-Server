@@ -14,7 +14,7 @@ Version: 1.1.0 (Async)
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Header, Query, Request
 from fastapi.responses import JSONResponse
 
 from demo_agent.agent import DemoAgent
@@ -39,6 +39,9 @@ from demo_agent.models.user import (
 from demo_agent.services.email_integration import EmailIntegrationService
 from demo_agent.services.otp_service import OTPService
 from demo_agent.services.user_service import UserService
+from demo_agent.services.clerk_service import get_clerk_service
+from demo_agent.security.clerk_middleware import ClerkAuthMiddleware, require_auth, get_current_user
+from demo_agent.webhooks.clerk_webhooks import get_clerk_webhook_handler
 from demo_agent import auth_endpoints
 
 # ============================================================================
@@ -117,6 +120,13 @@ def create_app() -> FastAPI:
     )
 
     # ========================================================================
+    # Clerk Authentication Middleware
+    # ========================================================================
+    # IMPORTANT: Must be added BEFORE observability middleware
+    # to ensure authentication happens first
+    app.add_middleware(ClerkAuthMiddleware)
+
+    # ========================================================================
     # Observability Middleware
     # ========================================================================
 
@@ -163,7 +173,7 @@ def create_app() -> FastAPI:
             return response
 
         except Exception as e:
-            logger.exception("Error in request", correlation_id=correlation_id)
+            logger.exception("Error in request", extra={"correlation_id": correlation_id})
             metrics.increment_counter("http_requests_errors")
             raise
 
@@ -393,11 +403,195 @@ def create_app() -> FastAPI:
         )
 
     # ========================================================================
+    # Clerk Webhook Endpoint
+    # ========================================================================
+
+    @app.post("/v1/webhooks/clerk", tags=["Webhooks"])
+    async def clerk_webhook(
+        request: Request,
+        svix_id: str = Header(..., alias="svix-id"),
+        svix_timestamp: str = Header(..., alias="svix-timestamp"),
+        svix_signature: str = Header(..., alias="svix-signature"),
+    ):
+        """Receive webhooks from Clerk Identity Provider.
+
+        Processes user and session events:
+        - user.created: New user registration
+        - user.updated: User profile changes
+        - user.deleted: User account deletion
+        - session.created: New login session
+
+        Headers Required:
+        - svix-id: Webhook message ID
+        - svix-timestamp: Event timestamp
+        - svix-signature: HMAC-SHA256 signature for verification
+
+        Security:
+        - Verifies webhook signature to prevent spoofing
+        - Rejects events older than 5 minutes (replay protection)
+
+        Response (Success):
+        ```json
+        {
+          "success": true,
+          "message": "Event user.created processed successfully",
+          "event_id": "msg_2abc..."
+        }
+        ```
+
+        Response (Error):
+        ```json
+        {
+          "success": false,
+          "error": "Invalid webhook signature"
+        }
+        ```
+        """
+        webhook_handler = get_clerk_webhook_handler()
+        return await webhook_handler.handle_webhook(
+            request=request,
+            svix_id=svix_id,
+            svix_timestamp=svix_timestamp,
+            svix_signature=svix_signature,
+        )
+
+    # ========================================================================
+    # Clerk Authentication Endpoints
+    # ========================================================================
+
+    @app.get("/v1/auth/me", tags=["Authentication"])
+    async def get_current_user_info(request: Request):
+        """Get current authenticated user information.
+
+        Requires: Valid Clerk Bearer token in Authorization header
+
+        Request Headers:
+        ```
+        Authorization: Bearer <clerk_token>
+        ```
+
+        Response (Success):
+        ```json
+        {
+          "success": true,
+          "user": {
+            "clerk_user_id": "user_2abc...",
+            "email": "user@example.com",
+            "full_name": "John Doe",
+            "email_verified": true,
+            "db_user_id": 123,
+            "is_active": true,
+            "clerk_metadata": {
+              "public_metadata": {"company": "Acme"},
+              "private_metadata": {},
+              "profile_image_url": "https://..."
+            },
+            "preferred_language": "es",
+            "created_at": "2025-11-03T10:30:00Z",
+            "last_login_at": "2025-11-03T14:25:00Z"
+          }
+        }
+        ```
+
+        Response (Error - Not Authenticated):
+        ```json
+        {
+          "success": false,
+          "error": "Unauthorized",
+          "message": "Missing Authorization header"
+        }
+        ```
+        """
+        # require_auth will raise 401 if not authenticated
+        user = require_auth(request)
+
+        # Fetch full user details from database if db_user_id exists
+        clerk_service = get_clerk_service()
+        full_user = None
+
+        if user.get("clerk_user_id"):
+            full_user = await clerk_service.get_user_by_clerk_id(user["clerk_user_id"])
+
+        return {
+            "success": True,
+            "user": full_user if full_user else user,
+        }
+
+    @app.post("/v1/auth/check-migration", tags=["Authentication"])
+    async def check_migration_status(request: Request):
+        """Check if a legacy user needs to migrate to Clerk.
+
+        Used by legacy auth endpoints to redirect users to Clerk login.
+
+        Request:
+        ```json
+        {
+          "email": "user@example.com"
+        }
+        ```
+
+        Response (Migration Required):
+        ```json
+        {
+          "success": true,
+          "requires_migration": true,
+          "user_id": 123,
+          "auth_provider": "email",
+          "migration_status": "pending",
+          "message": "Please log in with Clerk to migrate your account"
+        }
+        ```
+
+        Response (No Migration Required):
+        ```json
+        {
+          "success": true,
+          "requires_migration": false,
+          "message": "User already migrated or does not exist"
+        }
+        ```
+        """
+        try:
+            body = await request.json()
+            email = body.get("email")
+
+            if not email:
+                raise HTTPException(status_code=400, detail="Email is required")
+
+            clerk_service = get_clerk_service()
+            requires_migration, user_info = await clerk_service.check_migration_required(email)
+
+            if requires_migration and user_info:
+                return {
+                    "success": True,
+                    "requires_migration": True,
+                    "user_id": user_info["user_id"],
+                    "auth_provider": user_info["auth_provider"],
+                    "migration_status": user_info["migration_status"],
+                    "message": "Please log in with Clerk to migrate your account",
+                }
+            else:
+                return {
+                    "success": True,
+                    "requires_migration": False,
+                    "message": "User already migrated or does not exist",
+                }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error checking migration status: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error checking migration status: {str(e)}"
+            )
+
+    # ========================================================================
     # Demo Query Endpoint
     # ========================================================================
 
     @app.post("/v1/demo", response_model=DemoResponse, tags=["Demo"])
-    async def demo_query(request: DemoRequest):
+    async def demo_query(request_data: DemoRequest, request: Request):
         """Process a demo query with token-bucket rate limiting.
 
         Request:
@@ -452,18 +646,41 @@ def create_app() -> FastAPI:
                     detail="Services not initialized",
                 )
 
-            # STEP 1: Validate user exists and is active
-            # FIX: Lookup by user_id (not email) for security
-            # Users should only access their own quota, verified via token
+            # STEP 1: Get authenticated user from Clerk middleware
+            # Priority: Clerk auth > Legacy auth (during migration period)
+            authenticated_user = get_current_user(request)
+
+            if authenticated_user and authenticated_user.get("db_user_id"):
+                # User authenticated via Clerk - use db_user_id from middleware
+                user_id = authenticated_user["db_user_id"]
+                logger.info(f"Using Clerk-authenticated user: {user_id}")
+            elif request_data.user_id:
+                # Legacy auth - use user_id from request body (DEPRECATED)
+                # TODO: Remove this path after full migration to Clerk
+                user_id = request_data.user_id
+                logger.warning(f"Using legacy user_id from request body: {user_id} (DEPRECATED)")
+            else:
+                # No authentication found
+                logger.error("No user authentication found")
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "success": False,
+                        "error": "authentication_required",
+                        "message": "Please log in with Clerk to use this endpoint.",
+                    },
+                )
+
+            # STEP 2: Validate user exists and is active
             user_query = """
                 SELECT id, email, is_active, is_email_verified, is_suspended, is_deleted
                 FROM :SCHEMA_NAME.demo_users
                 WHERE id = %s
             """
-            user_result = user_service.db.execute_one(user_query, (request.user_id,))
+            user_result = await user_service.db.execute_one(user_query, (user_id,))
 
             if not user_result:
-                logger.warning(f"User ID {request.user_id} not found")
+                logger.warning(f"User ID {user_id} not found")
                 return JSONResponse(
                     status_code=403,
                     content={
@@ -475,7 +692,7 @@ def create_app() -> FastAPI:
 
             # Check if user is active and verified
             if not user_result.get("is_active"):
-                logger.warning(f"User ID {request.user_id} is not active")
+                logger.warning(f"User ID {user_id} is not active")
                 return JSONResponse(
                     status_code=403,
                     content={
@@ -489,7 +706,7 @@ def create_app() -> FastAPI:
                 )
 
             if not user_result.get("is_email_verified"):
-                logger.warning(f"User ID {request.user_id} email not verified")
+                logger.warning(f"User ID {user_id} email not verified")
                 return JSONResponse(
                     status_code=403,
                     content={
@@ -500,7 +717,7 @@ def create_app() -> FastAPI:
                 )
 
             if user_result.get("is_suspended"):
-                logger.warning(f"User ID {request.user_id} is suspended")
+                logger.warning(f"User ID {user_id} is suspended")
                 return JSONResponse(
                     status_code=403,
                     content={
@@ -511,7 +728,7 @@ def create_app() -> FastAPI:
                 )
 
             if user_result.get("is_deleted"):
-                logger.warning(f"User ID {request.user_id} is deleted")
+                logger.warning(f"User ID {user_id} is deleted")
                 return JSONResponse(
                     status_code=403,
                     content={
@@ -521,24 +738,24 @@ def create_app() -> FastAPI:
                     },
                 )
 
-            # STEP 2: Use user_id as user_key for token tracking
-            user_key = str(request.user_id)
+            # STEP 3: Use user_id as user_key for token tracking
+            user_key = str(user_id)
             user_email = user_result.get("email")
 
             # Generate session_id if not provided
-            session_id = request.session_id or str(uuid4())
+            session_id = request_data.session_id or str(uuid4())
 
-            logger.info(f"Demo query from active user: {user_email} (ID: {request.user_id})")
+            logger.info(f"Demo query from active user: {user_email} (ID: {user_id})")
 
             # Process query
             response_text, tokens_used, warning, error_msg = (
                 await demo_agent.process_query(
-                    user_input=request.input,
+                    user_input=request_data.input,
                     user_key=user_key,
-                    language=request.language or "es",
-                    ip_address=request.metadata.ip,
-                    user_agent=request.metadata.user_agent,
-                    client_fingerprint=request.metadata.fingerprint,
+                    language=request_data.language or "es",
+                    ip_address=request_data.metadata.ip,
+                    user_agent=request_data.metadata.user_agent,
+                    client_fingerprint=request_data.metadata.fingerprint,
                 )
             )
 

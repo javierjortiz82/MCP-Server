@@ -172,6 +172,30 @@ class DemoConfig(BaseSettings):
     )
 
     # ========================================================================
+    # Clerk Authentication Configuration
+    # ========================================================================
+    CLERK_SECRET_KEY: str = Field(
+        default="",
+        description="Clerk secret key (sk_test_... or sk_live_...)",
+    )
+    CLERK_PUBLISHABLE_KEY: str = Field(
+        default="",
+        description="Clerk publishable key (pk_test_... or pk_live_...)",
+    )
+    CLERK_WEBHOOK_SECRET: str = Field(
+        default="",
+        description="Clerk webhook signing secret (whsec_...)",
+    )
+    CLERK_FRONTEND_API: str = Field(
+        default="clerk.accounts.dev",
+        description="Clerk frontend API domain (e.g., clerk.odiseo.com or clerk.accounts.dev)",
+    )
+    ENABLE_CLERK_AUTH: bool = Field(
+        default=True,
+        description="Enable Clerk authentication (disable for legacy auth only)",
+    )
+
+    # ========================================================================
     # Rate Limiting Configuration
     # ========================================================================
     IP_RATE_LIMIT_REQUESTS: int = Field(
@@ -232,6 +256,30 @@ class DemoConfig(BaseSettings):
         """Validate temperature is in valid range."""
         if not 0.0 <= v <= 2.0:
             raise ValueError("TEMPERATURE must be between 0.0 and 2.0")
+        return v
+
+    @field_validator("CLERK_SECRET_KEY")
+    @classmethod
+    def validate_clerk_secret_key(cls, v: str) -> str:
+        """Validate Clerk secret key format."""
+        if v and not (v.startswith("sk_test_") or v.startswith("sk_live_")):
+            raise ValueError("CLERK_SECRET_KEY must start with 'sk_test_' or 'sk_live_'")
+        return v
+
+    @field_validator("CLERK_PUBLISHABLE_KEY")
+    @classmethod
+    def validate_clerk_publishable_key(cls, v: str) -> str:
+        """Validate Clerk publishable key format."""
+        if v and not (v.startswith("pk_test_") or v.startswith("pk_live_")):
+            raise ValueError("CLERK_PUBLISHABLE_KEY must start with 'pk_test_' or 'pk_live_'")
+        return v
+
+    @field_validator("CLERK_WEBHOOK_SECRET")
+    @classmethod
+    def validate_clerk_webhook_secret(cls, v: str) -> str:
+        """Validate Clerk webhook secret format."""
+        if v and not v.startswith("whsec_"):
+            raise ValueError("CLERK_WEBHOOK_SECRET must start with 'whsec_'")
         return v
 
 
