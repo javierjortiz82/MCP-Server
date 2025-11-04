@@ -102,6 +102,8 @@ class EmailQueueManager:
             self.logger.info("Queue manager initialized", schema=self.config.SCHEMA_NAME)
         except Exception as e:
             logger.error(f"❌ Failed to initialize queue manager: {e}")
+            # Ensure pool is properly closed if initialization failed
+            self._cleanup_pool()
             raise EmailQueueError(f"Connection pool initialization failed: {e}") from e
 
     def _init_pool(self) -> None:
@@ -117,6 +119,22 @@ class EmailQueueManager:
             dsn=self.config.DATABASE_URL,
             cursor_factory=RealDictCursor,
         )
+
+    def _cleanup_pool(self) -> None:
+        """Clean up connection pool and release all connections.
+
+        Safely closes the connection pool if it exists, ensuring all database
+        connections are properly released. Handles exceptions gracefully to
+        prevent cleanup errors from masking initialization errors.
+        """
+        if self._pool:
+            try:
+                self._pool.closeall()
+                logger.debug("✅ Connection pool closed successfully")
+            except Exception as e:
+                logger.warning(f"⚠️ Error closing connection pool: {e}")
+            finally:
+                self._pool = None
 
     def _get_connection(self) -> psycopg2.extensions.connection:
         """Get connection from pool with automatic validation.
@@ -734,9 +752,10 @@ class EmailQueueManager:
         """Close all connections in pool.
 
         Should be called when shutting down the application to clean up
-        database resources properly.
+        database resources properly. Uses the _cleanup_pool method to ensure
+        proper error handling and resource release.
         """
         if self._pool:
             logger.info("🔌 Closing database connection pool...")
-            self._pool.closeall()
+            self._cleanup_pool()
             logger.info("✅ Connection pool closed")

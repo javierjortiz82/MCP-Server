@@ -115,12 +115,14 @@ except ImportError:
 # Benefit: Eliminates parsing errors, enables reliable downstream processing
 # ═══════════════════════════════════════════════════════════════════════════════
 
-BOOKING_RESPONSE_SCHEMA = types.Schema(
-    type="object",
-    properties={
-        "intent": types.Schema(
-            type="string",
-            enum=[
+# Schema for booking response - using dict-based approach for compatibility
+# with google.genai types.GenerateContentConfig (response_schema expects dict)
+BOOKING_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "intent": {
+            "type": "string",
+            "enum": [
                 "create_booking",
                 "cancel_booking",
                 "reschedule_booking",
@@ -132,41 +134,41 @@ BOOKING_RESPONSE_SCHEMA = types.Schema(
                 "out_of_scope",
                 "error",
             ],
-            description="Automatically detected user intent",
-        ),
-        "confidence": types.Schema(
-            type="number",
-            description="Confidence score 0.0-1.0 for detected intent",
-        ),
-        "missing_data": types.Schema(
-            type="array",
-            items=types.Schema(type="string"),
-            description="List of required data still needed from user",
-        ),
-        "suggested_actions": types.Schema(
-            type="array",
-            items=types.Schema(type="string"),
-            description="List of next steps or options for user",
-        ),
-        "response_text": types.Schema(
-            type="string",
-            description="Main response text to user (conversational format)",
-        ),
-        "data_extracted": types.Schema(
-            type="object",
-            properties={
-                "service_type": types.Schema(type="string"),
-                "booking_date": types.Schema(type="string"),
-                "booking_time": types.Schema(type="string"),
-                "customer_email": types.Schema(type="string"),
-                "customer_name": types.Schema(type="string"),
-                "booking_id": types.Schema(type="string"),
+            "description": "Automatically detected user intent",
+        },
+        "confidence": {
+            "type": "number",
+            "description": "Confidence score 0.0-1.0 for detected intent",
+        },
+        "missing_data": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "List of required data still needed from user",
+        },
+        "suggested_actions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "List of next steps or options for user",
+        },
+        "response_text": {
+            "type": "string",
+            "description": "Main response text to user (conversational format)",
+        },
+        "data_extracted": {
+            "type": "object",
+            "properties": {
+                "service_type": {"type": "string"},
+                "booking_date": {"type": "string"},
+                "booking_time": {"type": "string"},
+                "customer_email": {"type": "string"},
+                "customer_name": {"type": "string"},
+                "booking_id": {"type": "string"},
             },
-            description="Extracted booking-related data from conversation",
-        ),
+            "description": "Extracted booking-related data from conversation",
+        },
     },
-    required=["intent", "confidence", "response_text"],
-)
+    "required": ["intent", "confidence", "response_text"],
+}
 
 
 class BookingAgent(BaseAgent):
@@ -422,6 +424,11 @@ class BookingAgent(BaseAgent):
             )
 
             # Build generation config with system instruction
+            if self.generation_config is None:
+                raise RuntimeError(
+                    "generation_config not initialized. Call initialize() first."
+                )
+
             config_dict = {
                 "temperature": self.generation_config.temperature,
                 "top_k": self.generation_config.top_k,
@@ -502,6 +509,11 @@ class BookingAgent(BaseAgent):
 
             # Generate initial response with system_instruction in config
             # (uses response_schema for intent detection)
+            if self.client is None:
+                raise RuntimeError(
+                    "Gemini client not initialized. Call initialize() first."
+                )
+
             response = await self.client.aio.models.generate_content(
                 model=self.model_name,
                 contents=contents,  # type: ignore[arg-type]
@@ -586,6 +598,10 @@ class BookingAgent(BaseAgent):
         Returns:
             Final text response.
         """
+        if self.client is None:
+            raise RuntimeError(
+                "Gemini client not initialized. Call initialize() first."
+            )
         if not self.function_call_handler:
             raise RuntimeError("Function call handler not available")
 
@@ -929,6 +945,12 @@ Requirements:
 Return ONLY the message itself - nothing else."""
 
         try:
+            # Validate client is initialized
+            if self.client is None:
+                raise RuntimeError(
+                    "Gemini client not initialized. Call initialize() first."
+                )
+
             # Generate response in user's language via Gemini 2.5
             response = await self.client.aio.models.generate_content(
                 model=self.model_name,
@@ -945,6 +967,9 @@ Return ONLY the message itself - nothing else."""
             )
 
             # Extract message and ensure it's clean
+            if response.text is None:
+                raise ValueError(f"Gemini returned None response for language {self.language}")
+
             message = response.text.strip()
 
             # Validate we got content
