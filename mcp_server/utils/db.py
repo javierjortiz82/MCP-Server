@@ -32,6 +32,32 @@ else:
 _pool = None
 
 
+def _validate_connection(conn: psycopg2.extensions.connection) -> bool:
+    """Validate if a database connection is alive by executing a simple query.
+
+    Sends a ping test query to PostgreSQL to detect dead connections that may
+    have been closed by the server due to idle timeout or server restarts.
+
+    Args:
+        conn: PostgreSQL connection to validate
+
+    Returns:
+        bool: True if connection is valid and responsive, False if dead/unusable
+
+    Note:
+        This function is used internally to prevent "server closed the connection"
+        errors by detecting dead connections before they're used.
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            cur.fetchone()
+        return True
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        # Connection is dead or unreachable
+        return False
+
+
 def init_db(minconn: int = 1, maxconn: int = 5) -> None:
     """Initialize database connection pool and register pgvector type.
 
@@ -110,6 +136,10 @@ def init_db(minconn: int = 1, maxconn: int = 5) -> None:
 def get_conn() -> Iterator[psycopg2.extensions.connection]:
     """Context manager that provides a database connection from the pool.
 
+    Validates connection health before yielding. If connection is dead (closed by
+    server due to idle timeout or restart), automatically returns it to the pool
+    as closed and retrieves a fresh connection.
+
     Yields a connection with autocommit disabled. The caller is responsible for
     committing, rolling back, or closing the connection as needed. The connection
     is automatically returned to the pool when the context exits.
@@ -129,7 +159,26 @@ def get_conn() -> Iterator[psycopg2.extensions.connection]:
     if _pool is None:
         init_db()
     assert _pool is not None  # For type checker
+
     conn = _pool.getconn()
+
+    # Validate connection before use (detect stale connections from pool)
+    if not _validate_connection(conn):
+        # Connection is dead - close it and get a fresh one
+        try:
+            conn.close()
+        except Exception:
+            pass  # Already closed, ignore
+        _pool.putconn(conn, close=True)  # Return to pool as closed
+
+        if metrics:
+            metrics.increment_counter("db_connection_dead_detected", 1)
+        if structured_logger:
+            structured_logger.warning("Dead connection detected from pool, retrieving fresh connection")
+
+        # Get a fresh connection
+        conn = _pool.getconn()
+
     try:
         yield conn
     finally:
@@ -139,6 +188,10 @@ def get_conn() -> Iterator[psycopg2.extensions.connection]:
 def fetchone(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> dict | None:
     """Execute a query and return a single row as a dictionary.
 
+    Includes automatic retry logic for connection errors. If a connection is
+    unexpectedly closed by the server, the function will automatically retry
+    up to 2 times before giving up.
+
     Args:
         query: SQL query string (can include %s placeholders)
         params: Tuple of parameters for query placeholders (default: empty tuple)
@@ -146,6 +199,9 @@ def fetchone(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> 
 
     Returns:
         Dictionary with column names as keys and values, or None if no row found
+
+    Raises:
+        psycopg2.Error: If query fails after all retry attempts
 
     Example:
         >>> # SELECT query (no commit needed)
@@ -156,37 +212,64 @@ def fetchone(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> 
         >>> # INSERT with RETURNING (commit required)
         >>> result = fetchone("INSERT INTO products (...) VALUES (...) RETURNING id", (...), commit=True)
     """
+    max_retries = 2
+    latency_ctx = None
+
     try:
-        # Track query execution with metrics (OPCIÓN 9)
-        if metrics:
-            latency_ctx = metrics.record_latency("db_query_fetchone_latency")
-            latency_ctx.__enter__()
-        else:
-            latency_ctx = None
+        for attempt in range(max_retries):
+            try:
+                # Track query execution with metrics (OPCIÓN 9)
+                if metrics and attempt == 0:  # Only start latency on first attempt
+                    latency_ctx = metrics.record_latency("db_query_fetchone_latency")
+                    latency_ctx.__enter__()
 
-        if metrics:
-            metrics.increment_counter("db_query_fetchone_attempts", 1)
+                if metrics:
+                    metrics.increment_counter("db_query_fetchone_attempts", 1)
 
-        with get_conn() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(query, params)
-            if commit:
-                conn.commit()
-            row = cur.fetchone()
+                with get_conn() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(query, params)
+                    if commit:
+                        conn.commit()
+                    row = cur.fetchone()
 
-            if metrics:
-                metrics.increment_counter("db_query_fetchone_success", 1)
-                if row:
-                    metrics.increment_counter("db_query_fetchone_found", 1)
+                    if metrics:
+                        metrics.increment_counter("db_query_fetchone_success", 1)
+                        if row:
+                            metrics.increment_counter("db_query_fetchone_found", 1)
+                        else:
+                            metrics.increment_counter("db_query_fetchone_not_found", 1)
+
+                    return dict(row) if row else None
+
+            except psycopg2.OperationalError as e:
+                # Connection error - eligible for retry
+                if attempt < max_retries - 1:
+                    if structured_logger:
+                        structured_logger.warning(
+                            "Database connection error, retrying",
+                            attempt=attempt + 1,
+                            max_retries=max_retries,
+                            error=str(e)
+                        )
+                    if metrics:
+                        metrics.increment_counter("db_connection_retry", 1)
+                    continue  # Retry
                 else:
-                    metrics.increment_counter("db_query_fetchone_not_found", 1)
-
-            return dict(row) if row else None
+                    # Final attempt failed
+                    if metrics:
+                        metrics.increment_counter("db_connection_retry_exhausted", 1)
+                    if metrics:
+                        metrics.increment_counter("db_query_fetchone_failure", 1)
+                        metrics.increment_counter(f"db_query_error_{type(e).__name__}", 1)
+                    if structured_logger:
+                        structured_logger.exception("Database fetchone query failed after retries")
+                    raise
 
     except Exception as e:
-        if metrics:
+        if metrics and attempt == max_retries - 1:  # Only count on final attempt
             metrics.increment_counter("db_query_fetchone_failure", 1)
             metrics.increment_counter(f"db_query_error_{type(e).__name__}", 1)
-        if structured_logger:
+        if structured_logger and not isinstance(e, psycopg2.OperationalError):
             structured_logger.exception("Database fetchone query failed")
         raise
 
@@ -198,6 +281,10 @@ def fetchone(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> 
 def fetchall(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> list[dict]:
     """Execute a query and return all rows as a list of dictionaries.
 
+    Includes automatic retry logic for connection errors. If a connection is
+    unexpectedly closed by the server, the function will automatically retry
+    up to 2 times before giving up.
+
     Args:
         query: SQL query string (can include %s placeholders)
         params: Tuple of parameters for query placeholders (default: empty tuple)
@@ -206,40 +293,70 @@ def fetchall(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> 
     Returns:
         List of dictionaries, each representing a row with column names as keys
 
+    Raises:
+        psycopg2.Error: If query fails after all retry attempts
+
     Example:
         >>> # SELECT query (no commit needed)
         >>> results = fetchall("SELECT * FROM products WHERE category = %s", ("Electronics",))
         >>> for product in results:
         ...     print(product['name'], product['price'])
     """
+    max_retries = 2
+    latency_ctx = None
+
     try:
-        # Track query execution with metrics (OPCIÓN 9)
-        if metrics:
-            latency_ctx = metrics.record_latency("db_query_fetchall_latency")
-            latency_ctx.__enter__()
-        else:
-            latency_ctx = None
+        for attempt in range(max_retries):
+            try:
+                # Track query execution with metrics (OPCIÓN 9)
+                if metrics and attempt == 0:  # Only start latency on first attempt
+                    latency_ctx = metrics.record_latency("db_query_fetchall_latency")
+                    latency_ctx.__enter__()
 
-        if metrics:
-            metrics.increment_counter("db_query_fetchall_attempts", 1)
+                if metrics:
+                    metrics.increment_counter("db_query_fetchall_attempts", 1)
 
-        with get_conn() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(query, params)
-            if commit:
-                conn.commit()
-            rows = cur.fetchall()
+                with get_conn() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(query, params)
+                    if commit:
+                        conn.commit()
+                    rows = cur.fetchall()
 
-            if metrics:
-                metrics.increment_counter("db_query_fetchall_success", 1)
-                metrics.set_gauge("db_query_fetchall_row_count", len(rows))
+                    if metrics:
+                        metrics.increment_counter("db_query_fetchall_success", 1)
+                        metrics.set_gauge("db_query_fetchall_row_count", len(rows))
 
-            return [dict(r) for r in rows]
+                    return [dict(r) for r in rows]
+
+            except psycopg2.OperationalError as e:
+                # Connection error - eligible for retry
+                if attempt < max_retries - 1:
+                    if structured_logger:
+                        structured_logger.warning(
+                            "Database connection error, retrying",
+                            attempt=attempt + 1,
+                            max_retries=max_retries,
+                            error=str(e)
+                        )
+                    if metrics:
+                        metrics.increment_counter("db_connection_retry", 1)
+                    continue  # Retry
+                else:
+                    # Final attempt failed
+                    if metrics:
+                        metrics.increment_counter("db_connection_retry_exhausted", 1)
+                    if metrics:
+                        metrics.increment_counter("db_query_fetchall_failure", 1)
+                        metrics.increment_counter(f"db_query_error_{type(e).__name__}", 1)
+                    if structured_logger:
+                        structured_logger.exception("Database fetchall query failed after retries")
+                    raise
 
     except Exception as e:
-        if metrics:
+        if metrics and attempt == max_retries - 1:  # Only count on final attempt
             metrics.increment_counter("db_query_fetchall_failure", 1)
             metrics.increment_counter(f"db_query_error_{type(e).__name__}", 1)
-        if structured_logger:
+        if structured_logger and not isinstance(e, psycopg2.OperationalError):
             structured_logger.exception("Database fetchall query failed")
         raise
 
@@ -251,42 +368,72 @@ def fetchall(query: str, params: tuple[Any, ...] = (), commit: bool = False) -> 
 def execute(query: str, params: tuple[Any, ...] = ()) -> None:
     """Execute a query without returning results (INSERT, UPDATE, DELETE, etc.).
 
-    Automatically commits the transaction after successful execution.
+    Automatically commits the transaction after successful execution. Includes
+    automatic retry logic for connection errors.
 
     Args:
         query: SQL query string (can include %s placeholders)
         params: Tuple of parameters for query placeholders (default: empty tuple)
 
     Raises:
-        Exception: If query execution fails, transaction will be rolled back automatically
+        psycopg2.Error: If query execution fails after all retry attempts
 
     Example:
         >>> execute("UPDATE products SET price = %s WHERE id = %s", (99.99, 42))
         >>> execute("DELETE FROM products WHERE sku = %s", ("OLD-001",))
     """
+    max_retries = 2
+    latency_ctx = None
+
     try:
-        # Track query execution with metrics (OPCIÓN 9)
-        if metrics:
-            latency_ctx = metrics.record_latency("db_query_execute_latency")
-            latency_ctx.__enter__()
-        else:
-            latency_ctx = None
+        for attempt in range(max_retries):
+            try:
+                # Track query execution with metrics (OPCIÓN 9)
+                if metrics and attempt == 0:  # Only start latency on first attempt
+                    latency_ctx = metrics.record_latency("db_query_execute_latency")
+                    latency_ctx.__enter__()
 
-        if metrics:
-            metrics.increment_counter("db_query_execute_attempts", 1)
+                if metrics:
+                    metrics.increment_counter("db_query_execute_attempts", 1)
 
-        with get_conn() as conn, conn.cursor() as cur:
-            cur.execute(query, params)
-            conn.commit()
+                with get_conn() as conn, conn.cursor() as cur:
+                    cur.execute(query, params)
+                    conn.commit()
 
-            if metrics:
-                metrics.increment_counter("db_query_execute_success", 1)
+                    if metrics:
+                        metrics.increment_counter("db_query_execute_success", 1)
+
+                return  # Success
+
+            except psycopg2.OperationalError as e:
+                # Connection error - eligible for retry
+                if attempt < max_retries - 1:
+                    if structured_logger:
+                        structured_logger.warning(
+                            "Database connection error, retrying",
+                            attempt=attempt + 1,
+                            max_retries=max_retries,
+                            error=str(e)
+                        )
+                    if metrics:
+                        metrics.increment_counter("db_connection_retry", 1)
+                    continue  # Retry
+                else:
+                    # Final attempt failed
+                    if metrics:
+                        metrics.increment_counter("db_connection_retry_exhausted", 1)
+                    if metrics:
+                        metrics.increment_counter("db_query_execute_failure", 1)
+                        metrics.increment_counter(f"db_query_error_{type(e).__name__}", 1)
+                    if structured_logger:
+                        structured_logger.exception("Database execute query failed after retries")
+                    raise
 
     except Exception as e:
-        if metrics:
+        if metrics and attempt == max_retries - 1:  # Only count on final attempt
             metrics.increment_counter("db_query_execute_failure", 1)
             metrics.increment_counter(f"db_query_error_{type(e).__name__}", 1)
-        if structured_logger:
+        if structured_logger and not isinstance(e, psycopg2.OperationalError):
             structured_logger.exception("Database execute query failed")
         raise
 
