@@ -44,18 +44,20 @@ help:
 	@echo "  2. make env-check              # Verify all .env files exist"
 	@echo "  3. nano DockerConfig/.env      # Edit: POSTGRES_PASSWORD, PGADMIN_PASSWORD"
 	@echo "  4. nano mcp_server/.env        # Edit: GOOGLE_API_KEY, DATABASE_URL"
-	@echo "  5. nano email_service/.env     # Edit: GOOGLE_API_KEY, SMTP_*"
-	@echo "  6. make docker-start-safe      # Validate + Start Docker"
-	@echo "  7. make db                     # Initialize database"
+	@echo "  5. nano demo_agent/.env        # Edit: GOOGLE_API_KEY, DATABASE_URL, RECAPTCHA_*"
+	@echo "  6. nano email_service/.env     # Edit: GOOGLE_API_KEY, SMTP_*"
+	@echo "  7. make docker-start-safe      # Validate + Start Docker"
+	@echo "  8. make db                     # Initialize database"
 	@echo ""
 	@echo "$(CYAN)OPTION B: Local Development (No Docker)$(NC)"
 	@echo "  1. make setup-env              # Create .env files from templates"
 	@echo "  2. make env-check              # Verify all .env files exist"
 	@echo "  3. make install                # Install dependencies"
 	@echo "  4. nano mcp_server/.env        # Edit: GOOGLE_API_KEY, DATABASE_URL (local PostgreSQL)"
-	@echo "  5. nano email_service/.env     # Edit: SMTP_*, GOOGLE_API_KEY"
-	@echo "  6. make db                     # Initialize database"
-	@echo "  7. make dev                    # Start all services"
+	@echo "  5. nano demo_agent/.env        # Edit: GOOGLE_API_KEY, DATABASE_URL, RECAPTCHA_*"
+	@echo "  6. nano email_service/.env     # Edit: SMTP_*, GOOGLE_API_KEY"
+	@echo "  7. make db                     # Initialize database"
+	@echo "  8. make dev                    # Start all services"
 	@echo ""
 	@echo "$(CYAN)OPTION C: Quick Test (Skip Docker/Local Setup)$(NC)"
 	@echo "  1. make install                # Install dependencies"
@@ -87,7 +89,7 @@ help:
 	@echo "  $(GREEN)make docker-ps$(NC)         Show container status (or SERVICE=<name>)"
 	@echo "  $(GREEN)make docker-logs$(NC)       Show Docker logs (follow mode, or SERVICE=<name>)"
 	@echo "  $(GREEN)make docker-clean$(NC)      Remove containers + volumes (or SERVICE=<name>)"
-	@echo "  $(CYAN)💡 Services: postgres, pgadmin, mcp-server, email-worker$(NC)"
+	@echo "  $(CYAN)💡 Services: postgres, pgadmin, mcp-server, demo-agent, email-worker$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Services (Local):$(NC)"
 	@echo "  $(GREEN)make start$(NC)             Start all local services"
@@ -128,6 +130,7 @@ install:
 	@$(ACTIVATE) && $(PIP) install -r requirements.txt && \
 		$(PIP) install -r agent/requirements.txt && \
 		$(PIP) install -r client_mcp/requirements.txt && \
+		$(PIP) install -r demo_agent/requirements.txt && \
 		$(PIP) install -r email_service/requirements.txt && \
 		$(PIP) install -r mcp_server/requirements.txt || { echo "$(RED)Failed to install dependencies$(NC)"; exit 1; }
 	@echo "$(YELLOW)Installing code review tools...$(NC)"
@@ -142,6 +145,7 @@ setup-env:
 	@echo "$(YELLOW)Creating .env files from .env.example templates...$(NC)"
 	@test -f DockerConfig/.env.example || { echo "$(RED)DockerConfig/.env.example not found$(NC)"; exit 1; }
 	@test -f mcp_server/.env.example || { echo "$(RED)mcp_server/.env.example not found$(NC)"; exit 1; }
+	@test -f demo_agent/.env.example || { echo "$(RED)demo_agent/.env.example not found$(NC)"; exit 1; }
 	@test -f email_service/.env.example || { echo "$(RED)email_service/.env.example not found$(NC)"; exit 1; }
 	@# Create .env files if they don't exist
 	@if [ ! -f DockerConfig/.env ]; then \
@@ -155,6 +159,12 @@ setup-env:
 		echo "$(GREEN)✓ Created mcp_server/.env$(NC)"; \
 	else \
 		echo "$(YELLOW)⚠ mcp_server/.env already exists (skipped)$(NC)"; \
+	fi
+	@if [ ! -f demo_agent/.env ]; then \
+		cp demo_agent/.env.example demo_agent/.env; \
+		echo "$(GREEN)✓ Created demo_agent/.env$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠ demo_agent/.env already exists (skipped)$(NC)"; \
 	fi
 	@if [ ! -f email_service/.env ]; then \
 		cp email_service/.env.example email_service/.env; \
@@ -181,6 +191,7 @@ setup-env:
 	@echo "$(YELLOW)⚠️  IMPORTANT: Edit the created .env files with your actual credentials:$(NC)"
 	@echo "   • DockerConfig/.env - Database passwords"
 	@echo "   • mcp_server/.env - Google API Key, Database URL"
+	@echo "   • demo_agent/.env - Google API Key, Database URL, reCAPTCHA keys"
 	@echo "   • email_service/.env - SMTP credentials, Google API Key"
 	@echo "   • agent/.env, client_mcp/.env - API keys (if needed)"
 	@echo ""
@@ -194,11 +205,11 @@ env-check:
 	@echo ""
 	@MISSING=0; \
 	TOTAL=0; \
-	for dir in DockerConfig mcp_server email_service agent client_mcp SQL; do \
+	for dir in DockerConfig mcp_server demo_agent email_service agent client_mcp SQL; do \
 		TOTAL=$$((TOTAL + 1)); \
 		if [ -d "$$dir" ]; then \
 			if [ -f "$$dir/.env" ]; then \
-				echo "$(GREEN)✓$$dir/.env$(NC)                 - Found"; \
+				echo "$(GREEN)✓ $$dir/.env$(NC)                 - Found"; \
 			else \
 				echo "$(RED)✗ $$dir/.env$(NC)               - Missing (run: make setup-env)"; \
 				MISSING=$$((MISSING + 1)); \
@@ -213,6 +224,7 @@ env-check:
 		echo "  1. Edit .env files with your credentials:"; \
 		echo "     - DockerConfig/.env: POSTGRES_PASSWORD, PGADMIN_PASSWORD"; \
 		echo "     - mcp_server/.env: GOOGLE_API_KEY, DATABASE_URL"; \
+		echo "     - demo_agent/.env: GOOGLE_API_KEY, DATABASE_URL, RECAPTCHA_*"; \
 		echo "     - email_service/.env: GOOGLE_API_KEY, SMTP_*"; \
 		echo ""; \
 		echo "  2. Validate configuration:"; \
@@ -254,45 +266,49 @@ lint:
 	@echo "$(YELLOW)Running linter (ruff)...$(NC)"
 	@test -d client_mcp || { echo "$(RED)client_mcp directory not found$(NC)"; exit 1; }
 	@test -d agent || { echo "$(RED)agent directory not found$(NC)"; exit 1; }
-	@$(ACTIVATE) && ruff check client_mcp/ agent/ test/ || { echo "$(RED)Linting failed$(NC)"; exit 1; }
+	@test -d demo_agent || { echo "$(RED)demo_agent directory not found$(NC)"; exit 1; }
+	@$(ACTIVATE) && ruff check client_mcp/ agent/ demo_agent/ test/ || { echo "$(RED)Linting failed$(NC)"; exit 1; }
 
 format:
 	@echo "$(YELLOW)Formatting code (ruff)...$(NC)"
 	@test -d client_mcp || { echo "$(RED)client_mcp directory not found$(NC)"; exit 1; }
 	@test -d agent || { echo "$(RED)agent directory not found$(NC)"; exit 1; }
-	@$(ACTIVATE) && ruff format client_mcp/ agent/ test/ || { echo "$(RED)Formatting failed$(NC)"; exit 1; }
+	@test -d demo_agent || { echo "$(RED)demo_agent directory not found$(NC)"; exit 1; }
+	@$(ACTIVATE) && ruff format client_mcp/ agent/ demo_agent/ test/ || { echo "$(RED)Formatting failed$(NC)"; exit 1; }
 
 check:
 	@echo "$(YELLOW)Running type checker (mypy)...$(NC)"
 	@test -d client_mcp || { echo "$(RED)client_mcp directory not found$(NC)"; exit 1; }
 	@test -d agent || { echo "$(RED)agent directory not found$(NC)"; exit 1; }
-	@$(ACTIVATE) && mypy --strict client_mcp/ agent/ || { echo "$(RED)Type checking failed$(NC)"; exit 1; }
+	@test -d demo_agent || { echo "$(RED)demo_agent directory not found$(NC)"; exit 1; }
+	@$(ACTIVATE) && mypy --strict client_mcp/ agent/ demo_agent/ || { echo "$(RED)Type checking failed$(NC)"; exit 1; }
 
 # Professional Code Review
 review:
 	@test -d client_mcp || { echo "$(RED)client_mcp directory not found$(NC)"; exit 1; }
 	@test -d agent || { echo "$(RED)agent directory not found$(NC)"; exit 1; }
+	@test -d demo_agent || { echo "$(RED)demo_agent directory not found$(NC)"; exit 1; }
 	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
 	@echo "$(BLUE)Professional Code Review - All Best Practices$(NC)"
 	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
 	@echo ""
 	@echo "$(YELLOW)[1/6] Linting (Ruff - PEP8, style, complexity)...$(NC)"
-	@$(ACTIVATE) && ruff check client_mcp/ agent/ test/ --show-settings || true
+	@$(ACTIVATE) && ruff check client_mcp/ agent/ demo_agent/ test/ --show-settings || true
 	@echo ""
 	@echo "$(YELLOW)[2/6] Import sorting (isort - Organized imports)...$(NC)"
-	@$(ACTIVATE) && isort --check-only --diff client_mcp/ agent/ test/ || true
+	@$(ACTIVATE) && isort --check-only --diff client_mcp/ agent/ demo_agent/ test/ || true
 	@echo ""
 	@echo "$(YELLOW)[3/6] Type checking (Mypy - Modern type hints, PEP 604)...$(NC)"
-	@$(ACTIVATE) && mypy --strict --show-error-codes client_mcp/ agent/ || true
+	@$(ACTIVATE) && mypy --strict --show-error-codes client_mcp/ agent/ demo_agent/ || true
 	@echo ""
 	@echo "$(YELLOW)[4/6] Dead code detection (Vulture - Unused variables/imports)...$(NC)"
-	@$(ACTIVATE) && vulture client_mcp/ agent/ test/ --min-confidence 80 || true
+	@$(ACTIVATE) && vulture client_mcp/ agent/ demo_agent/ test/ --min-confidence 80 || true
 	@echo ""
 	@echo "$(YELLOW)[5/6] Security analysis (Bandit - Security vulnerabilities)...$(NC)"
-	@$(ACTIVATE) && bandit -r client_mcp/ agent/ -ll || true
+	@$(ACTIVATE) && bandit -r client_mcp/ agent/ demo_agent/ -ll || true
 	@echo ""
 	@echo "$(YELLOW)[6/6] Code formatting check (Ruff - F-strings, no hardcode)...$(NC)"
-	@$(ACTIVATE) && ruff format --check client_mcp/ agent/ test/ || true
+	@$(ACTIVATE) && ruff format --check client_mcp/ agent/ demo_agent/ test/ || true
 	@echo ""
 	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
 	@echo "$(GREEN)✓ Professional code review complete$(NC)"
@@ -301,33 +317,35 @@ review:
 review-fix:
 	@test -d client_mcp || { echo "$(RED)client_mcp directory not found$(NC)"; exit 1; }
 	@test -d agent || { echo "$(RED)agent directory not found$(NC)"; exit 1; }
+	@test -d demo_agent || { echo "$(RED)demo_agent directory not found$(NC)"; exit 1; }
 	@echo "$(BLUE)Auto-fixing code issues...$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Fixing with Ruff...$(NC)"
-	@$(ACTIVATE) && ruff check --fix --unsafe-fixes client_mcp/ agent/ test/ || true
+	@$(ACTIVATE) && ruff check --fix --unsafe-fixes client_mcp/ agent/ demo_agent/ test/ || true
 	@echo ""
 	@echo "$(YELLOW)Formatting with Ruff...$(NC)"
-	@$(ACTIVATE) && ruff format client_mcp/ agent/ test/ || true
+	@$(ACTIVATE) && ruff format client_mcp/ agent/ demo_agent/ test/ || true
 	@echo ""
 	@echo "$(YELLOW)Sorting imports with isort...$(NC)"
-	@$(ACTIVATE) && isort client_mcp/ agent/ test/ || true
+	@$(ACTIVATE) && isort client_mcp/ agent/ demo_agent/ test/ || true
 	@echo ""
 	@echo "$(GREEN)✓ Auto-fix complete$(NC)"
 
 review-report:
 	@test -d client_mcp || { echo "$(RED)client_mcp directory not found$(NC)"; exit 1; }
 	@test -d agent || { echo "$(RED)agent directory not found$(NC)"; exit 1; }
+	@test -d demo_agent || { echo "$(RED)demo_agent directory not found$(NC)"; exit 1; }
 	@echo "$(BLUE)Generating detailed review report...$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Ruff Report (850+ rules):$(NC)"
-	@$(ACTIVATE) && ruff check client_mcp/ agent/ test/ --statistics 2>/dev/null || true
+	@$(ACTIVATE) && ruff check client_mcp/ agent/ demo_agent/ test/ --statistics 2>/dev/null || true
 	@echo ""
 	@echo "$(YELLOW)Type Coverage Report:$(NC)"
-	@$(ACTIVATE) && python3 -c "print('Run: mypy --stats client_mcp/ agent/')" || true
-	@$(ACTIVATE) && mypy --stats client_mcp/ agent/ 2>/dev/null || true
+	@$(ACTIVATE) && python3 -c "print('Run: mypy --stats client_mcp/ agent/ demo_agent/')" || true
+	@$(ACTIVATE) && mypy --stats client_mcp/ agent/ demo_agent/ 2>/dev/null || true
 	@echo ""
 	@echo "$(YELLOW)Dead Code Report:$(NC)"
-	@$(ACTIVATE) && vulture client_mcp/ agent/ test/ --min-confidence 60 2>/dev/null || true
+	@$(ACTIVATE) && vulture client_mcp/ agent/ demo_agent/ test/ --min-confidence 60 2>/dev/null || true
 	@echo ""
 	@echo "$(GREEN)✓ Review report generated$(NC)"
 
@@ -360,7 +378,7 @@ docker-start:
 		docker-compose -f DockerConfig/docker-compose.yml up -d || { echo "$(RED)Failed to start Docker containers$(NC)"; exit 1; }; \
 		echo "$(GREEN)✓ All Docker containers started$(NC)"; \
 		echo "$(CYAN)Tip: Use 'make docker-start SERVICE=<name>' to start a specific service$(NC)"; \
-		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, demo-agent, email-worker$(NC)"; \
 	else \
 		echo "$(YELLOW)Starting service: $(SERVICE)$(NC)"; \
 		docker-compose -f DockerConfig/docker-compose.yml up -d $(SERVICE) || { echo "$(RED)Failed to start service: $(SERVICE)$(NC)"; exit 1; }; \
@@ -377,7 +395,7 @@ docker-stop:
 	else \
 		docker-compose -f DockerConfig/docker-compose.yml stop $(SERVICE) || { echo "$(RED)Failed to stop service: $(SERVICE)$(NC)"; exit 1; }; \
 		echo "$(GREEN)✓ Service '$(SERVICE)' stopped$(NC)"; \
-		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, demo-agent, email-worker$(NC)"; \
 	fi
 
 docker-build:
@@ -388,7 +406,7 @@ docker-build:
 		docker-compose -f DockerConfig/docker-compose.yml build || { echo "$(RED)Failed to build Docker images$(NC)"; exit 1; }; \
 		echo "$(GREEN)✓ All Docker images built$(NC)"; \
 		echo "$(CYAN)Tip: Use 'make docker-build SERVICE=<name>' to build a specific service$(NC)"; \
-		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, demo-agent, email-worker$(NC)"; \
 	else \
 		echo "$(YELLOW)Building service: $(SERVICE)$(NC)"; \
 		docker-compose -f DockerConfig/docker-compose.yml build $(SERVICE) || { echo "$(RED)Failed to build service: $(SERVICE)$(NC)"; exit 1; }; \
@@ -403,7 +421,7 @@ docker-restart:
 		docker-compose -f DockerConfig/docker-compose.yml restart || { echo "$(RED)Failed to restart Docker containers$(NC)"; exit 1; }; \
 		echo "$(GREEN)✓ All Docker containers restarted$(NC)"; \
 		echo "$(CYAN)Tip: Use 'make docker-restart SERVICE=<name>' to restart a specific service$(NC)"; \
-		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, demo-agent, email-worker$(NC)"; \
 	else \
 		echo "$(YELLOW)Restarting service: $(SERVICE)$(NC)"; \
 		docker-compose -f DockerConfig/docker-compose.yml restart $(SERVICE) || { echo "$(RED)Failed to restart service: $(SERVICE)$(NC)"; exit 1; }; \
@@ -416,7 +434,7 @@ docker-logs:
 	@if [ -z "$(SERVICE)" ]; then \
 		echo "$(YELLOW)Following logs for all Docker containers...$(NC)"; \
 		echo "$(CYAN)Tip: Use 'make docker-logs SERVICE=<name>' to view a specific service$(NC)"; \
-		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, demo-agent, email-worker$(NC)"; \
 		echo ""; \
 		docker-compose -f DockerConfig/docker-compose.yml logs -f; \
 	else \
@@ -432,7 +450,7 @@ docker-ps:
 		docker-compose -f DockerConfig/docker-compose.yml ps; \
 		echo ""; \
 		echo "$(CYAN)Tip: Use 'make docker-ps SERVICE=<name>' to view a specific service$(NC)"; \
-		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, demo-agent, email-worker$(NC)"; \
 	else \
 		echo "$(YELLOW)Docker container status for service: $(SERVICE)$(NC)"; \
 		docker-compose -f DockerConfig/docker-compose.yml ps $(SERVICE) || { echo "$(RED)Failed to get status for service: $(SERVICE)$(NC)"; exit 1; }; \
@@ -446,7 +464,7 @@ docker-clean:
 		docker-compose -f DockerConfig/docker-compose.yml down -v --rmi all || { echo "$(RED)Failed to clean Docker containers$(NC)"; exit 1; }; \
 		echo "$(GREEN)✓ Removed: containers, networks, volumes, and images$(NC)"; \
 		echo "$(CYAN)Tip: Use 'make docker-clean SERVICE=<name>' to remove a specific service$(NC)"; \
-		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, email-worker$(NC)"; \
+		echo "$(CYAN)Available services: postgres, pgadmin, mcp-server, demo-agent, email-worker$(NC)"; \
 	else \
 		echo "$(YELLOW)Removing service: $(SERVICE)$(NC)"; \
 		docker-compose -f DockerConfig/docker-compose.yml rm --stop --force -v $(SERVICE) || { echo "$(RED)Failed to remove service: $(SERVICE)$(NC)"; exit 1; }; \

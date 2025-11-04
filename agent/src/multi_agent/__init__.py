@@ -65,6 +65,17 @@ from multi_agent.booking_agent import BookingAgent  # noqa: E402
 from multi_agent.general_agent import GeneralAgent  # noqa: E402
 from multi_agent.sales_agent import SalesAgent  # noqa: E402
 
+# Import exceptions from gemini_agent
+from gemini_agent.exceptions import (  # noqa: E402
+    AgentError,
+    ConfigurationError,
+    ConnectionError,
+    GenerationError,
+    InitializationError,
+    PromptError,
+    ValidationError,
+)
+
 # Import MemoryManager from mcp_server using absolute file path
 # NOTE: Complex import required due to client_mcp/utils and mcp_server/utils namespace conflict
 try:
@@ -131,6 +142,14 @@ __all__ = [
     "Intent",
     "MemoryManager",
     "SalesAgent",
+    # Exceptions
+    "AgentError",
+    "ConfigurationError",
+    "ConnectionError",
+    "GenerationError",
+    "InitializationError",
+    "PromptError",
+    "ValidationError",
 ]
 
 __version__ = "3.1.0"  # Added MemoryManager

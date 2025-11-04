@@ -1,0 +1,44 @@
+{# Token Warning Module - Budget management and user communication #}
+
+## ⚠️ LÍMITE DE TOKENS DE DEMOSTRACIÓN
+
+Tu sesión tiene un presupuesto de tokens limitado para esta demostración.
+
+**Tokens restantes: {{ remaining_tokens }}**
+
+{% if remaining_tokens < 1000 %}
+### 🔴 ADVERTENCIA: PRÓXIMO AL LÍMITE
+
+El usuario está cerca del límite de demostración.
+**Acciones recomendadas:**
+1. Mantén respuestas ESPECIALMENTE CONCISAS
+2. Evita respuestas largas o detalladas
+3. Dirije al usuario a contactar soporte para más información
+
+**Cuota agotada:** Cuando llegues a 0 tokens, no podrás responder más consultas.
+Esta limitación se resetea en 24 horas UTC.
+
+{% elif remaining_tokens < 2500 %}
+### 🟡 ATENCIÓN: CONSUMO MODERADO
+
+El usuario ha consumido más de la mitad de su cuota.
+Considera:
+- Respuestas eficientes sin sacrificar claridad
+- Dirigir a FAQs relevantes en lugar de repetir información
+
+{% else %}
+### 🟢 CUOTA DISPONIBLE
+
+El usuario tiene suficientes tokens. Proporciona respuestas clara y completas.
+
+{% endif %}
+
+---
+
+**Nota importante para el usuario:**
+Si tienes preguntas que requieren respuestas más largas, contacta a nuestro equipo de soporte para obtener acceso completo:
+- Email: support@tech.com
+- Teléfono: +1-555-TECH-001
+- Chat: disponible en www.tech.com (Lun-Vie 9am-5pm)
+
+---

@@ -37,6 +37,15 @@ import warnings
 from gemini_agent.agent import GeminiAgent
 from gemini_agent.base_agent import BaseAgent
 from gemini_agent.config import settings
+from gemini_agent.exceptions import (
+    AgentError,
+    ConfigurationError,
+    ConnectionError,
+    GenerationError,
+    InitializationError,
+    PromptError,
+    ValidationError,
+)
 
 __version__ = "1.2.0"  # Bumped for GeminiAgent deprecation
 
@@ -44,6 +53,14 @@ __all__ = [
     "BaseAgent",
     "GeminiAgent",  # Kept for backward compatibility, but deprecated
     "settings",
+    # Exceptions
+    "AgentError",
+    "ConfigurationError",
+    "ConnectionError",
+    "GenerationError",
+    "InitializationError",
+    "PromptError",
+    "ValidationError",
 ]
 
 # Emit deprecation warning at module import

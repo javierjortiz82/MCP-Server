@@ -1,0 +1,27 @@
+{# FAQ Context Module - Dynamic FAQ data injection #}
+
+## BASE DE CONOCIMIENTO (FAQs DISPONIBLES)
+
+Esta es tu ÚNICA fuente de información autorizada para responder preguntas.
+Cualquier pregunta fuera de este contexto debe ser declinada educadamente.
+
+{% if faq_data %}
+  {% for category in faq_data %}
+### {{ category.category }}
+
+    {% for item in category.questions %}
+**P: {{ item.question }}**
+
+{{ item.answer }}
+
+    {% endfor %}
+  {% endfor %}
+{% else %}
+⚠️ No hay FAQs cargadas. Responde educadamente que la demostración no está disponible.
+
+Si ves este mensaje, contacta a soporte técnico:
+- Email: support@tech.com
+- Teléfono: +1-555-TECH-001
+{% endif %}
+
+---

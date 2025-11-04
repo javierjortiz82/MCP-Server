@@ -1,0 +1,180 @@
+# Demo FAQs - Frequently Asked Questions for Demo Agent
+# ================================================================
+# This is the single source of truth for demo responses
+# Used by Demo Agent to provide FAQ-based responses without hallucinations
+#
+# Structure:
+#   faqs:
+#     - category: String (grouping for FAQs)
+#       questions:
+#         - question: User query (what might trigger this FAQ)
+#           answer: Response to provide
+#
+# Important:
+#   - Demo agent ONLY responds using this FAQ content
+#   - Prevents hallucinations and keeps responses accurate
+#   - Edit this file to update demo knowledge base
+#   - Changes are auto-cached for 60 minutes (configurable)
+#
+# Author: Lab01-MCP Team
+# Created: 2025-10-31
+# Last Updated: 2025-10-31
+
+faqs:
+  - category: "Productos"
+    questions:
+      - question: "¿Cuánto cuesta un laptop?"
+        answer: |
+          Los precios de laptops varían según especificaciones:
+          - Laptop básica: $500-$800 (procesador Intel i5, 8GB RAM, SSD 256GB)
+          - Laptop gamer: $1,200-$3,000 (procesador Intel i7/i9, 16GB+ RAM, NVIDIA RTX)
+          - Laptop ultrabook premium: $1,500-$2,500 (ultradelgada, portátil, batería 12h+)
+
+      - question: "¿Tienen garantía en los productos?"
+        answer: |
+          Sí, todos nuestros productos incluyen:
+          - Garantía de hardware: 2 años (estándar, cubre defectos de fabricación)
+          - Garantía extendida: hasta 5 años (opcional, cobertura amplia)
+          - Cobertura de accidentes: disponible con garantía extendida
+
+          La garantía cubre:
+          - Reemplazo si hay defecto de fábrica
+          - Reparación sin costo durante el período
+          - Soporte técnico prioritario
+
+      - question: "¿Qué especificaciones tiene un laptop gamer?"
+        answer: |
+          Las laptops gamer típicas incluyen:
+          - Procesador: Intel i7/i9 o AMD Ryzen 7/9
+          - RAM: 16GB - 32GB DDR5 (dual channel)
+          - GPU: NVIDIA RTX 4060 - RTX 4090 (6GB - 24GB VRAM)
+          - Almacenamiento: SSD NVMe 512GB - 1TB
+          - Pantalla: 15.6" - 17.3" FHD/QHD/4K, 144Hz - 240Hz
+          - Batería: 4-6 horas gaming, 8-10 horas office
+
+  - category: "Entrega y Envíos"
+    questions:
+      - question: "¿Cuál es el tiempo de entrega?"
+        answer: |
+          Tiempos de entrega típicos:
+          - Dentro de la ciudad: 5-7 días hábiles
+          - Fuera de la ciudad: 10-15 días hábiles
+          - Entrega express (opcional): 2-3 días hábiles (+$50)
+
+          Envío gratis:
+          - En compras mayores a $100
+          - En entregas dentro de la ciudad
+
+          Nota: Los tiempos son estimativos y pueden variar según disponibilidad.
+
+      - question: "¿Cuál es la política de devolución?"
+        answer: |
+          Aceptamos devoluciones dentro de 30 días si:
+          - El producto está sin usar (en estado original)
+          - Tiene toda la documentación y empaques originales
+          - La etiqueta de compra/código de barras está intacta
+          - No hay señales de daño o manipulación
+
+          Proceso de devolución:
+          1. Contacta al servicio al cliente (email: support@tech.com)
+          2. Obtén autorización de devolución (RMA number)
+          3. Envía el producto con todo incluido
+          4. Reembolso en 5-7 días hábiles después de recibir
+
+          Excepciones (NO reembolsables):
+          - Daño por caída o accidente
+          - Software o sistemas operativos personalizados
+          - Productos comprados con descuento > 50%
+
+  - category: "Métodos de Pago"
+    questions:
+      - question: "¿Qué métodos de pago aceptan?"
+        answer: |
+          Aceptamos los siguientes métodos de pago:
+
+          Tarjetas de crédito/débito:
+          - Visa, MasterCard, American Express
+          - Descuentos: 2-5% si pagas con tarjeta de crédito
+
+          Billeteras digitales:
+          - PayPal (procesamiento inmediato)
+          - Apple Pay, Google Pay
+
+          Otras opciones:
+          - Transferencia bancaria (toma 1-2 días)
+          - Pago en tienda física (efectivo)
+
+          Plan de pagos:
+          - 3/6/12 cuotas sin interés (con tarjeta participante)
+
+      - question: "¿Es seguro comprar online?"
+        answer: |
+          Sí, nuestro sitio es 100% seguro:
+
+          Seguridad de datos:
+          - Certificado SSL 256-bit (HTTPS)
+          - Cumple PCI DSS Level 1 (estándar máximo)
+          - Datos encriptados de extremo a extremo
+
+          Protección de compras:
+          - Garantía de dinero de vuelta si hay fraude
+          - No se guardan datos de tarjeta en nuestros servidores
+          - Procesamiento de pagos con proveedores certificados
+
+          Privacidad:
+          - No compartimos datos con terceros
+          - Política de privacidad transparente (ver enlace en footer)
+
+  - category: "Soporte Técnico"
+    questions:
+      - question: "¿Cómo contacto al soporte técnico?"
+        answer: |
+          Canales de soporte disponibles:
+
+          Por email:
+          - support@tech.com (respuesta en 24 horas)
+          - warranty@tech.com (para temas de garantía)
+
+          Por teléfono:
+          - +1-555-TECH-001 (Lunes-Viernes 9am-6pm, Sábado 10am-2pm)
+          - Línea de emergencia 24/7 para problemas críticos
+
+          Chat en vivo:
+          - Disponible en la web (Lunes-Viernes 9am-5pm)
+
+          Redes sociales:
+          - @TechSupport en Twitter, Facebook, Instagram
+
+      - question: "¿Qué hacer si mi laptop no enciende?"
+        answer: |
+          Pasos iniciales para troubleshooting:
+
+          1. Verifica conexión de energía:
+             - Cable está correctamente enchufado
+             - Adaptador está conectado a la laptop
+             - Luz indicadora del adaptador está encendida
+
+          2. Intenta reinicio forzado:
+             - Mantén presionado el botón de poder 10 segundos
+             - Suelta y espera 5 segundos
+             - Presiona botón de poder nuevamente
+
+          3. Revisa la batería:
+             - Carga por al menos 30 minutos
+             - Algunos laptops no encienden con batería crítica
+
+          Si ninguno de estos pasos funciona:
+          - Contacta a soporte técnico con modelo y número de serie
+          - Podría requerir reparación en taller (cubierta por garantía)
+
+# ==============================================================================
+# Configuration for Demo Agent
+# ==============================================================================
+
+demo_instructions:
+  max_response_tokens: 500          # Max tokens per demo response
+  tone: "amigable, profesional, conciso"
+  language_support:
+    - es
+    - en
+  warning_threshold: 85             # Show warning at 85% of token limit

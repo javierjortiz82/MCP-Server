@@ -25,6 +25,8 @@ active_versions:
   sales: v1.0        # Sales agent (OdiseoBot) system prompt - MODULAR
                      # v1.0: 4 products pagination (default)
                      # v1.1: 6 products pagination (A/B test variant)
+  demo: v1.0         # Demo agent system prompt - MODULAR
+                     # v1.0: FAQ-based responses with token warnings
 
 # ==============================================================================
 # Template Mode Configuration
@@ -193,6 +195,12 @@ database_integration:
     source: database              # "database" or "yaml"
     table: test.business_hours
     cache_ttl_minutes: 60         # Refresh every hour
+
+  # Demo FAQs (for demo agent)
+  demo_faqs:
+    source: yaml                  # Static YAML file (single source of truth)
+    file: demo_faqs.yaml          # Filename only (data/ directory is automatic)
+    cache_ttl_minutes: 60         # Cache FAQs for 1 hour
 
 # ==============================================================================
 # Logging and Debugging

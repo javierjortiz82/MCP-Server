@@ -26,11 +26,11 @@
 -- ============================================================================
 -- Phase 1: Initialize Database
 -- ============================================================================
-\echo '[1/9] Installing PostgreSQL extensions...'
+\echo '[1/11] Installing PostgreSQL extensions...'
 \i '../00_init/01_extensions.sql'
 \echo ''
 
-\echo '[2/9] Creating schema and configuring permissions...'
+\echo '[2/11] Creating schema and configuring permissions...'
 \i '../00_init/02_schema.sql'
 \i '../00_init/03_users_permissions.sql'
 \echo ''
@@ -38,14 +38,14 @@
 -- ============================================================================
 -- Phase 2: Core Data Tables
 -- ============================================================================
-\echo '[3/9] Creating products table with indexes...'
+\echo '[3/11] Creating products table with indexes...'
 \i '../01_ddl/01_products.sql'
 \echo ''
 
 -- ============================================================================
 -- Phase 3: Bookings System
 -- ============================================================================
-\echo '[4/9] Creating bookings schema (appointments, services, hours)...'
+\echo '[4/11] Creating bookings schema (appointments, services, hours)...'
 \i '../01_ddl/bookings/01_appointments.sql'
 \i '../01_ddl/bookings/02_service_types.sql'
 \i '../01_ddl/bookings/03_business_hours.sql'
@@ -56,14 +56,14 @@
 -- ============================================================================
 -- Phase 4: Email Queue System
 -- ============================================================================
-\echo '[5/9] Creating email queue system...'
+\echo '[5/11] Creating email queue system...'
 \i '../01_ddl/email/01_email_queue.sql'
 \echo ''
 
 -- ============================================================================
 -- Phase 5: Memory System
 -- ============================================================================
-\echo '[6/9] Creating multi-agent memory system...'
+\echo '[6/11] Creating multi-agent memory system...'
 \i '../01_ddl/memory/01_conversation.sql'
 \i '../01_ddl/memory/02_agent_memory.sql'
 \i '../01_ddl/memory/03_user_memory.sql'
@@ -72,21 +72,32 @@
 -- ============================================================================
 -- Phase 6: Utility Tables
 -- ============================================================================
-\echo '[7/9] Creating utility tables (pagination)...'
+\echo '[7/10] Creating utility tables (pagination)...'
 \i '../01_ddl/utils/01_pagination_contexts.sql'
 \echo ''
 
 -- ============================================================================
--- Phase 7: Indexes (Consolidated for maintainability)
+-- Phase 7: Demo System (Token-Bucket Rate Limiting)
 -- ============================================================================
-\echo '[8/10] Creating consolidated indexes...'
+\echo '[8/10] Creating demo system tables (token-bucket, audit, sessions, users, otp)...'
+\i '../01_ddl/demo/01_demo_usage.sql'
+\i '../01_ddl/demo/02_demo_audit_log.sql'
+\i '../01_ddl/demo/03_demo_sessions.sql'
+\i '../01_ddl/demo/04_demo_users.sql'
+\i '../01_ddl/demo/05_demo_otp_codes.sql'
+\echo ''
+
+-- ============================================================================
+-- Phase 8: Indexes (Consolidated for maintainability)
+-- ============================================================================
+\echo '[9/11] Creating consolidated indexes...'
 \i '../03_indexes/01_indexes.sql'
 \echo ''
 
 -- ============================================================================
--- Phase 8: Functions and Triggers
+-- Phase 9: Functions and Triggers
 -- ============================================================================
-\echo '[9/10] Creating functions and triggers...'
+\echo '[10/10] Creating functions and triggers...'
 \i '../02_functions/01_bookings.sql'
 \i '../02_functions/02_email.sql'
 \i '../02_functions/03_memory.sql'
@@ -95,13 +106,13 @@
 \echo ''
 
 -- ============================================================================
--- Phase 9: Seed Data (DML - Complete data loading)
+-- Phase 10: Seed Data (DML - Complete data loading)
 -- ============================================================================
 -- NOTE: Data loading is now handled by Python (populate.py --db --embeddings)
 --       This ensures embeddings are generated on-the-fly during insertion
 --       The following SQL files are kept for reference but not executed
 -- ============================================================================
-\echo '[10/10] Data loading phase...'
+\echo '[11/11] Data loading phase...'
 \echo 'NOTE: Seed data will be loaded via populate.py (bash script handles this)'
 \echo ''
 -- \i '../04_seed/01_products_data.sql'

@@ -13,3 +13,4 @@
 - Code Review:  El proyecto está completamente funcional y listo para producción.
 - Muestra los productos correctamente
 - Producto funcional
+- Conexión con servicio de coreo
