@@ -33,13 +33,17 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from gemini_agent.base_agent import BaseAgent
 from gemini_agent.config.booking_agent_settings import booking_agent_settings
 from gemini_agent.utils.language_detector import detect_user_language
 from google.genai import types
 from multi_agent.prompt_manager import PromptManager
+
+if TYPE_CHECKING:
+    from core.function_call_handler import FunctionCallHandler
+    from core.mcp_connector import MCPConnector
 
 # Gemini 2.5 Function Calling Optimization (Scope Limiting)
 # Autodiscover booking tools from MCP server (single source of truth)
@@ -209,7 +213,7 @@ class BookingAgent(BaseAgent):
         api_key: str | None = None,
         model_name: str | None = None,
         mcp_tools: list[types.FunctionDeclaration] | None = None,
-        mcp_client: MCPConnector | None = None,
+        mcp_client: MCPConnector | None = None,  # type: ignore[name-defined]
         **generation_params: Any,
     ) -> None:
         """Initialize BookingAgent with function calling support.
@@ -225,13 +229,11 @@ class BookingAgent(BaseAgent):
 
         # Function calling support (max iterations configurable via booking_agent_settings)
         self.mcp_client = mcp_client
-        self.function_call_handler = (
-            FunctionCallHandler(
+        self.function_call_handler = None
+        if FUNCTION_CALLING_AVAILABLE and FunctionCallHandler is not None:  # type: ignore[name-defined]
+            self.function_call_handler = FunctionCallHandler(  # type: ignore[name-defined]
                 max_iterations=booking_agent_settings.BOOKING_MAX_FUNCTION_CALL_ITERATIONS
             )
-            if FUNCTION_CALLING_AVAILABLE
-            else None
-        )
 
     @property
     def agent_name(self) -> str:
