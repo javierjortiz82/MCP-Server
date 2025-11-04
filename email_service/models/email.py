@@ -49,6 +49,7 @@ class EmailType(str, Enum):
         REMINDER_24H: 24-hour appointment reminder.
         REMINDER_1H: 1-hour appointment reminder.
         REMINDER_CUSTOM: Custom reminder (flexible timing).
+        OTP_VERIFICATION: OTP email verification code.
     """
 
     BOOKING_CREATED = "booking_created"
@@ -57,6 +58,7 @@ class EmailType(str, Enum):
     REMINDER_24H = "reminder_24h"
     REMINDER_1H = "reminder_1h"
     REMINDER_CUSTOM = "reminder_custom"
+    OTP_VERIFICATION = "otp_verification"
 
 
 class EmailRecord(BaseModel):

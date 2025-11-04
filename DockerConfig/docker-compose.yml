@@ -108,6 +108,43 @@ services:
       retries: 3
       start_period: 10s
 
+  demo-agent:
+    build:
+      context: ../demo_agent
+      dockerfile: Dockerfile
+    container_name: demo-agent
+    restart: unless-stopped
+    # Load service-specific configuration from demo_agent/.env
+    env_file:
+      - ../demo_agent/.env
+    environment:
+      # Override only Docker-specific variables (internal hostnames)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mcp_user}:${POSTGRES_PASSWORD:-mcp_password}@postgres:5432/${POSTGRES_DB:-mcpdb}
+      # Disable file logging in Docker (handle logs via container logging)
+      LOG_TO_FILE: "false"
+      # Override agent logging directory to writable location
+      LOG_DIR: /app/demo_agent/logs
+    ports:
+      - "8082:8082"
+    volumes:
+      - demo_logs:/app/demo_agent/logs
+      - agent_logs:/app/agent/logs
+      - ../agent:/app/agent:ro
+      - ../prompts:/app/prompts:ro
+    networks:
+      - mcp-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      email-worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
 volumes:
   postgres_data:
     driver: local
@@ -116,6 +153,10 @@ volumes:
   email_logs:
     driver: local
   mcp_logs:
+    driver: local
+  demo_logs:
+    driver: local
+  agent_logs:
     driver: local
 
 networks:

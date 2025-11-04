@@ -1,16 +1,25 @@
 """Logging configuration for Gemini Agent.
 
+This module provides backward compatibility with the legacy setup_logging API
+while delegating to the new factory-based logging system in logging_config.py.
+
 Implements file logging with rotation and structured format,
-following the same pattern as mcp_server.
+following the same pattern as mcp_server and email_service.
 
 Includes filters to suppress non-critical warnings from third-party libraries
 (e.g., Google Gemini API warnings about thought signatures).
+
+NOTE: For new code, prefer importing directly from logging_config:
+    from gemini_agent.logging_config import setup_logging, get_logger
 """
 
 import logging
 import logging.handlers
 
 from gemini_agent.config import settings
+
+# Import logging_config only when needed to avoid circular imports
+# (logging_config is imported inside functions that use it)
 
 
 class SuppressGoogleGenAIThinkingWarning(logging.Filter):
@@ -46,60 +55,48 @@ class SuppressGoogleGenAIThinkingWarning(logging.Filter):
 def setup_logging(name: str = "gemini_agent", level: str | None = None) -> logging.Logger:
     """Configure logging with file rotation and console output.
 
+    This function provides backward compatibility with existing code while
+    delegating to the new factory-based logging_config module.
+
     Args:
-        name: Logger name
+        name: Logger name (for the returned logger instance)
         level: Logging level (DEBUG, INFO, WARNING, ERROR). If None, uses .env setting
 
     Returns:
         Configured logger instance
+
+    Note:
+        This function sets up the factory-based root logger (once per application)
+        and returns a named logger instance. Subsequent calls reuse the root
+        configuration to avoid duplicate handlers.
+
+        For new code, prefer:
+            from gemini_agent.logging_config import setup_logging, get_logger
     """
+    # Import here to avoid circular imports
+    from gemini_agent import logging_config
+
     # Use level from .env if not provided
     if level is None:
         level = settings.LOG_LEVEL
 
-    # Create logs directory with absolute path
-    logs_dir = settings.log_dir_path
-    logs_dir.mkdir(exist_ok=True, parents=True)
+    # Use log_dir_path from settings if available
+    log_dir = getattr(settings, "log_dir_path", None)
 
-    # Configure logger
-    logger = logging.getLogger(name)
-    logger.setLevel(getattr(logging, level.upper()))
-
-    # Clear existing handlers
-    logger.handlers.clear()
-
-    # File handler with rotation (using settings from .env)
-    log_file = logs_dir / f"{name}.log"
-    file_handler = logging.handlers.RotatingFileHandler(
-        log_file,
-        maxBytes=settings.log_max_bytes,
-        backupCount=settings.LOG_BACKUP_COUNT,
-        encoding="utf-8",
+    # Initialize the factory-based logging system (safe to call multiple times)
+    logging_config.setup_logging(
+        log_dir=log_dir,
+        log_level=level,
+        file_level="DEBUG",
+        console_level=level,
+        enable_file=settings.LOG_TO_FILE if hasattr(settings, "LOG_TO_FILE") else True,
     )
-
-    # Console handler
-    console_handler = logging.StreamHandler()
-
-    # Formatter
-    formatter = logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-    file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-
-    # Prevent propagation to root logger
-    logger.propagate = False
 
     # Apply filter to suppress google.genai.types warnings about thought signatures
-    # This only needs to be done once globally, not per logger
     _apply_google_genai_suppression_filter()
 
-    return logger
+    # Return a named logger instance using the factory
+    return logging_config.get_logger(name, log_level=level)
 
 
 def _apply_google_genai_suppression_filter() -> None:

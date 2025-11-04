@@ -562,6 +562,95 @@ class PromptManager:
         template_name = self._get_template_path("sales_agent/sales_agent.jinja2", user_lang)
         return self._render_template(template_name, context)
 
+    # =========================================================================
+    # Demo Agent Prompts
+    # =========================================================================
+
+    def get_demo_prompt(
+        self,
+        faq_data: list[dict[str, Any]] | None = None,
+        remaining_tokens: int | None = None,
+        version: str | None = None,
+        user_lang: str = "es",
+    ) -> str:
+        """Get demo agent system prompt - MODULAR with FAQ context and token warnings.
+
+        Uses modular Jinja2 template architecture for FAQ-based responses with
+        automatic token limit warnings. Follows same pattern as other agents
+        (booking, sales, general) for consistency.
+
+        **Multilingual Support**:
+        All templates use Google Gemini's automatic language detection.
+        user_lang parameter is informational only - Gemini responds in the
+        language of the user's query automatically.
+
+        **Demo-Specific Features**:
+        - Only uses FAQ knowledge base (no external information)
+        - Token consumption tracking and warnings (85% threshold)
+        - Prevents hallucinations by restricting to FAQ content only
+        - Ideal for limited-scope demonstrations
+
+        Args:
+            faq_data: Optional FAQs list. If None, loads from data/demo_faqs.yaml
+                      Structure: [{"category": str, "questions": [{"question": str, "answer": str}]}]
+            remaining_tokens: Tokens remaining in demo quota (for warning logic)
+                             If None, no warning is generated
+            version: Specific version, or None for active version from config
+            user_lang: Language preference (informational only, default: "es")
+                      Template selection is no longer language-dependent.
+
+        Returns:
+            Demo agent system prompt with FAQs and token warnings
+
+        Example:
+            >>> manager = PromptManager()
+            >>> # Load FAQs from data/demo_faqs.yaml
+            >>> prompt = manager.get_demo_prompt(remaining_tokens=4750, user_lang="es")
+            >>> # Use custom FAQs
+            >>> custom_faqs = [{"category": "Products", "questions": [...]}]
+            >>> prompt = manager.get_demo_prompt(faq_data=custom_faqs, remaining_tokens=3000)
+        """
+        # Get version
+        version = version or self.config["active_versions"].get("demo", "v1.0")
+
+        # Load FAQs from data/demo_faqs.yaml if not provided
+        if faq_data is None:
+            try:
+                demo_config = self.config.get("database_integration", {}).get("demo_faqs", {})
+                if demo_config.get("source") == "yaml":
+                    faq_file = demo_config.get("file", "demo_faqs.yaml")
+                    faq_data = self._load_data(faq_file).get("faqs", [])
+                    logger.info(f"✅ Loaded {len(faq_data)} FAQ categories from {faq_file}")
+                else:
+                    faq_data = []
+                    logger.warning("FAQs not configured in database_integration, using empty list")
+            except (FileNotFoundError, KeyError) as e:
+                logger.warning(f"Could not load FAQs: {e}, using empty list")
+                faq_data = []
+
+        # Get demo configuration (max tokens, warning threshold)
+        demo_instructions = self.config.get("database_integration", {}).get("demo_faqs", {})
+
+        # Build context for template
+        context = {
+            "version": version,
+            "faq_data": faq_data,
+            "remaining_tokens": remaining_tokens or 0,
+            "demo_instructions": {
+                "max_response_tokens": 500,
+                "tone": "amigable, profesional, conciso",
+            },
+        }
+
+        logger.debug(
+            f"Rendering demo prompt: version={version}, "
+            f"faqs={len(faq_data)} categories, remaining_tokens={remaining_tokens}, lang={user_lang}"
+        )
+
+        # Use modular template structure (demo_agent/demo_agent.jinja2)
+        template_name = self._get_template_path("demo_agent/demo_agent.jinja2", user_lang)
+        return self._render_template(template_name, context)
+
     def _generate_tools_context(self, mcp_tools: list[Any]) -> str:
         """Generate tools context from MCP tools (standalone implementation).
 
