@@ -42,8 +42,8 @@ from google.genai import types
 from multi_agent.prompt_manager import PromptManager
 
 if TYPE_CHECKING:
-    from core.function_call_handler import FunctionCallHandler
-    from core.mcp_connector import MCPConnector
+    from core.function_call_handler import FunctionCallHandler  # type: ignore[import-not-found]
+    from core.mcp_connector import MCPConnector  # type: ignore[import-not-found]
 
 # Gemini 2.5 Function Calling Optimization (Scope Limiting)
 # Autodiscover booking tools from MCP server (single source of truth)
@@ -57,7 +57,7 @@ if str(mcp_server_path) not in sys.path:
 # Try to import autodiscovered booking tools
 # Fallback to hardcoded list if MCP server not available
 try:
-    from mcp_handlers.booking_handlers import get_booking_tool_names
+    from mcp_handlers.booking_handlers import get_booking_tool_names  # type: ignore[import-not-found]
 
     BOOKING_TOOLS_ALLOWED = set(get_booking_tool_names())
     _logger = __import__("logging").getLogger("booking_agent_init")
@@ -86,7 +86,7 @@ except ImportError as e:
 
 # Import language context for MCP tool execution
 try:
-    from utils.language_context import set_current_language
+    from utils.language_context import set_current_language  # type: ignore[import-not-found]
 
     LANGUAGE_CONTEXT_AVAILABLE = True
 except ImportError:
@@ -99,8 +99,8 @@ if str(client_mcp_path) not in sys.path:
     sys.path.insert(0, str(client_mcp_path))
 
 try:
-    from core.function_call_handler import FunctionCallHandler
-    from core.mcp_connector import MCPConnector
+    from core.function_call_handler import FunctionCallHandler  # type: ignore[import-not-found]
+    from core.mcp_connector import MCPConnector  # type: ignore[import-not-found]
 
     FUNCTION_CALLING_AVAILABLE = True
 except ImportError:
