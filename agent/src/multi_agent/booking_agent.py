@@ -601,6 +601,13 @@ class BookingAgent(BaseAgent):
             # If parts is None, try to extract text directly from content as fallback
             if parts is None:
                 self.logger.warning("Response parts is None - trying direct content extraction")
+                # Log diagnostic information about response structure
+                if response.candidates:
+                    candidate = response.candidates[0]
+                    self.logger.debug(
+                        f"Response diagnostic - candidate.content: {candidate.content}, "
+                        f"finish_reason: {candidate.finish_reason}"
+                    )
                 try:
                     content = response.candidates[0].content if response.candidates else None
                     text = self.function_call_handler.extract_text_from_content(content)
@@ -609,6 +616,7 @@ class BookingAgent(BaseAgent):
                         return text
                 except (AttributeError, IndexError) as e:
                     self.logger.warning(f"Failed to extract text from content: {e}")
+                self.logger.info(f"Using fallback response for iteration {iteration}")
                 return self._create_fallback_response(iteration)
 
             # Extract function calls
@@ -819,11 +827,12 @@ class BookingAgent(BaseAgent):
             iteration: Current iteration number.
 
         Returns:
-            Fallback error message.
+            Generic fallback response. Specific options should come from template.
         """
+        # Fallback to generic message - template should handle specific options
         return (
-            "No pude procesar tu solicitud completamente. "
-            "Por favor, intenta reformular tu pregunta o proporciona más detalles."
+            "No pude procesar tu solicitud completamente en esta iteración. "
+            "Por favor, intenta reformular tu pregunta con más detalles."
         )
 
     def __repr__(self) -> str:
