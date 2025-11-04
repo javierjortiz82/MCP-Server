@@ -77,14 +77,16 @@
 \echo ''
 
 -- ============================================================================
--- Phase 7: Demo System (Token-Bucket Rate Limiting)
+-- Phase 7: Demo System (Token-Bucket Rate Limiting + Clerk Auth)
 -- ============================================================================
-\echo '[8/10] Creating demo system tables (token-bucket, audit, sessions, users, otp)...'
+\echo '[8/10] Creating demo system tables (token-bucket, audit, sessions, users, otp, clerk)...'
 \i '../01_ddl/demo/01_demo_usage.sql'
 \i '../01_ddl/demo/02_demo_audit_log.sql'
 \i '../01_ddl/demo/03_demo_sessions.sql'
 \i '../01_ddl/demo/04_demo_users.sql'
 \i '../01_ddl/demo/05_demo_otp_codes.sql'
+\i '../01_ddl/demo/06_clerk_migration.sql'
+\i '../01_ddl/demo/07_fix_clerk_constraints.sql'
 \echo ''
 
 -- ============================================================================
@@ -146,6 +148,6 @@ SELECT extname, extversion FROM pg_extension WHERE extname IN ('uuid-ossp', 'una
 \echo ''
 \echo 'Deployment complete! Next steps:'
 \echo '  - Run verification: ./scripts/verify.sh'
-\echo '  - Query data: SELECT * FROM 'test'.products LIMIT 1;'
-\echo '  - Check functions: SELECT 'test'.is_slot_available(CURRENT_DATE, ''09:00''::TIME, 60);'
+\echo '  - Query data: SELECT * FROM :SCHEMA_NAME.products LIMIT 1;'
+\echo '  - Check functions: SELECT :SCHEMA_NAME.is_slot_available(CURRENT_DATE, ''09:00''::TIME, 60);'
 \echo ''

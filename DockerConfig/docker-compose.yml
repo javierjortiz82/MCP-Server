@@ -57,17 +57,24 @@ services:
     env_file:
       - ../mcp_server/.env
     environment:
-      # Override only Docker-specific variables (internal hostnames)
+      # Docker-specific overrides
       DATABASE_URL: postgresql://${POSTGRES_USER:-mcp_user}:${POSTGRES_PASSWORD:-mcp_password}@postgres:5432/${POSTGRES_DB:-mcpdb}
       LOG_DIR: logs
-      # Override credentials path to match Docker volume mount location
+      # CRITICAL: Override credentials path for Docker environment
+      # Reason: settings.py resolves relative paths using Path(__file__).parent.parent.parent
+      #         which resolves to / (filesystem root) in Docker instead of /app
+      #         Local: resolves to project root correctly
+      #         Docker: must use absolute path /app/credentials/service-account.json
       GOOGLE_CALENDAR_CREDENTIALS_PATH: /app/credentials/service-account.json
     ports:
       - "8009:8009"
     volumes:
       - mcp_logs:/app/logs
       - ../email_service:/app/email_service:ro
-      - ../credentials:/app/credentials:ro  # Google Calendar credentials (read-only)
+      # Google Calendar credentials (read-only for security)
+      # Development: bind mount from host directory
+      # Production: consider using Docker secrets (see docs/NOTAS_CLAUDE.md)
+      - ../credentials:/app/credentials:ro
     networks:
       - mcp-network
     depends_on:

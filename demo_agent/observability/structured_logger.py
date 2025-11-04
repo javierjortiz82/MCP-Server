@@ -159,9 +159,7 @@ class StructuredLogger:
             **kwargs: Additional fields to include in log
         """
         kwargs = self._add_context(kwargs)
-        for key, value in kwargs.items():
-            setattr(self.logger, key, value)
-        self.logger.debug(message)
+        self.logger.debug(message, extra=kwargs)
 
     def info(self, message: str, **kwargs) -> None:
         """Log info message with context.
@@ -171,9 +169,7 @@ class StructuredLogger:
             **kwargs: Additional fields to include in log
         """
         kwargs = self._add_context(kwargs)
-        for key, value in kwargs.items():
-            setattr(self.logger, key, value)
-        self.logger.info(message)
+        self.logger.info(message, extra=kwargs)
 
     def warning(self, message: str, **kwargs) -> None:
         """Log warning message with context.
@@ -183,9 +179,7 @@ class StructuredLogger:
             **kwargs: Additional fields to include in log
         """
         kwargs = self._add_context(kwargs)
-        for key, value in kwargs.items():
-            setattr(self.logger, key, value)
-        self.logger.warning(message)
+        self.logger.warning(message, extra=kwargs)
 
     def error(self, message: str, **kwargs) -> None:
         """Log error message with context.
@@ -195,9 +189,7 @@ class StructuredLogger:
             **kwargs: Additional fields to include in log
         """
         kwargs = self._add_context(kwargs)
-        for key, value in kwargs.items():
-            setattr(self.logger, key, value)
-        self.logger.error(message)
+        self.logger.error(message, extra=kwargs)
 
     def exception(self, message: str, **kwargs) -> None:
         """Log exception with context.
@@ -207,9 +199,7 @@ class StructuredLogger:
             **kwargs: Additional fields to include in log
         """
         kwargs = self._add_context(kwargs)
-        for key, value in kwargs.items():
-            setattr(self.logger, key, value)
-        self.logger.exception(message)
+        self.logger.exception(message, extra=kwargs)
 
     def critical(self, message: str, **kwargs) -> None:
         """Log critical message with context.
@@ -219,9 +209,7 @@ class StructuredLogger:
             **kwargs: Additional fields to include in log
         """
         kwargs = self._add_context(kwargs)
-        for key, value in kwargs.items():
-            setattr(self.logger, key, value)
-        self.logger.critical(message)
+        self.logger.critical(message, extra=kwargs)
 
 
 # Global structured logger instances

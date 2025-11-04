@@ -37,6 +37,11 @@ from typing import TYPE_CHECKING, Any
 
 from gemini_agent.base_agent import BaseAgent
 from gemini_agent.config.booking_agent_settings import booking_agent_settings
+from gemini_agent.utils.gemini_response_handler import (
+    GeminiResponseHandler,
+    ResponseStatus,
+    RetryConfig,
+)
 from gemini_agent.utils.language_detector import detect_user_language
 from google.genai import types
 from multi_agent.prompt_manager import PromptManager
@@ -234,6 +239,20 @@ class BookingAgent(BaseAgent):
             self.function_call_handler = FunctionCallHandler(  # type: ignore[name-defined]
                 max_iterations=booking_agent_settings.BOOKING_MAX_FUNCTION_CALL_ITERATIONS
             )
+
+        # Gemini Response Handler (Best Practices for Error Handling)
+        # Implements Google's official retry logic and response validation
+        retry_config = RetryConfig(
+            max_retries=3,  # 3 retry attempts for transient errors
+            base_delay=1.0,  # Start with 1 second delay
+            max_delay=60.0,  # Cap at 60 seconds
+            multiplier=2.0,  # Exponential backoff (1s, 2s, 4s, ...)
+            jitter=True,  # Add random jitter to prevent thundering herd
+        )
+        self.response_handler = GeminiResponseHandler(
+            logger=self.logger,
+            retry_config=retry_config,
+        )
 
     @property
     def agent_name(self) -> str:
@@ -516,11 +535,29 @@ class BookingAgent(BaseAgent):
                     "Gemini client not initialized. Call initialize() first."
                 )
 
-            response = await self.client.aio.models.generate_content(
+            # === GOOGLE BEST PRACTICE: Use retry with exponential backoff ===
+            response = await self.response_handler.retry_with_backoff(
+                self.client.aio.models.generate_content,
                 model=self.model_name,
                 contents=contents,  # type: ignore[arg-type]
                 config=initial_config,
             )
+
+            # === EARLY VALIDATION: Catch errors before entering function calling loop ===
+            # Validates finish_reason, safety_ratings, empty content/parts
+            # Provides better diagnostics and faster failure detection
+            initial_status, initial_diagnostic = self.response_handler.validate_response(response)
+            if initial_status != ResponseStatus.SUCCESS:
+                self.logger.warning(
+                    f"⚠️ Initial response validation failed: {initial_status}"
+                )
+                self.response_handler.log_response_diagnostics(
+                    response=response,
+                    query=query[:100] if query else "N/A",
+                    status=initial_status,
+                )
+                # Return fallback immediately - don't enter function calling loop
+                return await self._create_fallback_response(1)
 
             # DEBUG: Log response details for diagnosis
             self.logger.debug(f"Response type: {type(response).__name__}")
@@ -535,15 +572,6 @@ class BookingAgent(BaseAgent):
                 self.logger.debug(
                     f"Candidate.safety_ratings: {getattr(candidate, 'safety_ratings', 'N/A')}"
                 )
-
-                # CRITICAL: Log if content is None
-                if candidate.content is None:
-                    self.logger.error(
-                        f"🚨 Gemini returned content=None!\n"
-                        f"  Query: '{query[:100]}...'\n"
-                        f"  Finish reason: {getattr(candidate, 'finish_reason', 'UNKNOWN')}\n"
-                        f"  Safety ratings: {getattr(candidate, 'safety_ratings', 'N/A')}"
-                    )
 
             # Run function calling loop if tools are available
             # Use loop_config (WITHOUT response_schema) to avoid API conflicts
@@ -614,40 +642,58 @@ class BookingAgent(BaseAgent):
             iteration += 1
             self.logger.debug(f"Function calling iteration {iteration}/{max_iterations}")
 
-            # Check if response has candidates
-            if not self.function_call_handler.has_candidates(response):
-                self.logger.warning("No candidates in response")
-                return await self._create_fallback_response(iteration)
+            # === GOOGLE BEST PRACTICE: Validate response before processing ===
+            # Check finish_reason, safety_ratings, empty content, etc.
+            status, diagnostic_msg = self.response_handler.validate_response(response)
 
+            if status != ResponseStatus.SUCCESS:
+                # Log comprehensive diagnostics
+                self.response_handler.log_response_diagnostics(
+                    response=response,
+                    query=contents[0].parts[0].text if contents else "N/A",
+                    status=status,
+                )
+
+                # Handle based on status
+                if status == ResponseStatus.SAFETY_BLOCKED:
+                    # Safety filters triggered - cannot retry, use fallback
+                    self.logger.warning(f"🚫 Safety filter blocked response: {diagnostic_msg}")
+                    return await self._create_fallback_response(iteration)
+
+                elif status == ResponseStatus.RECITATION:
+                    # Recitation detected - increase temperature and retry
+                    self.logger.warning(f"📋 Recitation detected: {diagnostic_msg}")
+                    return await self._create_fallback_response(iteration)
+
+                elif status == ResponseStatus.MAX_TOKENS:
+                    # Hit token limit - extract partial response or use fallback
+                    self.logger.warning(f"⚠️ Max tokens reached: {diagnostic_msg}")
+                    try:
+                        # Try to extract partial text
+                        content = response.candidates[0].content if response.candidates else None
+                        text = self.function_call_handler.extract_text_from_content(content)
+                        if text and len(text.strip()) > 10:
+                            return text
+                    except (AttributeError, IndexError):
+                        pass
+                    return await self._create_fallback_response(iteration)
+
+                else:
+                    # Empty response, no candidates, or unknown error
+                    self.logger.warning(f"⚠️ Response validation failed: {status} - {diagnostic_msg}")
+                    return await self._create_fallback_response(iteration)
+
+            # === Response is valid - proceed with function calling ===
             # Get parts from response
             parts = self.function_call_handler.get_parts(response)
 
-            # If parts is None, try to extract text directly from content as fallback
+            # === DEFENSIVE CHECK: Ensure parts is not None ===
+            # This can happen in edge cases where content exists but parts are empty
+            # Matches SalesAgent's defensive programming pattern
             if parts is None:
                 self.logger.warning(
-                    f"⚠️ Response parts is None (iteration {iteration}) - Gemini API issue detected"
+                    f"⚠️ Response parts is None after validation (iteration {iteration}) - edge case detected"
                 )
-                # Log diagnostic information about response structure for debugging
-                if response.candidates:
-                    candidate = response.candidates[0]
-                    self.logger.debug(
-                        f"Response diagnostic - candidate.content: {candidate.content}, "
-                        f"finish_reason: {candidate.finish_reason}"
-                    )
-
-                # GEMINI 2.5 FIX: Try to extract text and use as recovery
-                try:
-                    content = response.candidates[0].content if response.candidates else None
-                    text = self.function_call_handler.extract_text_from_content(content)
-                    if text and len(text.strip()) > 10:
-                        # Got meaningful text, use it
-                        self.logger.debug(f"✅ Extracted text from content: {text[:100]}...")
-                        return text
-                except (AttributeError, IndexError) as e:
-                    self.logger.warning(f"Failed to extract text from content: {e}")
-
-                # Use multilingual fallback response (respects self.language)
-                self.logger.info(f"Using fallback response for iteration {iteration}")
                 return await self._create_fallback_response(iteration)
 
             # Extract function calls
@@ -685,7 +731,9 @@ class BookingAgent(BaseAgent):
 
             # Generate next response with system_instruction in config
             # (maintain language context through function calling loop)
-            response = await self.client.aio.models.generate_content(
+            # Use retry logic for transient errors
+            response = await self.response_handler.retry_with_backoff(
+                self.client.aio.models.generate_content,
                 model=self.model_name,
                 contents=contents,  # type: ignore[arg-type]
                 config=config,
@@ -953,8 +1001,10 @@ Return ONLY the message itself - nothing else."""
                     "Gemini client not initialized. Call initialize() first."
                 )
 
-            # Generate response in user's language via Gemini 2.5
-            response = await self.client.aio.models.generate_content(
+            # === GOOGLE BEST PRACTICE: Use retry with exponential backoff ===
+            # Generate response in user's language via Gemini 2.5 with retry logic
+            response = await self.response_handler.retry_with_backoff(
+                self.client.aio.models.generate_content,
                 model=self.model_name,
                 contents=fallback_prompt,
                 config=types.GenerateContentConfig(
@@ -968,9 +1018,13 @@ Return ONLY the message itself - nothing else."""
                 ),
             )
 
-            # Extract message and ensure it's clean
-            if response.text is None:
-                raise ValueError(f"Gemini returned None response for language {self.language}")
+            # Validate response before extracting text
+            status, diagnostic_msg = self.response_handler.validate_response(response)
+            if status != ResponseStatus.SUCCESS:
+                self.logger.error(
+                    f"❌ Fallback generation failed validation: {status} - {diagnostic_msg}"
+                )
+                raise ValueError(f"Gemini returned invalid response for language {self.language}: {status}")
 
             message = response.text.strip()
 

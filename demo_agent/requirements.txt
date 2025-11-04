@@ -23,6 +23,9 @@ google-genai==0.3.0
 # Security & Authentication
 requests==2.31.0  # For reCAPTCHA verification
 bcrypt==4.1.2  # For password hashing
+PyJWT[crypto]==2.8.0  # For Clerk JWT verification
+httpx==0.25.2  # For async HTTP requests to Clerk API
+svix==1.17.0  # For Clerk webhook signature verification
 
 # Logging
 python-json-logger==2.0.7

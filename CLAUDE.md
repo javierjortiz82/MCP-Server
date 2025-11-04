@@ -14,3 +14,5 @@
 - Muestra los productos correctamente
 - Producto funcional
 - Conexión con servicio de coreo
+- Implementacion clerk en backend existosa
+- Implementacion de clerk en frontend
