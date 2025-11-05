@@ -41,6 +41,11 @@ from datetime import UTC
 from typing import Any, TypedDict
 
 from gemini_agent.config import settings
+from gemini_agent.utils.gemini_response_handler import (
+    GeminiResponseHandler,
+    ResponseStatus,
+    RetryConfig,
+)
 from gemini_agent.utils.language_detector import detect_user_language
 from gemini_agent.utils.logger import setup_logging
 from google import genai
@@ -84,6 +89,8 @@ class BaseAgent(ABC):
     - Common lifecycle methods (initialize, cleanup)
     - MCP tools integration support
     - Logging infrastructure
+    - Response validation and retry logic (Google Best Practices)
+    - Multilingual fallback message generation
 
     **Required Implementations** (must be provided by subclasses):
     - `agent_name` property: Unique identifier for logging
@@ -93,6 +100,8 @@ class BaseAgent(ABC):
     - `_build_generation_config()`: Customize generation parameters
     - `_build_contents()`: Customize conversation structure
     - `generate_response()`: Add specialized logic (e.g., function calling)
+    - `_create_response_handler()`: Customize retry config
+    - `_handle_validation_failure()`: Customize error handling
 
     Attributes:
         api_key: Google API key for Gemini (from settings if not provided)
@@ -102,6 +111,7 @@ class BaseAgent(ABC):
         generation_config: Configuration for response generation
         conversation_history: List of conversation turns (auto-trimmed to 20 items)
         logger: Logger instance with agent-specific name
+        response_handler: Response validator and retry handler (optional)
 
     Example:
         >>> class CustomAgent(BaseAgent):
@@ -118,6 +128,12 @@ class BaseAgent(ABC):
         >>> print(response)
     """
 
+    # 🌍 ELEGANT MULTILINGUAL SUPPORT (shared by all agents)
+    # In-memory cache for generated fallback messages
+    # Maps: language_code → {iteration → message}
+    # Gemini 2.5 generates messages dynamically in ANY language
+    _fallback_cache: dict[str, dict[int, str]] = {}
+
     def __init__(
         self,
         api_key: str | None = None,
@@ -126,6 +142,7 @@ class BaseAgent(ABC):
         session_id: str | None = None,
         memory_manager: Any | None = None,
         language: str = "es",
+        enable_response_handler: bool = True,
         **generation_params: Any,
     ) -> None:
         """Initialize base agent with common parameters.
@@ -140,6 +157,9 @@ class BaseAgent(ABC):
             memory_manager: Optional MemoryManager instance for persistent context.
                 If None, agent operates in stateless mode (RAM-only history).
             language: Language code for prompts ("es" or "en", default: "es").
+            enable_response_handler: Enable response validation and retry logic (default: True).
+                If False, agent operates without retry/validation (legacy mode).
+                GeneralAgent disables this to reduce overhead.
             **generation_params: Override generation parameters:
                 - temperature: Sampling temperature (0.0-1.0)
                 - top_k: Top K sampling parameter
@@ -193,11 +213,19 @@ class BaseAgent(ABC):
             self.structured_logger = None
             self.metrics = None
 
+        # Initialize response handler for retry + validation (Google Best Practices)
+        # Subclasses can override _create_response_handler() for custom config
+        if enable_response_handler:
+            self.response_handler: GeminiResponseHandler | None = self._create_response_handler()
+        else:
+            self.response_handler = None
+
         self.logger.info(
             f"Initializing {self.agent_name} - "
             f"Model: {self.model_name}, "
             f"Tools: {len(self.mcp_tools)}, "
             f"Memory: {'✅ Enabled' if self._memory_enabled else '❌ Disabled'}, "
+            f"Response Handler: {'✅ Enabled' if self.response_handler else '❌ Disabled'}, "
             f"API Key: {'***REDACTED***' if self.api_key else 'None'}, "
             f"Observability: {'✅ Enabled' if OBSERVABILITY_AVAILABLE else '❌ Disabled'}"
         )
@@ -268,6 +296,253 @@ class BaseAgent(ABC):
             ...         )
         """
         pass
+
+    def _create_response_handler(self) -> GeminiResponseHandler:
+        """Create response handler with default retry configuration.
+
+        This method creates a GeminiResponseHandler with Google's recommended
+        retry settings (exponential backoff with jitter). Subclasses can override
+        this method to customize retry behavior.
+
+        Default configuration:
+        - max_retries: 3 attempts
+        - base_delay: 1.0 seconds
+        - max_delay: 60.0 seconds
+        - multiplier: 2.0 (exponential backoff: 1s, 2s, 4s, ...)
+        - jitter: True (random variation to prevent thundering herd)
+
+        Returns:
+            GeminiResponseHandler instance configured for this agent
+
+        Example (custom config in subclass):
+            >>> class SalesAgent(BaseAgent):
+            ...     def _create_response_handler(self) -> GeminiResponseHandler:
+            ...         retry_config = RetryConfig(
+            ...             max_retries=5,  # More retries for sales
+            ...             base_delay=0.5,  # Faster retry
+            ...         )
+            ...         return GeminiResponseHandler(
+            ...             logger=self.logger,
+            ...             retry_config=retry_config,
+            ...         )
+        """
+        retry_config = RetryConfig(
+            max_retries=3,  # 3 retry attempts for transient errors
+            base_delay=1.0,  # Start with 1 second delay
+            max_delay=60.0,  # Cap at 60 seconds
+            multiplier=2.0,  # Exponential backoff (1s, 2s, 4s, ...)
+            jitter=True,  # Add random jitter to prevent thundering herd
+        )
+        return GeminiResponseHandler(
+            logger=self.logger,
+            retry_config=retry_config,
+        )
+
+    async def _handle_validation_failure(
+        self,
+        status: ResponseStatus,
+        diagnostic: str,
+        query: str,
+    ) -> str:
+        """Handle response validation failure (template method - overridable by subclasses).
+
+        This method is called when response validation fails (e.g., safety block,
+        empty response, etc.). Default behavior is to raise an exception, but
+        subclasses can override to provide custom fallback responses.
+
+        Args:
+            status: Response validation status (SAFETY_BLOCKED, EMPTY_RESPONSE, etc.)
+            diagnostic: Diagnostic message explaining the failure
+            query: Original user query (for context in error messages)
+
+        Returns:
+            Fallback response text (if subclass overrides with custom logic)
+
+        Raises:
+            RuntimeError: Default behavior - raises exception with diagnostic info
+
+        Example (custom handling in subclass):
+            >>> class BookingAgent(BaseAgent):
+            ...     async def _handle_validation_failure(self, status, diagnostic, query):
+            ...         if status == ResponseStatus.SAFETY_BLOCKED:
+            ...             return await self._create_fallback_response(iteration=1)
+            ...         return await super()._handle_validation_failure(status, diagnostic, query)
+        """
+        self.logger.error(
+            f"Response validation failed: {status} - {diagnostic}\n"
+            f"Query: '{query[:100]}...'"
+        )
+        raise RuntimeError(f"Gemini API validation failed: {status}")
+
+    async def _create_fallback_response(self, iteration: int) -> str:
+        """Create multilingual fallback response for ANY language (shared by all agents).
+
+        Gemini 2.5 is natively multilingual - it automatically generates
+        messages in ANY language the user speaks. We just cache results
+        to avoid regenerating for the same user.
+
+        Why this is elegant:
+        - ✅ Zero hardcoding
+        - ✅ Supports UNLIMITED languages (Arabic, Mandarin, Swahili, etc.)
+        - ✅ Self-improving (Gemini gets better at languages over time)
+        - ✅ Cache-aware for performance
+        - ✅ Follows the project's dynamic generation pattern
+        - ✅ No manual translation maintenance needed
+
+        Args:
+            iteration: Current iteration number (1, 2, etc.)
+
+        Returns:
+            Language-appropriate fallback message generated by Gemini.
+            Respects self.language attribute (any ISO 639-1 code).
+        """
+        return await self._generate_fallback_dynamic(iteration)
+
+    async def _generate_fallback_dynamic(self, iteration: int) -> str:
+        """Generate multilingual fallback message dynamically via Gemini 2.5.
+
+        🌍 ELEGANT APPROACH: Pure dynamic generation without hardcoding
+
+        Leverages Gemini 2.5's native multilingual capabilities to generate
+        appropriate fallback messages in ANY language the user speaks.
+        Results are cached in-memory to avoid regenerating for the same language.
+
+        Why this is elegant:
+        - Zero hardcoded translation dictionaries
+        - Supports UNLIMITED languages automatically
+        - Deterministic generation (temperature=0.3)
+        - Cache-aware for performance
+        - Self-improving (as Gemini models improve over time)
+
+        Supports ANY ISO 639-1 language code:
+        Arabic (ar), Chinese (zh), French (fr), German (de), Hindi (hi),
+        Italian (it), Japanese (ja), Polish (pl), Portuguese (pt), Russian (ru),
+        Spanish (es), Swahili (sw), Thai (th), Vietnamese (vi), etc.
+
+        Args:
+            iteration: Current iteration number (1, 2, etc.)
+
+        Returns:
+            Professional fallback message in user's language (from cache or newly generated).
+
+        Raises:
+            Exception: If Gemini API call fails after retries.
+        """
+        # Check cache first - avoid regenerating for same language + iteration combo
+        if self.language in self._fallback_cache:
+            cached_msg = self._fallback_cache[self.language].get(iteration)
+            if cached_msg:
+                self.logger.debug(
+                    f"✅ Cached fallback (lang={self.language}, iteration={iteration})"
+                )
+                return cached_msg
+
+        # Define context based on iteration number
+        context_map = {
+            1: (
+                "first attempt at user request - we need more information from user "
+                "to process their request"
+            ),
+            2: (
+                "multiple failed attempts - a technical issue occurred during processing"
+            ),
+        }
+        context = context_map.get(iteration, "error processing user request")
+
+        # Construct elegant prompt that asks Gemini to generate in user's language
+        fallback_prompt = f"""You are a professional customer service assistant.
+Generate a brief, helpful fallback message in {self.language}.
+
+Context: {context}
+
+Requirements:
+- Respond ONLY in {self.language} (no English, no mixed languages)
+- Acknowledge the issue briefly and professionally
+- Ask user to provide more details or rephrase their question
+- Maximum 2 sentences
+- Friendly and helpful tone
+- No emojis, no special formatting
+
+Return ONLY the message itself - nothing else."""
+
+        try:
+            # Validate client is initialized
+            if self.client is None:
+                raise RuntimeError(
+                    "Gemini client not initialized. Call initialize() first."
+                )
+
+            # Generate response in user's language via Gemini 2.5
+            # Use response_handler if available, otherwise direct call
+            if self.response_handler:
+                response = await self.response_handler.retry_with_backoff(
+                    self.client.aio.models.generate_content,
+                    model=self.model_name,
+                    contents=fallback_prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.3,  # Deterministic for consistency
+                        max_output_tokens=150,
+                        system_instruction=(
+                            "You are a multilingual assistant. "
+                            "Generate responses exclusively in the specified language. "
+                            "Do not include explanations or meta-information."
+                        ),
+                    ),
+                )
+
+                # Validate response before extracting text
+                status, diagnostic_msg = self.response_handler.validate_response(response)
+                if status != ResponseStatus.SUCCESS:
+                    self.logger.error(
+                        f"❌ Fallback generation failed validation: {status} - {diagnostic_msg}"
+                    )
+                    raise ValueError(
+                        f"Gemini returned invalid response for language {self.language}: {status}"
+                    )
+            else:
+                # Direct call without retry/validation
+                response = await self.client.aio.models.generate_content(
+                    model=self.model_name,
+                    contents=fallback_prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.3,
+                        max_output_tokens=150,
+                        system_instruction=(
+                            "You are a multilingual assistant. "
+                            "Generate responses exclusively in the specified language. "
+                            "Do not include explanations or meta-information."
+                        ),
+                    ),
+                )
+
+            # Extract message and ensure it's clean
+            if response.text is None:
+                raise ValueError(f"Gemini returned None response for language {self.language}")
+
+            message = response.text.strip()
+
+            # Validate we got content
+            if not message:
+                raise ValueError(f"Gemini returned empty response for language {self.language}")
+
+            # Cache for future requests in same language
+            if self.language not in self._fallback_cache:
+                self._fallback_cache[self.language] = {}
+            self._fallback_cache[self.language][iteration] = message
+
+            self.logger.debug(
+                f"✅ Generated fallback (lang={self.language}, iteration={iteration}, "
+                f"cached for future reuse)"
+            )
+
+            return message
+
+        except Exception as e:
+            # Log the error and re-raise for upstream handling
+            self.logger.error(
+                f"Failed to generate fallback for language '{self.language}': {e}"
+            )
+            raise
 
     async def initialize(self) -> None:
         """Initialize the Gemini client and generation configuration.
@@ -841,23 +1116,56 @@ class BaseAgent(ABC):
 
             dynamic_config = types.GenerateContentConfig(**config_dict)  # type: ignore[arg-type]
 
-            # Generate response with system_instruction in config (OPCIÓN 7: Track latency)
-            if self.metrics:
-                async with self.metrics.record_latency_async(
-                    f"{self.agent_name}_generate_latency",
-                    tags={"model": self.model_name, "has_tools": len(self.mcp_tools) > 0}
-                ):
+            # Generate response with system_instruction in config
+            # Use response_handler for retry + validation if available (Google Best Practices)
+            if self.response_handler:
+                # With retry logic and exponential backoff
+                if self.metrics:
+                    async with self.metrics.record_latency_async(
+                        f"{self.agent_name}_generate_latency",
+                        tags={"model": self.model_name, "has_tools": len(self.mcp_tools) > 0}
+                    ):
+                        response = await self.response_handler.retry_with_backoff(
+                            self.client.aio.models.generate_content,
+                            model=self.model_name,
+                            contents=contents,  # type: ignore[arg-type]
+                            config=dynamic_config,
+                        )
+                else:
+                    response = await self.response_handler.retry_with_backoff(
+                        self.client.aio.models.generate_content,
+                        model=self.model_name,
+                        contents=contents,  # type: ignore[arg-type]
+                        config=dynamic_config,
+                    )
+
+                # Validate response before processing
+                status, diagnostic = self.response_handler.validate_response(response)
+                if status != ResponseStatus.SUCCESS:
+                    self.logger.warning(
+                        f"⚠️ Response validation failed: {status} - {diagnostic}"
+                    )
+                    # Call template method for custom error handling (overridable by subclasses)
+                    return await self._handle_validation_failure(status, diagnostic, query)
+
+            else:
+                # Legacy mode: No retry, no validation
+                if self.metrics:
+                    async with self.metrics.record_latency_async(
+                        f"{self.agent_name}_generate_latency",
+                        tags={"model": self.model_name, "has_tools": len(self.mcp_tools) > 0}
+                    ):
+                        response = await self.client.aio.models.generate_content(
+                            model=self.model_name,
+                            contents=contents,  # type: ignore[arg-type]
+                            config=dynamic_config,
+                        )
+                else:
                     response = await self.client.aio.models.generate_content(
                         model=self.model_name,
                         contents=contents,  # type: ignore[arg-type]
                         config=dynamic_config,
                     )
-            else:
-                response = await self.client.aio.models.generate_content(
-                    model=self.model_name,
-                    contents=contents,  # type: ignore[arg-type]
-                    config=dynamic_config,
-                )
 
             self.logger.debug("Response generated successfully")
             if self.structured_logger:

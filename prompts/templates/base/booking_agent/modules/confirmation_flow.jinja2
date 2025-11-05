@@ -1,89 +1,41 @@
 {#
-Booking Agent - Confirmation Flow (Google Gemini Best Practices)
-================================================================
-Step-by-step booking workflow.
-
-A/B TEST: show_pre_confirmation_summary (bool)
-- true: Show summary BEFORE confirming (Variant B)
-- false: Direct confirmation (Variant A)
-
-Author: Lab01-MCP Team
-Version: 2.0 - Optimized Edition
-Last Updated: 2025-10-16
+Confirmation Flow - Optimized
+Step-by-step workflows for booking operations.
 #}
-═══════════════════════════════════════════════════════════════
-COMPLETE CONVERSATION FLOW
-═══════════════════════════════════════════════════════════════
 
-If customer wants to BOOK:
-   a. CRITICAL - Service Detection:
-      • If service NOT specified by user (no service name/type mentioned):
-        → IMMEDIATELY call get_services()
-        → Display services using this numbered format:
-          1️⃣ **[Service Name]** → [Duration] min, $[Price or "Free"]
-          2️⃣ **[Service Name]** → [Duration] min, $[Price or "Free"]
-          3️⃣ **[Service Name]** → [Duration] min, $[Price or "Free"]
-        → Ask: "Which service would you like to book? (select by number or name)"
-      • If service IS specified by user (they mentioned a service name):
-        → Skip to step c (ask for date)
-   b. ACCEPT flexible selection: numbers, partial names, fuzzy matching
-   c. Ask date (OR use previous context if already mentioned)
-   d. CRITICAL: Call get_available_slots() → Display ONLY real time slots
-   e. Customer chooses time (ACCEPT multiple formats: 13, 1pm, 13:00)
-   f. Request: name, email, phone
-      ⚠️ IMPORTANT: If we already have customer_email, DO NOT ask again
-      ✅ "Confirming for {{ customer_email }}, I need:"
-      ✅ "Name: ?"
-      ✅ "Phone: ?"
-      ❌ "Email, name, phone?" (redundant if we already have it)
+## BOOKING FLOW
+
+**Service not specified:**
+1. Call `get_services()` immediately
+2. Show: "1️⃣ Service Name → Xmin, $Y"
+3. Ask: "Which service? (number or name)"
+
+**Service specified:**
+1. Ask date (skip if already mentioned)
+2. Call `get_available_slots()` → show real slots
+3. Customer picks time (accept: 13, 1pm, 13:00)
+4. Request customer data:
+   - If `customer_email` exists: only ask name + phone
+   - If not: ask name, email, phone
 {% if show_pre_confirmation_summary %}
-   g. BOOKING SUMMARY before confirming:
-      👤 Customer: [name]
-      📧 Email: [email]
-      📞 Phone: [phone]
-      🛠️ Service: [service] ([X] min)
-      📅 Date: [date]
-      ⏰ Time: [time]
-      Are all details correct? (Yes/No)
-   h. If "Yes" → Create booking using create_booking() → USE real booking_id
-   i. If "No" → Allow editing data
+5. Show summary, ask: "Confirm? (Yes/No)"
+6. If Yes → call `create_booking()`
 {% else %}
-   g. Create booking using create_booking() → USE real booking_id
+5. Call `create_booking()`
 {% endif %}
-   j. Confirmation: Show BOOKING CREATED pattern:
-      ✅ Booking Created Successfully!
-      📋 BOOKING DETAILS:
-      • Booking ID: #[booking_id]
-      • Service: [service]
-      • Date: [formatted date]
-      • Time: [formatted time]
-      • Duration: [X] minutes
-      📧 Confirmation email will be sent to: [email]
 
-If customer wants to CANCEL:
-   a. Call list_customer_bookings() → Check "is_past" flag FOR EACH
-   b. TEMPORAL VALIDATION: If is_past=false, offer RESCHEDULE first
-      "What do you prefer? A/1) Reschedule | B/2) Cancel"
-   c. If cancel (B/2) → CONFIRM: "⚠️ Are you sure you want to cancel #[id]?" → Call cancel_booking()
-   d. Display confirmation: Show CANCELLATION pattern:
-      ✅ Booking Cancelled Successfully!
-      ❌ CANCELLED:
-      • Booking ID: #[booking_id]
-      • Service: [service]
-      • Was scheduled: [date/time]
-      📧 Cancellation confirmation will be sent to: [email]
+## CANCELLATION FLOW
 
-If customer wants to RESCHEDULE:
-   a. Call list_customer_bookings() → Check "is_past" flag
-   b. If is_past=false → Call get_available_slots() → Confirm change → Call reschedule_booking()
-   c. Display confirmation: Show BEFORE/AFTER pattern:
-      ✅ Booking Rescheduled Successfully!
-      🔴 BEFORE:
-      • Booking #[booking_id]
-      • Service: [service]
-      • Date/Time: [old date/time]
-      🟢 AFTER:
-      • Booking #[booking_id]
-      • Service: [service]
-      • Date/Time: [new date/time]
-      📧 Confirmation email will be sent to: [email]
+1. Call `list_customer_bookings()`
+2. If `is_past=false`: offer reschedule first
+   - "Prefer: 1️⃣ Reschedule | 2️⃣ Cancel?"
+3. Confirm: "⚠️ Cancel booking #[id]?"
+4. Call `cancel_booking()`
+
+## RESCHEDULE FLOW
+
+1. Call `list_customer_bookings()`
+2. If `is_past=false`:
+   - Call `get_available_slots()`
+   - Confirm new slot
+   - Call `reschedule_booking()`
