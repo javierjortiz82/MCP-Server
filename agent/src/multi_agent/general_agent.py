@@ -60,6 +60,18 @@ class GeneralAgent(BaseAgent):
     # PromptManager instance (shared across all GeneralAgent instances)
     _prompt_manager: PromptManager | None = None
 
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize GeneralAgent with response_handler disabled.
+
+        GeneralAgent doesn't use function calling or complex error handling,
+        so response_handler is disabled to reduce overhead.
+
+        Args:
+            **kwargs: Arguments passed to BaseAgent.__init__()
+        """
+        # Disable response_handler for GeneralAgent (no function calling, simpler logic)
+        super().__init__(enable_response_handler=False, **kwargs)
+
     @property
     def agent_name(self) -> str:
         """Return agent name for logging.
