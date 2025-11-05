@@ -119,6 +119,14 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
             request.state.is_authenticated = False
             return await call_next(request)
 
+        # Allow OPTIONS requests without authentication (CORS preflight)
+        # OPTIONS requests are sent by browsers before actual requests
+        # Let it pass through so CORSMiddleware can add proper headers
+        if request.method == "OPTIONS":
+            self.logger.debug(f"OPTIONS request bypassed: {path}")
+            request.state.is_authenticated = False
+            return await call_next(request)
+
         # Extract Authorization header
         auth_header = request.headers.get("Authorization")
 

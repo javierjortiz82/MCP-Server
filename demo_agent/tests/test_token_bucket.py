@@ -6,7 +6,7 @@ Version: 1.0.0
 """
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -20,7 +20,10 @@ def token_bucket():
     with patch("demo_agent.rate_limiter.token_bucket.get_db") as mock_db:
         mock_db.return_value = Mock()
         bucket = TokenBucket()
+        # Use AsyncMock for async methods
         bucket.db = Mock()
+        bucket.db.execute_one = AsyncMock()
+        bucket.db.execute = AsyncMock()
         yield bucket
 
 
@@ -315,3 +318,136 @@ async def test_error_handling_deduct_tokens(token_bucket):
     tokens_remaining = await token_bucket.deduct_tokens("user_123", tokens_used=100)
 
     assert tokens_remaining == config.DEMO_MAX_TOKENS
+
+
+# ============================================================================
+# Warning Threshold Tests (DEMO_WARNING_THRESHOLD)
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_warning_below_threshold(token_bucket):
+    """Test warning object when percentage is below threshold (< 85%)."""
+    mock_result = {
+        "tokens_consumed": 4200,  # 84% of 5000
+        "requests_count": 10,
+        "is_blocked": False,
+        "blocked_until": None,
+        "last_reset": datetime.now(timezone.utc),
+    }
+    token_bucket.db.execute_one.return_value = mock_result
+
+    status = await token_bucket.get_quota_status("user_123")
+
+    # Verify warning object structure
+    assert "warning" in status
+    assert status["warning"]["is_warning"] is False
+    assert status["warning"]["message"] is None
+    assert status["warning"]["percentage_used"] == 84
+
+
+@pytest.mark.asyncio
+async def test_warning_at_threshold(token_bucket):
+    """Test warning object when percentage equals threshold (= 85%)."""
+    mock_result = {
+        "tokens_consumed": 4250,  # Exactly 85% of 5000
+        "requests_count": 10,
+        "is_blocked": False,
+        "blocked_until": None,
+        "last_reset": datetime.now(timezone.utc),
+    }
+    token_bucket.db.execute_one.return_value = mock_result
+
+    status = await token_bucket.get_quota_status("user_123")
+
+    # Verify warning is triggered at threshold
+    assert "warning" in status
+    assert status["warning"]["is_warning"] is True
+    assert status["warning"]["message"] is not None
+    assert "85%" in status["warning"]["message"]
+    assert "consumed" in status["warning"]["message"].lower()
+    assert status["warning"]["percentage_used"] == 85
+
+
+@pytest.mark.asyncio
+async def test_warning_above_threshold(token_bucket):
+    """Test warning object when percentage is above threshold (> 85%)."""
+    mock_result = {
+        "tokens_consumed": 4500,  # 90% of 5000
+        "requests_count": 15,
+        "is_blocked": False,
+        "blocked_until": None,
+        "last_reset": datetime.now(timezone.utc),
+    }
+    token_bucket.db.execute_one.return_value = mock_result
+
+    status = await token_bucket.get_quota_status("user_123")
+
+    # Verify warning is active above threshold
+    assert "warning" in status
+    assert status["warning"]["is_warning"] is True
+    assert status["warning"]["message"] is not None
+    assert "90%" in status["warning"]["message"]
+    assert status["warning"]["percentage_used"] == 90
+
+
+@pytest.mark.asyncio
+async def test_warning_message_format(token_bucket):
+    """Test warning message contains correct dynamic percentage."""
+    test_cases = [
+        (4250, 85),  # 85%
+        (4500, 90),  # 90%
+        (4750, 95),  # 95%
+        (4900, 98),  # 98%
+    ]
+
+    for tokens_consumed, expected_percentage in test_cases:
+        mock_result = {
+            "tokens_consumed": tokens_consumed,
+            "requests_count": 1,
+            "is_blocked": False,
+            "blocked_until": None,
+            "last_reset": datetime.now(timezone.utc),
+        }
+        token_bucket.db.execute_one.return_value = mock_result
+
+        status = await token_bucket.get_quota_status("user_123")
+
+        # Verify message includes the exact percentage
+        assert status["warning"]["is_warning"] is True
+        assert f"{expected_percentage}%" in status["warning"]["message"]
+        assert "You've consumed" in status["warning"]["message"]
+        assert "daily quota" in status["warning"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_warning_new_user_no_warning(token_bucket):
+    """Test warning object for new user (0% usage)."""
+    token_bucket.db.execute_one.return_value = None
+
+    status = await token_bucket.get_quota_status("new_user")
+
+    # New user should have no warning
+    assert "warning" in status
+    assert status["warning"]["is_warning"] is False
+    assert status["warning"]["message"] is None
+    assert status["warning"]["percentage_used"] == 0
+
+
+@pytest.mark.asyncio
+async def test_warning_edge_case_84_percent(token_bucket):
+    """Test warning at edge case just below threshold (84%)."""
+    mock_result = {
+        "tokens_consumed": 4199,  # 83.98% ≈ 83%
+        "requests_count": 5,
+        "is_blocked": False,
+        "blocked_until": None,
+        "last_reset": datetime.now(timezone.utc),
+    }
+    token_bucket.db.execute_one.return_value = mock_result
+
+    status = await token_bucket.get_quota_status("user_123")
+
+    # Should NOT trigger warning (< 85%)
+    assert status["warning"]["is_warning"] is False
+    assert status["warning"]["message"] is None

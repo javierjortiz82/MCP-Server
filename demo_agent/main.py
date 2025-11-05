@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Header, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from demo_agent.agent import DemoAgent
@@ -120,11 +121,36 @@ def create_app() -> FastAPI:
     )
 
     # ========================================================================
+    # CORS Middleware
+    # ========================================================================
+    # IMPORTANT: Must be added FIRST so it executes LAST in middleware chain
+    # This ensures CORS headers are added to all responses, including auth errors
+    # Configuration loaded from environment variables (see config/settings.py)
+    cors_origins = [origin.strip() for origin in config.CORS_ALLOW_ORIGINS.split(",")]
+    cors_methods = ["*"] if config.CORS_ALLOW_METHODS == "*" else [
+        method.strip() for method in config.CORS_ALLOW_METHODS.split(",")
+    ]
+    cors_headers = ["*"] if config.CORS_ALLOW_HEADERS == "*" else [
+        header.strip() for header in config.CORS_ALLOW_HEADERS.split(",")
+    ]
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=config.CORS_ALLOW_CREDENTIALS,
+        allow_methods=cors_methods,
+        allow_headers=cors_headers,
+    )
+
+    # ========================================================================
     # Clerk Authentication Middleware
     # ========================================================================
-    # IMPORTANT: Must be added BEFORE observability middleware
-    # to ensure authentication happens first
+    # IMPORTANT: Added AFTER CORSMiddleware so it executes BEFORE CORS
+    # This allows authentication checks before CORS processing
     app.add_middleware(ClerkAuthMiddleware)
+
+    logger.info(f"✅ CORS configured: {len(cors_origins)} allowed origins")
+    logger.debug(f"   Origins: {cors_origins}")
 
     # ========================================================================
     # Observability Middleware
@@ -822,9 +848,18 @@ def create_app() -> FastAPI:
           "is_blocked": false,
           "blocked_until": null,
           "last_reset": "2025-10-31T00:00:00Z",
-          "next_reset": "2025-11-01T00:00:00Z"
+          "next_reset": "2025-11-01T00:00:00Z",
+          "warning": {
+            "is_warning": false,
+            "message": null,
+            "percentage_used": 25
+          }
         }
         ```
+
+        Note: When percentage_used >= DEMO_WARNING_THRESHOLD (default 85%),
+        warning.is_warning will be true with a generic English message.
+        Frontend should use is_warning flag to display i18n translations.
         """
         try:
             global demo_agent

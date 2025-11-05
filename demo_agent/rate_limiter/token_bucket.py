@@ -289,6 +289,7 @@ class TokenBucket:
             - blocked_until: Block expiration (ISO 8601) or None
             - last_reset: Last quota reset (ISO 8601)
             - next_reset: Next quota reset (ISO 8601 at UTC midnight)
+            - warning: Warning object with is_warning, message, percentage_used
         """
         try:
             async with self.metrics.record_latency_async(
@@ -321,6 +322,11 @@ class TokenBucket:
                         "blocked_until": None,
                         "last_reset": now.isoformat(),
                         "next_reset": self._next_utc_midnight(),
+                        "warning": {
+                            "is_warning": False,
+                            "message": None,
+                            "percentage_used": 0,
+                        },
                     }
 
                 tokens_consumed = result["tokens_consumed"]
@@ -329,6 +335,14 @@ class TokenBucket:
 
                 # Calculate next reset (next UTC midnight)
                 next_reset = self._next_utc_midnight()
+
+                # Generate warning object based on threshold
+                is_warning = percentage_used >= config.DEMO_WARNING_THRESHOLD
+                warning_msg = None
+                if is_warning:
+                    # Generic English message with dynamic percentage
+                    # Frontend handles i18n translations based on is_warning flag
+                    warning_msg = f"You've consumed {percentage_used}% of your daily quota"
 
                 self.logger.debug(
                     "Quota status retrieved",
@@ -350,6 +364,11 @@ class TokenBucket:
                     ),
                     "last_reset": result["last_reset"].isoformat(),
                     "next_reset": next_reset,
+                    "warning": {
+                        "is_warning": is_warning,
+                        "message": warning_msg,
+                        "percentage_used": percentage_used,
+                    },
                 }
 
         except Exception as e:
@@ -367,6 +386,11 @@ class TokenBucket:
                 "blocked_until": None,
                 "last_reset": datetime.now(timezone.utc).isoformat(),
                 "next_reset": self._next_utc_midnight(),
+                "warning": {
+                    "is_warning": False,
+                    "message": None,
+                    "percentage_used": 0,
+                },
             }
 
     async def refund_tokens(self, user_key: str, tokens_to_refund: int) -> int:
