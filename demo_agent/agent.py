@@ -334,19 +334,10 @@ class DemoAgent:
             warning_msg = None
 
             if is_warning:
+                # Generic English message with dynamic percentage
+                # Frontend handles i18n translations based on is_warning flag
+                warning_msg = f"You've consumed {percentage_used}% of your daily quota"
                 self.metrics.increment_counter("agent_queries_with_warning")
-                if percentage_used >= 95:
-                    warning_msg = (
-                        f"🔴 ALERTA: Has usado {percentage_used}% de tu cuota diaria. "
-                        f"Quedan {tokens_remaining:,} tokens."
-                    )
-                    self.metrics.increment_counter("agent_quota_critical_warning")
-                elif percentage_used >= 85:
-                    warning_msg = (
-                        f"🟡 Advertencia: Has usado {percentage_used}% de tu cuota diaria. "
-                        f"Quedan {tokens_remaining:,} tokens."
-                    )
-                    self.metrics.increment_counter("agent_quota_warning")
 
             warning = TokenWarning(
                 is_warning=is_warning,

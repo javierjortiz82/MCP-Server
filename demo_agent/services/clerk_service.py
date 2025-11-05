@@ -187,12 +187,14 @@ class ClerkService:
             return None, "Token expired"
 
         except jwt.InvalidTokenError as e:
-            self.logger.warning("Invalid token", error=str(e))
+            self.logger.warning(f"Invalid token: {str(e)}", error=str(e))
             self.metrics.increment_counter("clerk_token_invalid")
             return None, f"Invalid token: {str(e)}"
 
         except Exception as e:
-            self.logger.error("Token verification failed", error=str(e))
+            import traceback
+            error_trace = traceback.format_exc()
+            self.logger.error(f"Token verification failed: {str(e)}\n{error_trace}")
             self.metrics.increment_counter("clerk_token_verification_error")
             return None, f"Token verification error: {str(e)}"
 

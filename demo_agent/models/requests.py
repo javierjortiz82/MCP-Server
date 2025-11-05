@@ -20,7 +20,7 @@ class Metadata(BaseModel):
         fingerprint: Client fingerprint hash (for VPN detection)
     """
 
-    ip: str = Field(..., description="Client IP address (IPv4 or IPv6)")
+    ip: str | None = Field(None, description="Client IP address (IPv4 or IPv6) - obtained from request if not provided")
     user_agent: str | None = Field(None, description="HTTP User-Agent header")
     fingerprint: str | None = Field(None, description="Client fingerprint hash")
 
@@ -51,7 +51,7 @@ class DemoRequest(BaseModel):
         before accessing demo chat.
     """
 
-    user_id: int = Field(..., description="Authenticated user ID (required)", gt=0)
+    user_id: int | None = Field(None, description="Authenticated user ID (optional - obtained from Clerk token if not provided)", gt=0)
     session_id: str | None = Field(None, description="Session token (tracking)")
     input: str = Field(
         ...,
@@ -61,12 +61,12 @@ class DemoRequest(BaseModel):
     )
     language: str = Field(
         default="es",
-        pattern="^(es|en)$",
-        description="Language preference (es|en)",
+        pattern="^(es|en|ar)$",
+        description="Language preference (es|en|ar)",
     )
-    metadata: Metadata = Field(
-        ...,
-        description="Request metadata (IP, fingerprint, etc.)",
+    metadata: Metadata | None = Field(
+        None,
+        description="Request metadata (IP, fingerprint, etc.) - optional",
     )
 
     @validator("input")

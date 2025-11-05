@@ -196,6 +196,26 @@ class DemoConfig(BaseSettings):
     )
 
     # ========================================================================
+    # CORS Configuration
+    # ========================================================================
+    CORS_ALLOW_ORIGINS: str = Field(
+        default="http://localhost:8080,http://localhost:3000",
+        description="Comma-separated list of allowed origins for CORS (e.g., http://localhost:8080,https://app.odiseo.com)",
+    )
+    CORS_ALLOW_CREDENTIALS: bool = Field(
+        default=True,
+        description="Allow credentials (cookies, authorization headers) in CORS requests",
+    )
+    CORS_ALLOW_METHODS: str = Field(
+        default="*",
+        description="Comma-separated list of allowed HTTP methods for CORS (use * for all)",
+    )
+    CORS_ALLOW_HEADERS: str = Field(
+        default="*",
+        description="Comma-separated list of allowed headers for CORS (use * for all)",
+    )
+
+    # ========================================================================
     # Rate Limiting Configuration
     # ========================================================================
     IP_RATE_LIMIT_REQUESTS: int = Field(
