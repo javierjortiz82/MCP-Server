@@ -58,6 +58,11 @@ class IPLimiter:
         4. If count >= limit: return False
         5. If count < limit: increment and return True
         """
+        # Handle None or empty IP address - allow request without rate limiting
+        if not ip_address or not ip_address.strip():
+            logger.warning("check_rate_limit called with empty IP address, allowing request")
+            return True, 0
+
         try:
             logger.debug(f"Checking rate limit for IP: {ip_address}")
 
@@ -111,6 +116,22 @@ class IPLimiter:
             - last_seen: Last request timestamp
             - is_blocked: Whether IP is globally blocked
         """
+        # Handle None or empty IP address
+        if not ip_address or not ip_address.strip():
+            logger.warning("get_ip_stats called with empty IP address, returning default stats")
+            return {
+                "ip_address": ip_address or "unknown",
+                "total_requests": 0,
+                "requests_today": 0,
+                "requests_per_minute": 0,
+                "unique_users": 0,
+                "abuse_score_avg": 0.0,
+                "abuse_score_max": 0.0,
+                "first_seen": None,
+                "last_seen": None,
+                "rate_limit_exceeded": False,
+            }
+
         try:
             now = datetime.now(timezone.utc)
             one_day_ago = now - timedelta(days=1)
@@ -234,6 +255,11 @@ class IPLimiter:
             - is_suspicious: True if IP meets suspicious criteria
             - reason: Description of suspicious pattern
         """
+        # Handle None or empty IP address - not suspicious by default
+        if not ip_address or not ip_address.strip():
+            logger.warning("is_ip_suspicious called with empty IP address, returning not suspicious")
+            return False, ""
+
         try:
             stats = await self.get_ip_stats(ip_address)
 

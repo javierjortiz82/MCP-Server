@@ -63,44 +63,36 @@ class ClerkWebhookHandler:
         self,
         payload: bytes,
         headers: dict,
-    ) -> bool:
+    ) -> None:
         """Verify Clerk webhook signature using Svix library.
 
         Clerk uses Svix for webhook delivery. This method uses the official
         Svix library to verify webhook signatures following the standard documented at:
         https://docs.svix.com/receiving/verifying-payloads/how
 
+        SECURITY (CWE-345 fix): Raises exceptions instead of returning False
+        to ensure signature verification failures are never silently ignored.
+
         Args:
             payload: Raw request body (bytes) - must be unmodified from request
             headers: Dict with svix-id, svix-timestamp, and svix-signature
 
-        Returns:
-            bool: True if signature is valid, False otherwise
+        Raises:
+            ValueError: If webhook secret is not configured
+            WebhookVerificationError: If signature verification fails
+            Exception: For other verification errors
         """
         if not self.webhook_secret:
             self.logger.error("Webhook secret not configured")
-            return False
+            raise ValueError("Webhook secret not configured - cannot verify signatures")
 
-        try:
-            # Verify using official Svix library
-            # According to docs: wh.verify() accepts raw payload (bytes or string)
-            # and headers dict directly from request
-            self.wh.verify(payload, headers)
+        # Verify using official Svix library
+        # According to docs: wh.verify() accepts raw payload (bytes or string)
+        # and headers dict directly from request
+        # This will raise WebhookVerificationError if invalid
+        self.wh.verify(payload, headers)
 
-            self.logger.info("Webhook signature verified successfully")
-            return True
-
-        except WebhookVerificationError as e:
-            self.logger.warning(
-                "Webhook signature verification failed",
-                error=str(e),
-                headers=headers
-            )
-            return False
-
-        except Exception as e:
-            self.logger.error("Error verifying webhook signature", error=str(e))
-            return False
+        self.logger.info("Webhook signature verified successfully")
 
     async def handle_webhook(
         self,
@@ -140,16 +132,21 @@ class ClerkWebhookHandler:
                 detail="Missing required Svix headers"
             )
 
-        # Verify signature using official Svix pattern
+        # Verify signature using official Svix pattern (raises on failure)
         headers = {
             "svix-id": svix_id,
             "svix-timestamp": svix_timestamp,
             "svix-signature": svix_signature,
         }
-        is_valid = self.verify_webhook_signature(payload, headers)
 
-        if not is_valid:
-            self.logger.error("Invalid webhook signature", svix_id=svix_id)
+        try:
+            self.verify_webhook_signature(payload, headers)
+        except (WebhookVerificationError, ValueError) as e:
+            self.logger.error(
+                "Webhook signature verification failed",
+                svix_id=svix_id,
+                error=str(e)
+            )
             self.metrics.increment_counter("clerk_webhook_invalid_signature")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

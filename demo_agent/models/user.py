@@ -12,6 +12,14 @@ from enum import Enum
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+# SECURITY: Import ReDoS-safe validators
+from demo_agent.utils.validators import (
+    validate_email_safe,
+    validate_otp_code_safe,
+    validate_password_strength,
+    sanitize_email,
+)
+
 
 class AuthProvider(str, Enum):
     """Authentication provider types."""
@@ -69,6 +77,19 @@ class UserRegisterRequest(BaseModel):
         default="web", description="Registration source (web, mobile, api)"
     )
 
+    @field_validator("email")
+    @classmethod
+    def validate_email_redos_safe(cls, v: str) -> str:
+        """Validate email with ReDoS protection.
+
+        SECURITY (CWE-1333 fix): Additional validation beyond Pydantic's EmailStr
+        to ensure ReDoS resistance and prevent email-based attacks.
+        """
+        is_valid, error_msg = validate_email_safe(v)
+        if not is_valid:
+            raise ValueError(error_msg)
+        return sanitize_email(v)
+
     @field_validator("preferred_language")
     @classmethod
     def validate_language(cls, v: str) -> str:
@@ -91,15 +112,14 @@ class UserRegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password(cls, v: str) -> str:
-        """Validate password strength."""
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        if not any(char.isupper() for char in v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not any(char.islower() for char in v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not any(char.isdigit() for char in v):
-            raise ValueError("Password must contain at least one number")
+        """Validate password strength.
+
+        SECURITY: Uses hardened password validation to prevent common
+        weak passwords and enforce strong password policy.
+        """
+        is_valid, error_msg = validate_password_strength(v)
+        if not is_valid:
+            raise ValueError(error_msg)
         return v
 
 
@@ -151,11 +171,14 @@ class VerifyOTPRequest(BaseModel):
     @field_validator("otp_code")
     @classmethod
     def validate_otp_code(cls, v: str) -> str:
-        """Validate OTP code is 6 digits."""
-        if not v.isdigit():
-            raise ValueError("OTP code must contain only digits")
-        if len(v) != 6:
-            raise ValueError("OTP code must be exactly 6 digits")
+        """Validate OTP code is 6 digits.
+
+        SECURITY: Uses safe validator to prevent unicode digit attacks
+        and ensure only ASCII digits 0-9 are accepted.
+        """
+        is_valid, error_msg = validate_otp_code_safe(v)
+        if not is_valid:
+            raise ValueError(error_msg)
         return v
 
 

@@ -16,3 +16,5 @@
 - Conexión con servicio de coreo
 - Implementacion clerk en backend existosa
 - Implementacion de clerk en frontend
+- Aplicación de estandares de seguridad
+- Chat completo
