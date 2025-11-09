@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     )
 
     SCHEMA_NAME: str = Field(
-        default="public",
+        default="test",  # ✅ FIXED: Must match mcp_server schema
         description="PostgreSQL schema name (shared across all modules)",
     )
 

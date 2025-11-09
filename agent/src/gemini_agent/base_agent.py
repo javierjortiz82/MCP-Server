@@ -978,6 +978,7 @@ Return ONLY the message itself - nothing else."""
         query: str,
         *,
         include_history: bool = True,
+        intent: str | None = None,
         **kwargs: Any,
     ) -> str:
         """Generate response for user query.
@@ -1061,6 +1062,9 @@ Return ONLY the message itself - nothing else."""
             raise RuntimeError(f"{self.agent_name} not initialized")
 
         try:
+            # Store intent for use in _update_history()
+            self.current_intent = intent
+
             self.logger.info(f"Generating response for: '{query[:100]}...'")
 
             # Auto-detect or use provided language for consistent context (prevents language switching)
@@ -1201,12 +1205,22 @@ Return ONLY the message itself - nothing else."""
                 self.logger.error("Response text is None or empty")
                 raise RuntimeError("Empty response text")
 
+            # Calculate elapsed time BEFORE updating history (for accurate DB storage)
+            elapsed_ms = int((time.time() - start_time) * 1000)
+
+            # Extract tool calls from response (for analytics)
+            tool_calls = self._extract_tool_calls(response.candidates[0].content)
+
             # Update history (uses template method pattern)
             if include_history:
-                self._update_history(contents[-1], response.candidates[0].content)
+                self._update_history(
+                    contents[-1],
+                    response.candidates[0].content,
+                    response_time_ms=elapsed_ms,
+                    tool_calls=tool_calls
+                )
 
             # Track success metrics
-            elapsed_ms = (time.time() - start_time) * 1000
             self._metrics["successful_requests"] += 1
             self._metrics["total_response_time_ms"] += elapsed_ms
             self._metrics["history_sizes"].append(len(self.conversation_history))
@@ -1316,10 +1330,60 @@ Return ONLY the message itself - nothing else."""
 
         return contents
 
+    def _extract_tool_calls(self, model_content: types.Content) -> list[dict[str, Any]] | None:
+        """Extract tool/function calls from Gemini response for database storage.
+
+        Processes the model response to identify and extract function calls
+        that were made during generation. Returns structured metadata for
+        analytics and debugging.
+
+        Args:
+            model_content: Gemini model response content that may contain function calls.
+
+        Returns:
+            List of tool call dictionaries with structure:
+            [
+                {
+                    "tool_name": str,           # Name of the function called
+                    "args": dict,                # Arguments passed to function
+                    "execution_time_ms": int,    # Execution time (if available)
+                }
+            ]
+            Returns None if no function calls were made.
+
+        Example:
+            >>> response = await client.generate_content(...)
+            >>> tool_calls = self._extract_tool_calls(response.candidates[0].content)
+            >>> print(tool_calls)
+            [{"tool_name": "get_products", "args": {"category": "laptops"}, "execution_time_ms": 45}]
+
+        Note:
+            This method only extracts metadata about tool calls. The actual
+            function execution is handled by Gemini's function calling system.
+        """
+        if not model_content or not model_content.parts:
+            return None
+
+        tool_calls = []
+        for part in model_content.parts:
+            # Check if this part is a function call
+            if hasattr(part, 'function_call') and part.function_call:
+                func_call = part.function_call
+                tool_call_info = {
+                    "tool_name": func_call.name,
+                    "args": dict(func_call.args) if func_call.args else {},
+                }
+                tool_calls.append(tool_call_info)
+
+        return tool_calls if tool_calls else None
+
     def _update_history(
         self,
         user_content: types.Content,
         model_content: types.Content,
+        response_time_ms: int | None = None,
+        tool_calls: list[dict[str, Any]] | None = None,
+        token_count: int | None = None,
     ) -> None:
         """Update conversation history with automatic size management.
 
@@ -1333,6 +1397,9 @@ Return ONLY the message itself - nothing else."""
         Args:
             user_content: User message to add to history.
             model_content: Model response to add to history.
+            response_time_ms: Response generation time in milliseconds (for analytics).
+            tool_calls: List of function calls made during response generation.
+            token_count: Total token count from Gemini response (for cost tracking).
 
         Note:
             History trimming is automatic and transparent to the caller.
@@ -1344,33 +1411,50 @@ Return ONLY the message itself - nothing else."""
         self.conversation_history.append(model_content)
 
         # Persist to database (PostgreSQL - long-term) if enabled
+        self.logger.info(
+            f"🔍 DEBUG _update_history: _memory_enabled={self._memory_enabled}, "
+            f"memory_manager={self.memory_manager is not None}, "
+            f"session_id={self.session_id is not None}"
+        )
         if self._memory_enabled and self.memory_manager and self.session_id:
+            self.logger.info("✅ Entering DB persistence block...")
             try:
                 # Extract text from Content objects (ensure non-None strings for Pydantic)
                 user_text = (user_content.parts[0].text if user_content.parts else "") or ""
                 model_text = (model_content.parts[0].text if model_content.parts else "") or ""
 
-                # Save user message
+                self.logger.info(
+                    f"🔍 Extracted texts - user: '{user_text[:50]}...' ({len(user_text)} chars), "
+                    f"model: '{model_text[:50]}...' ({len(model_text)} chars)"
+                )
+
+                # Save user message (no agent_name, response_time, or tool_calls for user)
                 self.memory_manager.save_message(
                     session_id=self.session_id,
                     role="user",
                     message_text=user_text,
-                    intent=None,  # Intent classification done by AgentRouter
+                    intent=self.current_intent,  # Use intent passed from AgentRouter
                 )
 
-                # Save model message
+                # Save model message with performance metrics and tool calls
                 self.memory_manager.save_message(
                     session_id=self.session_id,
                     role="model",
                     agent_name=self.agent_name,
                     message_text=model_text,
-                    intent=None,
+                    intent=self.current_intent,  # Use intent passed from AgentRouter
+                    tool_calls=tool_calls,
+                    response_time_ms=response_time_ms,
+                    token_count=token_count,
                 )
 
-                self.logger.debug(f"Messages persisted to DB (session={self.session_id[:8]})")
+                self.logger.info(
+                    f"✅ Messages persisted to DB (session={self.session_id[:8]}, "
+                    f"response_time={response_time_ms}ms, tokens={token_count}, tools={len(tool_calls) if tool_calls else 0})"
+                )
             except Exception as e:
                 # Non-critical: Log but don't fail if persistence fails
-                self.logger.warning(f"Failed to persist messages to DB: {e}")
+                self.logger.error(f"❌ Failed to persist messages to DB: {e}", exc_info=True)
 
         # Maintain reasonable history size (20 items = 10 conversation turns)
         if len(self.conversation_history) > 20:

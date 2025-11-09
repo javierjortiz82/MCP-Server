@@ -558,13 +558,25 @@ NO agregues explicaciones ni puntuación adicional."""
             if self.metrics:
                 self.metrics.increment_counter("router_classifications_attempted", 1)
 
-            # Use session language if provided, otherwise auto-detect from query
+            # CRITICAL FIX: Always detect query language and validate against session language
+            # This prevents language mismatch when user switches languages mid-conversation
+            # Reference: docs/ROUTER_EMPTY_RESPONSE_ROOT_CAUSE.md
+            query_language = detect_user_language(query)
+
             if session_language:
-                detected_language = session_language
-                logger.info(f"🌐 Using session language: {detected_language}")
+                if query_language != session_language:
+                    logger.warning(
+                        f"⚠️ Language mismatch detected! "
+                        f"Session language: {session_language}, Query language: {query_language}. "
+                        f"Using query language for accurate classification."
+                    )
+                    detected_language = query_language  # Override session with query language
+                else:
+                    detected_language = session_language
+                    logger.info(f"🌐 Using consistent language: {detected_language}")
             else:
                 # Auto-detect user language from query (first message or when session_language not provided)
-                detected_language = detect_user_language(query)
+                detected_language = query_language
                 logger.info(f"🌐 Auto-detected language: {detected_language}")
 
             # Get classification prompt using PromptManager with detected language
@@ -613,33 +625,80 @@ NO agregues explicaciones ni puntuación adicional."""
 
             logger.debug("Generating classification with temperature=0 (deterministic)")
 
-            # Generate classification (OPCIÓN 7: Track latency)
-            if self.metrics:
-                async with self.metrics.record_latency_async(
-                    "router_classify_latency",
-                    tags={"language": detected_language}
-                ):
-                    response = await self.client.aio.models.generate_content(
-                        model=self.model_name,
-                        contents=contents,
-                        config=self.generation_config,
-                    )
-            else:
-                response = await self.client.aio.models.generate_content(
-                    model=self.model_name,
-                    contents=contents,
-                    config=self.generation_config,
-                )
+            # Generate classification with exponential backoff retry (Google best practice)
+            # Reference: https://ai.google.dev/gemini-api/docs/troubleshooting
+            import asyncio
+            import random
+
+            max_retries = 3
+            base_delay = 1.0  # 1 second initial delay
+            max_delay = 10.0  # 10 seconds max delay
+
+            last_error = None
+            response = None
+
+            for attempt in range(max_retries):
+                try:
+                    # Generate classification (OPCIÓN 7: Track latency)
+                    if self.metrics:
+                        async with self.metrics.record_latency_async(
+                            "router_classify_latency",
+                            tags={"language": detected_language, "attempt": attempt + 1}
+                        ):
+                            response = await self.client.aio.models.generate_content(
+                                model=self.model_name,
+                                contents=contents,
+                                config=self.generation_config,
+                            )
+                    else:
+                        response = await self.client.aio.models.generate_content(
+                            model=self.model_name,
+                            contents=contents,
+                            config=self.generation_config,
+                        )
+
+                    # Validate response has content
+                    if (response and response.candidates and
+                        response.candidates[0].content and
+                        response.candidates[0].content.parts and
+                        response.candidates[0].content.parts[0].text):
+                        # Success - valid response
+                        logger.debug(f"Classification successful on attempt {attempt + 1}/{max_retries}")
+                        break
+                    else:
+                        # Empty response - treat as retriable error
+                        logger.warning(f"Empty response on attempt {attempt + 1}/{max_retries}")
+                        last_error = RuntimeError("Empty response from Gemini API")
+
+                except Exception as e:
+                    logger.warning(f"Error on classification attempt {attempt + 1}/{max_retries}: {e}")
+                    last_error = e
+
+                # Retry with exponential backoff + jitter (unless last attempt)
+                if attempt < max_retries - 1:
+                    # Exponential backoff: delay = min(base * 2^attempt + jitter, max)
+                    delay = min(base_delay * (2 ** attempt) + random.uniform(0, 0.5), max_delay)
+                    logger.info(f"Retrying classification in {delay:.2f}s... (attempt {attempt + 1}/{max_retries})")
+                    await asyncio.sleep(delay)
+
+            # If all retries failed, raise the last error
+            if not response or not (response.candidates and
+                                   response.candidates[0].content and
+                                   response.candidates[0].content.parts):
+                logger.error(f"All {max_retries} retry attempts failed for classification")
+                if last_error:
+                    raise last_error
+                raise RuntimeError("Classification failed after all retries")
 
             # Extract classification result with defensive checks
             if not response.candidates or not response.candidates[0].content:
                 logger.error("Empty response from Gemini API")
                 raise RuntimeError("No classification result from Gemini")
 
-            # Additional defensive checks for None values
+            # Additional defensive checks for None values (should not happen after retry logic)
             candidate = response.candidates[0]
             if not candidate.content.parts:
-                logger.error("Response has no parts")
+                logger.error("Response has no parts (after retries)")
                 logger.debug(f"Response candidates: {len(response.candidates)}")
                 logger.debug(
                     f"Candidate finish_reason: {candidate.finish_reason if hasattr(candidate, 'finish_reason') else 'N/A'}"
@@ -648,31 +707,40 @@ NO agregues explicaciones ni puntuación adicional."""
                     f"Safety ratings: {candidate.safety_ratings if hasattr(candidate, 'safety_ratings') else 'N/A'}"
                 )
 
-                # STICKY SESSION: If in an active conversation, maintain intent
-                if context and "last_intent" in context:
+                # Sticky session ONLY for very short queries (< 5 chars) - likely follow-ups
+                # No hardcoded word lists - just length heuristic
+                is_very_short = len(query.strip()) < 5  # "ok", "sí", "no" = likely follow-up
+
+                if is_very_short and context and "last_intent" in context:
                     last_intent_str = context["last_intent"]
                     logger.warning(
-                        f"⚠️ Empty response but continuing conversation. "
-                        f"Maintaining previous intent: {last_intent_str}"
+                        f"⚠️ Empty response on very short query (len={len(query)}). "
+                        f"Maintaining previous intent: {last_intent_str} (sticky session)"
                     )
                     return (Intent(last_intent_str), detected_language)
 
-                raise RuntimeError("No content parts in classification response")
+                # For longer queries, cannot classify safely after all retries
+                logger.error(f"Empty response persists after retries on query (len={len(query)}). Cannot classify.")
+                raise RuntimeError("No content parts in classification response after retries")
 
             if not candidate.content.parts[0].text:
-                logger.error("Response part has no text")
+                logger.error("Response part has no text (after retries)")
                 logger.debug(f"Response structure: {candidate.content}")
 
-                # STICKY SESSION: If in an active conversation, maintain intent
-                if context and "last_intent" in context:
+                # Sticky session ONLY for very short queries (< 5 chars)
+                is_very_short = len(query.strip()) < 5
+
+                if is_very_short and context and "last_intent" in context:
                     last_intent_str = context["last_intent"]
                     logger.warning(
-                        f"⚠️ No text in response but continuing conversation. "
-                        f"Maintaining previous intent: {last_intent_str}"
+                        f"⚠️ No text in response on very short query (len={len(query)}). "
+                        f"Maintaining previous intent: {last_intent_str} (sticky session)"
                     )
                     return (Intent(last_intent_str), detected_language)
 
-                raise RuntimeError("No text in classification response")
+                # For longer queries, cannot classify after all retries
+                logger.error(f"No text in response after retries on query (len={len(query)}). Cannot classify.")
+                raise RuntimeError("No text in classification response after retries")
 
             classification_text = candidate.content.parts[0].text.strip().lower()
 

@@ -14,7 +14,7 @@
 # ============================================================================
 
 # Core AI
-google-genai>=1.0.0                # Google GenAI SDK for Gemini models
+google-genai>=1.49.0               # Google GenAI SDK for Gemini models
 
 # Configuration and Settings
 pydantic>=2.11.0                   # Data validation and settings management (v2)

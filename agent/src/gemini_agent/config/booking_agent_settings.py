@@ -76,17 +76,24 @@ class BookingAgentSettings(BaseSettings):
     )
 
     BOOKING_MAX_OUTPUT_TOKENS: int = Field(
-        default=2048,
+        default=4096,
         gt=0,
-        le=4096,
-        description="Maximum output tokens for Gemini API response",
+        le=8192,
+        description="Maximum output tokens for Gemini API response (increased for thinking mode)",
     )
 
     BOOKING_TEMPERATURE: float = Field(
-        default=0.7,
+        default=0.0,
         ge=0.0,
         le=2.0,
-        description="Temperature for response generation (0=deterministic, 2=creative)",
+        description="Temperature for response generation (0=deterministic, 2=creative). Set to 0.0 for reliable function calling per Google best practices.",
+    )
+
+    BOOKING_THINKING_BUDGET: int = Field(
+        default=1024,
+        ge=0,
+        le=24576,
+        description="Thinking budget for Gemini 2.5 models (0=disabled, 1024=simple tasks, 8192+=complex reasoning). Controls how many tokens the model uses for internal reasoning.",
     )
 
     # ============================================================================

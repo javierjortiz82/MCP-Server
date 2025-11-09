@@ -52,7 +52,7 @@ class ConversationMessage(BaseModel):
     agent_name: str | None = Field(default=None, description="Agent that generated response")
     intent: str | None = Field(default=None, description="'sales', 'booking', or 'general'")
     message_text: str = Field(description="Message content")
-    tool_calls: dict[str, Any] | None = Field(default=None, description="MCP tools used")
+    tool_calls: list[dict[str, Any]] | None = Field(default=None, description="MCP tools used (JSONB array)")
     response_time_ms: int | None = Field(default=None, description="Response latency")
     token_count: int | None = Field(default=None, description="Token count")
 
@@ -367,15 +367,16 @@ class MemoryManager:
         )
 
         try:
-            result = fetchone(query, params)
+            logger.info(f"💾 EXECUTING INSERT: schema={self.schema}, session_id={session_id[:8]}, role={role}, agent={agent_name}")
+            result = fetchone(query, params, commit=True)  # ✅ COMMIT REQUIRED for INSERT
             message_id = result["id"] if result else -1
-            logger.debug(
-                f"Message saved (id={message_id}, role={role}, "
-                f"agent={agent_name}, len={len(message_text)})"
+            logger.info(
+                f"✅ Message saved to DB (id={message_id}, role={role}, "
+                f"agent={agent_name}, len={len(message_text)}, response_time={response_time_ms}ms)"
             )
             return message_id
         except Exception as e:
-            logger.error(f"Failed to save message: {e}")
+            logger.error(f"❌ Failed to save message to DB: {e}", exc_info=True)
             raise
 
     def get_recent_messages(
