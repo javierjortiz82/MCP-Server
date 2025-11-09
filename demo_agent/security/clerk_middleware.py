@@ -41,6 +41,8 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
     - /v1/auth/verify-otp (legacy)
     - /v1/auth/resend-otp (legacy)
     - /v1/webhooks/clerk (webhook receiver)
+    - /v1/contact (public contact form)
+    - /v1/booking (public demo booking form)
 
     Protected routes (auth required):
     - /v1/demo
@@ -72,6 +74,8 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
         "/v1/auth/resend-otp",
         "/v1/webhooks/clerk",
         "/v1/auth/check-migration",  # For legacy user migration checks
+        "/v1/contact",  # Public contact form endpoint
+        "/v1/booking",  # Public demo booking form endpoint
     }
 
     def __init__(self, app):
