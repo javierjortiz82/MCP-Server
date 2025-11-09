@@ -217,11 +217,13 @@ class TokenBucket:
                         )
                         self.metrics.increment_counter("quota_auto_unblocked")
 
-                # Calculate remaining tokens after this request
-                tokens_remaining = (
-                    self.max_tokens - result["tokens_consumed"] - tokens_needed
-                )
-                can_proceed = tokens_remaining >= 0
+                # Calculate remaining tokens BEFORE deducting estimated tokens
+                # User should be allowed to proceed if they have ANY tokens remaining
+                tokens_before_request = self.max_tokens - result["tokens_consumed"]
+                can_proceed = tokens_before_request > 0
+
+                # Calculate remaining after deduction for return value
+                tokens_remaining = tokens_before_request - tokens_needed
 
                 self.logger.debug(
                     "Quota check completed",
