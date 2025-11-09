@@ -49457,3 +49457,151 @@ Hora actual: 2025-11-09 00:38:19 CST (hoy)
 - Python zoneinfo: https://docs.python.org/3/library/zoneinfo.html
 - Best practices: Stripe API, GitHub API, Twitter API (reset a medianoche local)
 
+
+---
+
+## 2025-11-09 - Integración de nuevas tablas booking_requests y contact_requests al flujo de despliegue
+
+**Motivo:** Garantizar que las nuevas tablas de formularios web (booking_requests y contact_requests) sean invocadas correctamente desde `make db`.
+
+**Problema identificado:**
+- Se crearon nuevos archivos SQL para tablas de booking y contacto
+- Estos archivos no estaban integrados en el flujo de despliegue (`SQL/05_orchestration/01_deploy.sql`)
+- Las tablas dependen de una función trigger (`update_updated_at_column`) que tampoco estaba en el flujo
+- Los contadores en scripts de validación no reflejaban las nuevas tablas
+
+**Cambios realizados:**
+
+### 1. Estructura de archivos SQL creada:
+```
+SQL/01_ddl/booking/01_booking_requests.sql    (ya existía)
+SQL/01_ddl/contact/01_contact_requests.sql    (ya existía)
+SQL/01_ddl/utils/00_triggers.sql               (nuevo)
+```
+
+### 2. Actualización de `SQL/05_orchestration/01_deploy.sql`:
+
+**Añadidas nuevas fases en el orden correcto:**
+- Phase 6: Common Trigger Functions (`utils/00_triggers.sql`)
+- Phase 7: Booking & Contact Requests (web forms)
+  - `booking/01_booking_requests.sql`
+  - `contact/01_contact_requests.sql`
+- Renumeradas fases posteriores (Phase 8-13)
+
+**Orden de ejecución garantizado:**
+1. Extensions y schema
+2. Products (base catalog)
+3. Bookings system
+4. Email queue
+5. Memory system
+6. **Trigger functions** ← Nuevo (debe ir antes de las tablas que los usan)
+7. **Booking & Contact requests** ← Nuevo
+8. Utility tables
+9. Demo system
+10. Indexes
+11. Functions
+12-13. Seed data
+
+### 3. Actualización de `SQL/scripts/deploy.sh`:
+
+**Añadida sección de preprocesamiento (línea 229-244):**
+```bash
+# 3. Preprocess trigger function and new table files (booking, contact)
+info "Preprocessing trigger functions and new table files..."
+for sql_file in \
+    /tmp/sql_deploy/01_ddl/utils/00_triggers.sql \
+    /tmp/sql_deploy/01_ddl/booking/01_booking_requests.sql \
+    /tmp/sql_deploy/01_ddl/contact/01_contact_requests.sql; do
+    if [ -f "$sql_file" ]; then
+        echo "  Processing: $(basename $sql_file)..."
+        docker exec mcp-postgres sed -i "s/:SCHEMA_NAME/$SCHEMA_NAME/g" "$sql_file"
+    fi
+done
+```
+
+**Actualizado deployment summary (línea 460-479):**
+- Tables: 14 → **16**
+- Añadida categoría "Web forms: booking_requests, contact_requests (2)"
+- Indexes: 80+ → **85+**
+- Añadida línea "Triggers: update_updated_at_column (for all tables)"
+
+### 4. Actualización de `SQL/05_orchestration/02_validate_deployment.sql`:
+
+**Cambios en contadores esperados:**
+- Línea 21: Expected tables: 14 → **16**
+- Línea 230: Validation summary: 14 → **16**
+
+### 5. Modelos Pydantic correspondientes:
+
+Los modelos ya existían y están correctamente mapeados:
+- `demo_agent/models/booking.py`: `BookingRequest`, `BookingResponse`
+- `demo_agent/models/contact.py`: `ContactRequest`, `ContactResponse`, `ContactStatus`
+
+**Estructura de tablas agregadas:**
+
+**booking_requests:**
+- Campos: full_name, email, phone, country_code, company, preferred_date, preferred_time, message
+- Seguridad: ip_address, user_agent, recaptcha_score
+- Estado: status (pending, confirmed, completed, cancelled, no_show)
+- Timestamps automáticos con trigger
+
+**contact_requests:**
+- Campos: full_name, email, phone, country_code, company, message, contact_type
+- Seguridad: ip_address, user_agent, recaptcha_score
+- Estado: status (pending, in_progress, resolved, spam)
+- Timestamps automáticos con trigger
+
+**Índices creados:**
+- Email lookup (duplicados)
+- Status filtering (admin dashboard)
+- Date/time queries (booking)
+- Recent contacts/bookings
+- IP rate limiting
+- Type filtering (contact)
+
+**Función trigger común:**
+```sql
+CREATE OR REPLACE FUNCTION :SCHEMA_NAME.update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### Verificación:
+
+```bash
+# Test deployment
+make db
+
+# Expected output:
+# [7/11] Creating common trigger functions...
+# [8/11] Creating booking and contact request tables...
+# Tables: 16 (DDL)
+#   • Web forms: booking_requests, contact_requests (2)
+```
+
+### Beneficios:
+
+✅ Flujo de despliegue completo y ordenado
+✅ Dependencias de triggers resueltas correctamente
+✅ Validación actualizada con contadores correctos
+✅ Documentación clara de nuevas tablas en summary
+✅ Preprocesamiento automático de :SCHEMA_NAME
+✅ Integración completa con `make db`
+
+### Archivos modificados:
+
+- `SQL/05_orchestration/01_deploy.sql` (añadidas fases 6-7, renumeradas 8-13)
+- `SQL/scripts/deploy.sh` (preprocesamiento y summary)
+- `SQL/05_orchestration/02_validate_deployment.sql` (contadores actualizados)
+- `SQL/01_ddl/utils/00_triggers.sql` (creado)
+- `SQL/01_ddl/booking/01_booking_requests.sql` (ya existía)
+- `SQL/01_ddl/contact/01_contact_requests.sql` (ya existía)
+
+**Estado:** ✅ Listo para deployment
+
+---
+
