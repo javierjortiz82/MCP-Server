@@ -226,6 +226,23 @@ run_deployment() {
     fi
     success "Unaccent references preprocessed successfully"
 
+    # 3. Preprocess trigger function and new table files (booking, contact)
+    info "Preprocessing trigger functions and new table files..."
+    for sql_file in \
+        /tmp/sql_deploy/01_ddl/utils/00_triggers.sql \
+        /tmp/sql_deploy/01_ddl/booking/01_booking_requests.sql \
+        /tmp/sql_deploy/01_ddl/contact/01_contact_requests.sql; do
+        if [ -f "$sql_file" ]; then
+            echo "  Processing: $(basename $sql_file)..."
+            docker exec mcp-postgres sed -i "s/:SCHEMA_NAME/$SCHEMA_NAME/g" "$sql_file"
+        fi
+    done
+    if [ $? -ne 0 ]; then
+        error "Failed to preprocess new table files"
+        return 1
+    fi
+    success "Trigger functions and new tables preprocessed successfully"
+
     # Execute deployment from within container where \i directives work
     if docker exec -w /tmp/sql_deploy/05_orchestration mcp-postgres \
         psql -U mcp_user -d mcpdb -v "SCHEMA_NAME=$SCHEMA_NAME" -f 01_deploy.sql; then
@@ -440,9 +457,17 @@ main() {
     print_header "DEPLOYMENT SUMMARY"
     success "Database deployment completed"
     info "Schema: $SCHEMA_NAME"
-    info "Tables: 14 (DDL)"
-    info "Indexes: 80+ (optimized)"
+    info "Tables: 16 (DDL)"
+    info "  • Core: products (1)"
+    info "  • Bookings: appointments, services, hours, blocked times (5)"
+    info "  • Email: email_queue (1)"
+    info "  • Memory: conversations, agent_memory, user_memory (3)"
+    info "  • Demo: usage, audit, sessions, users, otp (5)"
+    info "  • Web forms: booking_requests, contact_requests (2)"
+    info "  • Utils: pagination_contexts (1)"
+    info "Indexes: 85+ (optimized)"
     info "Functions: 31 (bookings, email, memory)"
+    info "Triggers: update_updated_at_column (for all tables)"
     info "Data loaded:"
     info "  • Products: 90 (with embeddings)"
     info "  • Service types: 5"

@@ -70,16 +70,31 @@
 \echo ''
 
 -- ============================================================================
--- Phase 6: Utility Tables
+-- Phase 6: Common Trigger Functions
 -- ============================================================================
-\echo '[7/10] Creating utility tables (pagination)...'
+\echo '[7/11] Creating common trigger functions...'
+\i '../01_ddl/utils/00_triggers.sql'
+\echo ''
+
+-- ============================================================================
+-- Phase 7: Booking & Contact Requests (Web Forms)
+-- ============================================================================
+\echo '[8/11] Creating booking and contact request tables...'
+\i '../01_ddl/booking/01_booking_requests.sql'
+\i '../01_ddl/contact/01_contact_requests.sql'
+\echo ''
+
+-- ============================================================================
+-- Phase 8: Utility Tables
+-- ============================================================================
+\echo '[9/11] Creating utility tables (pagination)...'
 \i '../01_ddl/utils/01_pagination_contexts.sql'
 \echo ''
 
 -- ============================================================================
--- Phase 7: Demo System (Token-Bucket Rate Limiting + Clerk Auth)
+-- Phase 9: Demo System (Token-Bucket Rate Limiting + Clerk Auth)
 -- ============================================================================
-\echo '[8/10] Creating demo system tables (token-bucket, audit, sessions, users, otp, clerk)...'
+\echo '[10/11] Creating demo system tables (token-bucket, audit, sessions, users, otp, clerk)...'
 \i '../01_ddl/demo/01_demo_usage.sql'
 \i '../01_ddl/demo/02_demo_audit_log.sql'
 \i '../01_ddl/demo/03_demo_sessions.sql'
@@ -91,16 +106,16 @@
 \echo ''
 
 -- ============================================================================
--- Phase 8: Indexes (Consolidated for maintainability)
+-- Phase 10: Indexes (Consolidated for maintainability)
 -- ============================================================================
-\echo '[9/11] Creating consolidated indexes...'
+\echo '[11/13] Creating consolidated indexes...'
 \i '../03_indexes/01_indexes.sql'
 \echo ''
 
 -- ============================================================================
--- Phase 9: Functions and Triggers
+-- Phase 11: Functions and Triggers
 -- ============================================================================
-\echo '[10/10] Creating functions and triggers...'
+\echo '[12/13] Creating functions and triggers...'
 \i '../02_functions/01_bookings.sql'
 \i '../02_functions/02_email.sql'
 \i '../02_functions/03_memory.sql'
@@ -109,13 +124,13 @@
 \echo ''
 
 -- ============================================================================
--- Phase 10: Seed Data (DML - Complete data loading)
+-- Phase 12: Seed Data (DML - Complete data loading)
 -- ============================================================================
 -- NOTE: Data loading is now handled by Python (populate.py --db --embeddings)
 --       This ensures embeddings are generated on-the-fly during insertion
 --       The following SQL files are kept for reference but not executed
 -- ============================================================================
-\echo '[11/11] Data loading phase...'
+\echo '[13/13] Data loading phase...'
 \echo 'NOTE: Seed data will be loaded via populate.py (bash script handles this)'
 \echo ''
 -- \i '../04_seed/01_products_data.sql'

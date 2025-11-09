@@ -18,7 +18,7 @@
 \echo '════════════════════════════════════════════════════════════════════════════════'
 \echo ''
 
-\echo '✅ 1.1 - Core Tables (Expected: 14)'
+\echo '✅ 1.1 - Core Tables (Expected: 16)'
 SELECT
     COUNT(*) as total_tables,
     string_agg(tablename, ', ' ORDER BY tablename) as table_list
@@ -227,7 +227,7 @@ ORDER BY event_object_table, trigger_name;
 
 \echo '✅ DDL Structure:'
 SELECT
-    '  Tables: ' || (SELECT COUNT(*) FROM pg_tables WHERE schemaname = :'SCHEMA_NAME')::text || ' (expected 14)' as metric
+    '  Tables: ' || (SELECT COUNT(*) FROM pg_tables WHERE schemaname = :'SCHEMA_NAME')::text || ' (expected 16)' as metric
 UNION ALL
 SELECT
     '  Indexes: ' || (SELECT COUNT(*) FROM pg_indexes WHERE schemaname = :'SCHEMA_NAME')::text || ' (expected 29+)'
