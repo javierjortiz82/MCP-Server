@@ -14,6 +14,7 @@ Version: 2.0.0 (Async)
 """
 
 import asyncpg
+import re
 from typing import Any
 
 from demo_agent.config.settings import config
@@ -149,35 +150,137 @@ class AsyncDatabaseConnection:
     def _convert_placeholders(query: str) -> str:
         """Convert psycopg2 %s placeholders to asyncpg $1, $2 style.
 
+        SECURITY (CWE-89 fix): Robust placeholder conversion with proper
+        handling of SQL string literals, comments, and edge cases.
+
         asyncpg uses $1, $2, $3 for parameters instead of %s.
+
+        Handles:
+        - Single-quoted strings with escaped quotes: 'O''Brien', 'It\'s'
+        - Double-quoted identifiers: "column_name"
+        - SQL comments: -- line comment, /* block comment */
+        - Dollar-quoted strings: $$text$$, $tag$text$tag$
+        - Escape sequences: \', \\
+
+        Args:
+            query: SQL query with %s placeholders
+
+        Returns:
+            SQL query with $1, $2, $3... placeholders
+
+        Raises:
+            ValueError: If query has unmatched quotes or comments
         """
-        counter = 1
+        if not query:
+            return query
+
+        # State machine for tracking SQL context
+        param_counter = 1
         result = []
         i = 0
-        while i < len(query):
-            if i < len(query) - 1 and query[i:i+2] == "%s":
-                result.append(f"${counter}")
-                counter += 1
-                i += 2
-            elif i < len(query) - 1 and query[i] == "'" and (i == 0 or query[i-1] != "\\"):
-                # Handle string literals - don't replace %s inside strings
-                result.append(query[i])
+        length = len(query)
+
+        while i < length:
+            # Check for SQL line comment: --
+            if query[i:i+2] == '--':
+                # Copy comment until end of line
+                newline_pos = query.find('\n', i)
+                if newline_pos == -1:
+                    result.append(query[i:])  # Comment to end of query
+                    break
+                result.append(query[i:newline_pos+1])
+                i = newline_pos + 1
+                continue
+
+            # Check for SQL block comment: /* ... */
+            if query[i:i+2] == '/*':
+                end_pos = query.find('*/', i + 2)
+                if end_pos == -1:
+                    raise ValueError("Unclosed block comment in SQL query")
+                result.append(query[i:end_pos+2])
+                i = end_pos + 2
+                continue
+
+            # Check for dollar-quoted string: $$...$$, $tag$...$tag$
+            if query[i] == '$':
+                # Match dollar quote tag: $tag$
+                dollar_match = re.match(r'(\$[a-zA-Z_][a-zA-Z0-9_]*\$|\$\$)', query[i:])
+                if dollar_match:
+                    tag = dollar_match.group(1)
+                    tag_len = len(tag)
+                    # Find closing tag
+                    end_pos = query.find(tag, i + tag_len)
+                    if end_pos == -1:
+                        raise ValueError(f"Unclosed dollar-quoted string: {tag}")
+                    # Copy entire dollar-quoted string
+                    result.append(query[i:end_pos + tag_len])
+                    i = end_pos + tag_len
+                    continue
+
+            # Check for single-quoted string literal: 'text'
+            if query[i] == "'":
+                result.append("'")
                 i += 1
-                while i < len(query):
+                while i < length:
                     if query[i] == "'":
-                        result.append(query[i])
-                        i += 1
-                        break
-                    elif query[i] == "\\":
+                        # Check for escaped quote: ''
+                        if i + 1 < length and query[i+1] == "'":
+                            result.append("''")
+                            i += 2
+                        else:
+                            # End of string
+                            result.append("'")
+                            i += 1
+                            break
+                    elif query[i] == '\\' and i + 1 < length:
+                        # Escaped character: \'
                         result.append(query[i:i+2])
                         i += 2
                     else:
                         result.append(query[i])
                         i += 1
-            else:
-                result.append(query[i])
+                else:
+                    raise ValueError("Unclosed single-quoted string in SQL query")
+                continue
+
+            # Check for double-quoted identifier: "column_name"
+            if query[i] == '"':
+                result.append('"')
                 i += 1
-        return "".join(result)
+                while i < length:
+                    if query[i] == '"':
+                        # Check for escaped quote: ""
+                        if i + 1 < length and query[i+1] == '"':
+                            result.append('""')
+                            i += 2
+                        else:
+                            # End of identifier
+                            result.append('"')
+                            i += 1
+                            break
+                    elif query[i] == '\\' and i + 1 < length:
+                        # Escaped character
+                        result.append(query[i:i+2])
+                        i += 2
+                    else:
+                        result.append(query[i])
+                        i += 1
+                else:
+                    raise ValueError("Unclosed double-quoted identifier in SQL query")
+                continue
+
+            # Check for %s placeholder (outside strings/comments)
+            if query[i:i+2] == '%s':
+                result.append(f'${param_counter}')
+                param_counter += 1
+                i += 2
+                continue
+
+            # Regular character
+            result.append(query[i])
+            i += 1
+
+        return ''.join(result)
 
 
 # Global async connection instance

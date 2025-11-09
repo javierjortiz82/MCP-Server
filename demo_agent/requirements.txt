@@ -2,40 +2,40 @@
 # Python 3.10+ compatible
 
 # Core dependencies
-pydantic==2.5.0
-pydantic-settings==2.1.0
-python-dotenv==1.0.0
-email-validator==2.1.0  # For email validation in Pydantic
+pydantic>=2.11.0
+pydantic-settings>=2.11.0
+python-dotenv>=1.0.0
+email-validator>=2.2.0  # For email validation in Pydantic
 
 # FastAPI and async web server
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
 jinja2>=3.1.0
 
 # Database
-asyncpg==0.29.0
-psycopg2-binary==2.9.9
-sqlalchemy==2.0.23
+asyncpg>=0.30.0
+psycopg2-binary>=2.9.10
+sqlalchemy>=2.0.36
 
 # Google Gemini API
-google-genai==0.3.0
+google-genai>=1.49.0
 
 # Security & Authentication
-requests==2.31.0  # For reCAPTCHA verification
-bcrypt==4.1.2  # For password hashing
-PyJWT[crypto]==2.8.0  # For Clerk JWT verification
-httpx==0.25.2  # For async HTTP requests to Clerk API
-svix==1.17.0  # For Clerk webhook signature verification
+requests>=2.32.0  # For reCAPTCHA verification
+bcrypt>=4.2.0  # For password hashing
+PyJWT[crypto]>=2.9.0  # For Clerk JWT verification
+httpx>=0.28.0  # For async HTTP requests to Clerk API
+svix>=1.40.0  # For Clerk webhook signature verification
 
 # Logging
 python-json-logger==2.0.7
 
 # Development
-pytest==7.4.3
-pytest-asyncio==0.21.1
-black==23.12.0
-ruff==0.1.8
-mypy==1.7.1
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+black>=24.0.0
+ruff>=0.8.0
+mypy>=1.13.0
 
 # Optional: Redis for advanced caching (fallback to PostgreSQL)
 # redis==5.0.1

@@ -230,6 +230,27 @@ class DemoConfig(BaseSettings):
     )
 
     # ========================================================================
+    # Proxy & IP Extraction Configuration
+    # ========================================================================
+    TRUSTED_PROXIES: str = Field(
+        default="",
+        description="Comma-separated list of trusted proxy IPs or CIDR ranges (e.g., 172.17.0.0/16,10.0.0.1)",
+    )
+    ENABLE_PROXY_HEADERS: bool = Field(
+        default=True,
+        description="Enable extraction of client IP from proxy headers (X-Forwarded-For, CF-Connecting-IP, etc.)",
+    )
+    PROXY_DEPTH: int = Field(
+        default=1,
+        ge=0,
+        description="Number of proxies in chain (0 = direct connection, 1 = one proxy, etc.)",
+    )
+    USE_CLOUDFLARE: bool = Field(
+        default=False,
+        description="Enable Cloudflare-specific headers (CF-Connecting-IP, True-Client-IP)",
+    )
+
+    # ========================================================================
     # Logging Configuration
     # ========================================================================
     LOG_LEVEL: str = Field(
