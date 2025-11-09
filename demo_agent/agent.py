@@ -77,6 +77,7 @@ class DemoAgent:
         ip_address: str | None = None,
         user_agent: str | None = None,
         client_fingerprint: str | None = None,
+        user_timezone: str | None = None,
     ) -> tuple[str | None, int, TokenWarning, str | None]:
         """Process a demo query with rate limiting and token tracking.
 
@@ -87,6 +88,7 @@ class DemoAgent:
             ip_address: Client IP address
             user_agent: HTTP User-Agent header
             client_fingerprint: Device fingerprint hash
+            user_timezone: IANA timezone identifier (e.g., 'America/Costa_Rica')
 
         Returns:
             Tuple[response_text, tokens_used, warning, error_message]:
@@ -244,7 +246,7 @@ class DemoAgent:
 
             # Step 4: Check quota before processing
             can_proceed, tokens_remaining = await self.token_bucket.check_quota(
-                user_key, tokens_needed=100  # Estimate for pre-check
+                user_key, tokens_needed=100, user_timezone=user_timezone  # Estimate for pre-check
             )
 
             if not can_proceed:

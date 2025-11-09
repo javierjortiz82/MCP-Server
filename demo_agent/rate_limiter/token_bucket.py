@@ -59,13 +59,14 @@ class TokenBucket:
         )
 
     async def check_quota(
-        self, user_key: str, tokens_needed: int = 1
+        self, user_key: str, tokens_needed: int = 1, user_timezone: str | None = None
     ) -> tuple[bool, int]:
         """Check if user has sufficient quota.
 
         Args:
             user_key: User identifier (user_id | session_id | fingerprint)
             tokens_needed: Tokens required for this request
+            user_timezone: IANA timezone identifier (e.g., 'America/Costa_Rica')
 
         Returns:
             Tuple[bool, int]: (can_proceed, tokens_remaining)
@@ -74,7 +75,7 @@ class TokenBucket:
 
         Logic:
         1. Query demo_usage by user_key
-        2. If not exists: create new record with full quota
+        2. If not exists: create new record with full quota and user timezone
         3. If exists: check needs_reset() and auto-reset if needed
         4. Check is_blocked and if block has expired
         5. Calculate remaining tokens after tokens_needed
@@ -93,48 +94,101 @@ class TokenBucket:
                 # Query user's current quota state
                 query = """
                     SELECT id, user_key, tokens_consumed, requests_count,
-                           last_reset, is_blocked, blocked_until
+                           last_reset, is_blocked, blocked_until, user_timezone
                     FROM :SCHEMA_NAME.demo_usage
                     WHERE user_key = %s
                 """
                 result = await self.db.execute_one(query, (user_key,))
 
+                # Get current UTC time for all operations
+                now = datetime.now(timezone.utc)
+
                 # Create new record if user not seen before
                 if not result:
+                    # Use provided timezone or default to UTC
+                    tz = user_timezone or 'UTC'
                     insert_query = """
                         INSERT INTO :SCHEMA_NAME.demo_usage
-                        (user_key, tokens_consumed, requests_count, is_blocked)
-                        VALUES (%s, %s, %s, %s)
+                        (user_key, tokens_consumed, requests_count, is_blocked, user_timezone)
+                        VALUES (%s, %s, %s, %s, %s)
                     """
-                    await self.db.execute(insert_query, (user_key, 0, 0, False))
+                    await self.db.execute(insert_query, (user_key, 0, 0, False, tz))
                     self.logger.debug(
                         "Created new quota record",
-                        user_key=user_key
+                        user_key=user_key,
+                        timezone=tz
                     )
                     self.metrics.increment_counter("quota_checks")
                     return True, self.max_tokens - tokens_needed
 
-                # Check if daily reset is needed (midnight UTC passed)
-                last_reset = result["last_reset"]
-                now = datetime.now(timezone.utc)
-                if last_reset.date() < now.date():
-                    # Reset quota for new day
-                    reset_query = """
+                # Update timezone if provided and different from stored value
+                if user_timezone and user_timezone != result.get("user_timezone"):
+                    update_tz_query = """
                         UPDATE :SCHEMA_NAME.demo_usage
-                        SET tokens_consumed = 0,
-                            requests_count = 0,
-                            is_blocked = false,
-                            blocked_until = NULL,
-                            last_reset = %s
+                        SET user_timezone = %s, updated_at = %s
                         WHERE user_key = %s
                     """
-                    await self.db.execute(reset_query, (now, user_key))
+                    await self.db.execute(update_tz_query, (user_timezone, now, user_key))
                     self.logger.debug(
-                        "Reset daily quota",
-                        user_key=user_key
+                        "Updated user timezone",
+                        user_key=user_key,
+                        old_timezone=result.get("user_timezone"),
+                        new_timezone=user_timezone
                     )
-                    self.metrics.increment_counter("quota_resets")
-                    return True, self.max_tokens - tokens_needed
+
+                # Check if daily reset is needed (midnight in user's timezone passed)
+                last_reset = result["last_reset"]
+                stored_timezone = result.get("user_timezone", "UTC")
+
+                # Convert current time and last_reset to user's timezone
+                try:
+                    from zoneinfo import ZoneInfo
+                    user_tz = ZoneInfo(stored_timezone)
+                    now_user_tz = now.astimezone(user_tz)
+                    last_reset_user_tz = last_reset.astimezone(user_tz)
+
+                    # Check if we've passed midnight in user's timezone
+                    if last_reset_user_tz.date() < now_user_tz.date():
+                        # Reset quota for new day
+                        reset_query = """
+                            UPDATE :SCHEMA_NAME.demo_usage
+                            SET tokens_consumed = 0,
+                                requests_count = 0,
+                                is_blocked = false,
+                                blocked_until = NULL,
+                                last_reset = %s
+                            WHERE user_key = %s
+                        """
+                        await self.db.execute(reset_query, (now, user_key))
+                        self.logger.debug(
+                            "Reset daily quota",
+                            user_key=user_key,
+                            timezone=stored_timezone,
+                            local_time=now_user_tz.isoformat()
+                        )
+                        self.metrics.increment_counter("quota_resets")
+                        return True, self.max_tokens - tokens_needed
+                except Exception as e:
+                    # Fallback to UTC if timezone conversion fails
+                    self.logger.warning(
+                        f"Timezone conversion failed, falling back to UTC: {e}",
+                        user_key=user_key,
+                        timezone=stored_timezone
+                    )
+                    if last_reset.date() < now.date():
+                        reset_query = """
+                            UPDATE :SCHEMA_NAME.demo_usage
+                            SET tokens_consumed = 0,
+                                requests_count = 0,
+                                is_blocked = false,
+                                blocked_until = NULL,
+                                last_reset = %s
+                            WHERE user_key = %s
+                        """
+                        await self.db.execute(reset_query, (now, user_key))
+                        self.logger.debug("Reset daily quota (UTC fallback)", user_key=user_key)
+                        self.metrics.increment_counter("quota_resets")
+                        return True, self.max_tokens - tokens_needed
 
                 # Check if user is currently blocked
                 if result["is_blocked"]:
@@ -216,17 +270,41 @@ class TokenBucket:
                     tokens_used=tokens_used
                 )
 
-                # Atomic update: increment tokens and requests count
+                # SECURITY (CWE-362 fix): Atomic update with conditional blocking
+                # Single query prevents race condition where multiple concurrent requests
+                # could bypass quota limits between check and block operations
+                now = datetime.now(timezone.utc)
+                blocked_until = now + timedelta(hours=self.cooldown_hours)
+
                 query = """
                     UPDATE :SCHEMA_NAME.demo_usage
                     SET tokens_consumed = tokens_consumed + %s,
                         requests_count = requests_count + 1,
-                        updated_at = %s
+                        updated_at = %s,
+                        is_blocked = CASE
+                            WHEN (tokens_consumed + %s) >= %s THEN true
+                            ELSE is_blocked
+                        END,
+                        blocked_until = CASE
+                            WHEN (tokens_consumed + %s) >= %s THEN %s
+                            ELSE blocked_until
+                        END
                     WHERE user_key = %s
-                    RETURNING tokens_consumed, is_blocked
+                    RETURNING tokens_consumed, is_blocked, blocked_until
                 """
-                now = datetime.now(timezone.utc)
-                result = await self.db.execute_one(query, (tokens_used, now, user_key))
+                result = await self.db.execute_one(
+                    query,
+                    (
+                        tokens_used,  # For tokens_consumed increment
+                        now,  # For updated_at
+                        tokens_used,  # For CASE condition check (1st)
+                        self.max_tokens,  # For CASE condition check (1st)
+                        tokens_used,  # For CASE condition check (2nd)
+                        self.max_tokens,  # For CASE condition check (2nd)
+                        blocked_until,  # For blocked_until value
+                        user_key,  # WHERE clause
+                    )
+                )
 
                 if not result:
                     self.logger.error(
@@ -238,19 +316,12 @@ class TokenBucket:
 
                 new_tokens_consumed = result["tokens_consumed"]
                 tokens_remaining = max(0, self.max_tokens - new_tokens_consumed)
+                is_blocked = result["is_blocked"]
 
-                # Check if quota exhausted
-                if new_tokens_consumed >= self.max_tokens:
-                    blocked_until = now + timedelta(hours=self.cooldown_hours)
-                    block_query = """
-                        UPDATE :SCHEMA_NAME.demo_usage
-                        SET is_blocked = true,
-                            blocked_until = %s
-                        WHERE user_key = %s
-                    """
-                    await self.db.execute(block_query, (blocked_until, user_key))
+                # Log if user was blocked by this operation
+                if is_blocked and new_tokens_consumed >= self.max_tokens:
                     self.logger.warning(
-                        "User quota exhausted and blocked",
+                        "User quota exhausted and blocked (atomic operation)",
                         user_key=user_key,
                         blocked_until=blocked_until.isoformat()
                     )
@@ -283,6 +354,7 @@ class TokenBucket:
             dict with keys:
             - tokens_used: Tokens consumed today
             - tokens_remaining: Tokens left today
+            - daily_limit: Maximum tokens allowed per day (from DEMO_MAX_TOKENS)
             - percentage_used: Usage percentage (0-100)
             - requests_count: Number of requests today
             - is_blocked: Whether user is currently blocked
@@ -303,7 +375,7 @@ class TokenBucket:
 
                 query = """
                     SELECT tokens_consumed, requests_count, is_blocked,
-                           blocked_until, last_reset
+                           blocked_until, last_reset, user_timezone
                     FROM :SCHEMA_NAME.demo_usage
                     WHERE user_key = %s
                 """
@@ -316,12 +388,13 @@ class TokenBucket:
                     return {
                         "tokens_used": 0,
                         "tokens_remaining": self.max_tokens,
+                        "daily_limit": self.max_tokens,  # Frontend needs this for display
                         "percentage_used": 0,
                         "requests_count": 0,
                         "is_blocked": False,
                         "blocked_until": None,
                         "last_reset": now.isoformat(),
-                        "next_reset": self._next_utc_midnight(),
+                        "next_reset": self._next_midnight_in_timezone("UTC"),
                         "warning": {
                             "is_warning": False,
                             "message": None,
@@ -333,8 +406,9 @@ class TokenBucket:
                 tokens_remaining = max(0, self.max_tokens - tokens_consumed)
                 percentage_used = min(100, int((tokens_consumed / self.max_tokens) * 100))
 
-                # Calculate next reset (next UTC midnight)
-                next_reset = self._next_utc_midnight()
+                # Calculate next reset (next midnight in user's timezone)
+                user_tz = result.get("user_timezone", "UTC")
+                next_reset = self._next_midnight_in_timezone(user_tz)
 
                 # Generate warning object based on threshold
                 is_warning = percentage_used >= config.DEMO_WARNING_THRESHOLD
@@ -354,6 +428,7 @@ class TokenBucket:
                 return {
                     "tokens_used": tokens_consumed,
                     "tokens_remaining": tokens_remaining,
+                    "daily_limit": self.max_tokens,  # Frontend needs this for display
                     "percentage_used": percentage_used,
                     "requests_count": result["requests_count"],
                     "is_blocked": result["is_blocked"],
@@ -362,6 +437,7 @@ class TokenBucket:
                         if result["blocked_until"]
                         else None
                     ),
+                    "user_timezone": result.get("user_timezone", "UTC"),  # For frontend display
                     "last_reset": result["last_reset"].isoformat(),
                     "next_reset": next_reset,
                     "warning": {
@@ -385,7 +461,7 @@ class TokenBucket:
                 "is_blocked": False,
                 "blocked_until": None,
                 "last_reset": datetime.now(timezone.utc).isoformat(),
-                "next_reset": self._next_utc_midnight(),
+                "next_reset": self._next_midnight_in_timezone("UTC"),
                 "warning": {
                     "is_warning": False,
                     "message": None,
@@ -559,15 +635,32 @@ class TokenBucket:
             return False
 
     @staticmethod
-    def _next_utc_midnight() -> str:
-        """Calculate next UTC midnight timestamp.
+    def _next_midnight_in_timezone(user_timezone: str = "UTC") -> str:
+        """Calculate next midnight in user's timezone.
+
+        Args:
+            user_timezone: IANA timezone identifier (e.g., 'America/Costa_Rica')
 
         Returns:
-            ISO 8601 formatted string of next UTC midnight
+            ISO 8601 formatted string of next midnight in user's timezone (as UTC)
         """
-        now = datetime.now(timezone.utc)
-        # Next midnight is start of tomorrow
-        next_midnight = now.replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ) + timedelta(days=1)
-        return next_midnight.isoformat()
+        try:
+            from zoneinfo import ZoneInfo
+            user_tz = ZoneInfo(user_timezone)
+            now_user_tz = datetime.now(user_tz)
+
+            # Next midnight in user's timezone
+            next_midnight_user_tz = now_user_tz.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ) + timedelta(days=1)
+
+            # Convert back to UTC for storage
+            next_midnight_utc = next_midnight_user_tz.astimezone(timezone.utc)
+            return next_midnight_utc.isoformat()
+        except Exception:
+            # Fallback to UTC midnight if timezone is invalid
+            now = datetime.now(timezone.utc)
+            next_midnight = now.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ) + timedelta(days=1)
+            return next_midnight.isoformat()

@@ -8,30 +8,124 @@ Version: 1.0.0
 """
 
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, field_validator
 
 
 class Metadata(BaseModel):
     """Request metadata for tracking and rate limiting.
 
     Attributes:
-        ip: Client IP address (required for IP-based rate limiting)
+        ip: [DEPRECATED] Client IP address - DO NOT SEND from frontend.
+            The backend extracts IP from request headers automatically using
+            a secure validation system. Client-supplied IPs are ignored.
         user_agent: HTTP User-Agent header (for fingerprinting)
         fingerprint: Client fingerprint hash (for VPN detection)
+
+    Security Note:
+        The 'ip' field is DEPRECATED and should NOT be sent from the frontend.
+        Allowing clients to set their own IP is a security vulnerability.
+        The backend now uses ClientIPExtractor service to securely extract
+        the real client IP from validated proxy headers (X-Forwarded-For,
+        CF-Connecting-IP, X-Real-IP, etc.) with trusted proxy validation.
     """
 
-    ip: str | None = Field(None, description="Client IP address (IPv4 or IPv6) - obtained from request if not provided")
-    user_agent: str | None = Field(None, description="HTTP User-Agent header")
-    fingerprint: str | None = Field(None, description="Client fingerprint hash")
+    ip: str | None = Field(
+        None,
+        deprecated=True,
+        description="[DEPRECATED] Client IP - DO NOT SEND. Backend extracts from request headers."
+    )
+    user_agent: str | None = Field(
+        None,
+        max_length=500,  # SECURITY: Prevent DoS via huge user agent strings
+        description="HTTP User-Agent header"
+    )
+    fingerprint: str | None = Field(
+        None,
+        max_length=128,  # SECURITY: Fingerprint hashes are typically 32-64 chars
+        description="Client fingerprint hash"
+    )
+    timezone: str | None = Field(
+        None,
+        max_length=64,  # SECURITY: IANA timezone identifiers are max ~40 chars
+        description="IANA timezone identifier (e.g., 'America/Costa_Rica', 'Europe/London')"
+    )
+
+    @field_validator("user_agent")
+    @classmethod
+    def validate_user_agent(cls, v: str | None) -> str | None:
+        """Validate user agent to prevent injection attacks.
+
+        SECURITY (CWE-20): Prevents control characters and null bytes
+        that could enable header injection or logging exploits.
+        """
+        if not v:
+            return None
+
+        # Remove null bytes and control characters (except tab/newline for natural UA strings)
+        cleaned = "".join(
+            char for char in v
+            if ord(char) >= 0x20 or char in "\t\n"
+        )
+
+        # Trim and limit length
+        cleaned = cleaned.strip()[:500]
+
+        return cleaned if cleaned else None
+
+    @field_validator("fingerprint")
+    @classmethod
+    def validate_fingerprint(cls, v: str | None) -> str | None:
+        """Validate fingerprint format.
+
+        SECURITY (CWE-20): Ensures fingerprint is alphanumeric only,
+        preventing injection attacks via malformed fingerprints.
+        """
+        if not v:
+            return None
+
+        # Fingerprints should be alphanumeric (hex or base64)
+        # Allow: letters, numbers, hyphens, underscores (common in hashes)
+        cleaned = "".join(char for char in v if char.isalnum() or char in "-_")
+
+        # Limit length
+        cleaned = cleaned[:128]
+
+        return cleaned if cleaned else None
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, v: str | None) -> str | None:
+        """Validate timezone format.
+
+        SECURITY (CWE-20): Ensures timezone is valid IANA identifier,
+        preventing injection attacks via malformed timezone strings.
+        """
+        if not v:
+            return None
+
+        # IANA timezone identifiers: letters, numbers, forward slash, underscore, hyphen, plus
+        # Examples: America/Costa_Rica, Europe/London, Asia/Tokyo, UTC, GMT+5
+        cleaned = "".join(char for char in v if char.isalnum() or char in "/_-+")
+
+        # Limit length and validate basic format
+        cleaned = cleaned[:64]
+
+        # Basic validation: should contain at least one letter
+        if not any(c.isalpha() for c in cleaned):
+            return None
+
+        return cleaned if cleaned else None
 
     class Config:
         """Pydantic config."""
 
         json_schema_extra = {
             "example": {
-                "ip": "203.0.113.42",
-                "user_agent": "Mozilla/5.0...",
+                # NOTE: ip field intentionally removed from example
+                # Backend extracts IP automatically from request headers
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "fingerprint": "abc123def456",
+                "timezone": "America/Costa_Rica",
             }
         }
 

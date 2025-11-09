@@ -13,6 +13,7 @@ Version: 1.1.0 (Async)
 
 from contextlib import asynccontextmanager
 from uuid import uuid4
+import json
 
 from fastapi import FastAPI, HTTPException, Header, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,8 +21,19 @@ from fastapi.responses import JSONResponse
 
 from demo_agent.agent import DemoAgent
 from demo_agent.config.settings import config
+from demo_agent.middleware.security_headers import SecurityHeadersMiddleware
+from demo_agent.middleware.rate_limit_headers import RateLimitHeadersMiddleware
+from demo_agent.middleware.request_size_limit import RequestSizeLimitMiddleware
+from demo_agent.middleware.api_version import APIVersionMiddleware
 from demo_agent.db.connection import close_db, get_db, init_db
 from demo_agent.logger import logger
+from demo_agent.utils.sanitizers import (
+    sanitize_html,
+    sanitize_user_input,
+    sanitize_error_message,
+    sanitize_response_data,
+)
+from demo_agent.utils.validators import validate_session_id
 from demo_agent.observability.context import create_request_context, clear_request_context
 from demo_agent.observability.correlation import CorrelationID
 from demo_agent.observability.metrics import get_metrics_collector
@@ -41,6 +53,7 @@ from demo_agent.services.email_integration import EmailIntegrationService
 from demo_agent.services.otp_service import OTPService
 from demo_agent.services.user_service import UserService
 from demo_agent.services.clerk_service import get_clerk_service
+from demo_agent.services.client_ip_service import extract_client_ip
 from demo_agent.security.clerk_middleware import ClerkAuthMiddleware, require_auth, get_current_user
 from demo_agent.webhooks.clerk_webhooks import get_clerk_webhook_handler
 from demo_agent import auth_endpoints
@@ -121,18 +134,92 @@ def create_app() -> FastAPI:
     )
 
     # ========================================================================
-    # CORS Middleware
+    # Request Size Limit Middleware (Phase 4 - LOW Priority)
     # ========================================================================
-    # IMPORTANT: Must be added FIRST so it executes LAST in middleware chain
+    # SECURITY (CWE-400 fix): Prevent DoS via oversized request payloads
+    # Must be added FIRST to reject huge requests before any processing
+    app.add_middleware(
+        RequestSizeLimitMiddleware,
+        max_size=50 * 1024,  # 50 KB default
+        endpoint_limits={
+            "/v1/demo": 10 * 1024,  # 10 KB for user queries
+            "/v1/webhooks/clerk": 100 * 1024,  # 100 KB for webhooks
+            "/v1/auth/register": 10 * 1024,  # 10 KB for registration
+        }
+    )
+    logger.info("Request size limit middleware registered")
+
+    # ========================================================================
+    # CORS Middleware (SECURITY HARDENED)
+    # ========================================================================
+    # IMPORTANT: Must be added AFTER size limit so it executes LAST in middleware chain
     # This ensures CORS headers are added to all responses, including auth errors
     # Configuration loaded from environment variables (see config/settings.py)
-    cors_origins = [origin.strip() for origin in config.CORS_ALLOW_ORIGINS.split(",")]
-    cors_methods = ["*"] if config.CORS_ALLOW_METHODS == "*" else [
-        method.strip() for method in config.CORS_ALLOW_METHODS.split(",")
-    ]
-    cors_headers = ["*"] if config.CORS_ALLOW_HEADERS == "*" else [
-        header.strip() for header in config.CORS_ALLOW_HEADERS.split(",")
-    ]
+
+    # SECURITY (CWE-942 fix): Validate CORS origins don't contain wildcards
+    cors_origins_raw = [origin.strip() for origin in config.CORS_ALLOW_ORIGINS.split(",")]
+    cors_origins = []
+
+    for origin in cors_origins_raw:
+        if not origin:
+            continue
+
+        # SECURITY: Reject wildcard origins in production
+        if "*" in origin:
+            logger.error(
+                f"SECURITY ERROR: Wildcard origin '{origin}' is not allowed. "
+                "Specify exact origins (e.g., https://app.example.com)"
+            )
+            raise ValueError(
+                f"Wildcard CORS origin '{origin}' is forbidden for security. "
+                "Use exact origins instead."
+            )
+
+        # SECURITY: Validate origin is a valid URL
+        if not origin.startswith(("http://", "https://")):
+            logger.error(f"SECURITY ERROR: Invalid origin '{origin}' must start with http:// or https://")
+            raise ValueError(f"Invalid CORS origin '{origin}' - must be a complete URL")
+
+        cors_origins.append(origin)
+
+    if not cors_origins:
+        logger.warning(
+            "No CORS origins configured. API will reject all cross-origin requests. "
+            "Set CORS_ALLOW_ORIGINS in environment variables."
+        )
+
+    # SECURITY (CWE-942 fix): Restrict methods if credentials are allowed
+    if config.CORS_ALLOW_METHODS == "*":
+        if config.CORS_ALLOW_CREDENTIALS:
+            logger.warning(
+                "SECURITY WARNING: CORS allows all methods (*) with credentials. "
+                "This is acceptable for development but should be restricted in production."
+            )
+        cors_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+    else:
+        cors_methods = [method.strip().upper() for method in config.CORS_ALLOW_METHODS.split(",")]
+
+    # SECURITY (CWE-942 fix): Restrict headers if credentials are allowed
+    if config.CORS_ALLOW_HEADERS == "*":
+        if config.CORS_ALLOW_CREDENTIALS:
+            logger.warning(
+                "SECURITY WARNING: CORS allows all headers (*) with credentials. "
+                "For production, restrict to: Authorization, Content-Type, X-Request-ID"
+            )
+        # Allow common headers but not all
+        cors_headers = [
+            "Authorization", "Content-Type", "Accept", "Origin",
+            "X-Request-ID", "X-Correlation-ID", "User-Agent"
+        ]
+    else:
+        cors_headers = [header.strip() for header in config.CORS_ALLOW_HEADERS.split(",")]
+
+    logger.info(
+        f"CORS configured: origins={len(cors_origins)}, "
+        f"methods={len(cors_methods)}, "
+        f"headers={len(cors_headers)}, "
+        f"credentials={config.CORS_ALLOW_CREDENTIALS}"
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -141,6 +228,44 @@ def create_app() -> FastAPI:
         allow_methods=cors_methods,
         allow_headers=cors_headers,
     )
+
+    # ========================================================================
+    # Security Headers Middleware
+    # ========================================================================
+    # SECURITY (CWE-1021 fix): Add OWASP recommended security headers
+    # Protects against: XSS, clickjacking, MIME sniffing, etc.
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        enable_hsts=True,  # Enforce HTTPS (only applied on HTTPS requests)
+        hsts_max_age=31536000,  # 1 year
+        enable_csp=True,  # Content Security Policy
+        csp_report_only=False,  # Block violations (set True for testing)
+    )
+    logger.info("Security headers middleware registered")
+
+    # ========================================================================
+    # Rate Limit Headers Middleware (Phase 4 - LOW Priority)
+    # ========================================================================
+    # SECURITY (CWE-770 defense-in-depth): Add rate limit headers to responses
+    # Helps clients manage usage and avoid quota exhaustion
+    app.add_middleware(
+        RateLimitHeadersMiddleware,
+        max_tokens=config.DEMO_MAX_TOKENS
+    )
+    logger.info("Rate limit headers middleware registered")
+
+    # ========================================================================
+    # API Version Headers Middleware (Phase 4 - LOW Priority)
+    # ========================================================================
+    # Adds version information to help clients track compatibility
+    # and manage API deprecations
+    app.add_middleware(
+        APIVersionMiddleware,
+        api_version="1.0.0",
+        min_client_version="1.0.0",
+        deprecated_endpoints={}  # No deprecated endpoints yet
+    )
+    logger.info("API version headers middleware registered")
 
     # ========================================================================
     # Clerk Authentication Middleware
@@ -673,21 +798,12 @@ def create_app() -> FastAPI:
                 )
 
             # STEP 1: Get authenticated user from Clerk middleware
-            # Priority: Clerk auth > Legacy auth (during migration period)
+            # SECURITY: Only Clerk authentication is allowed (CWE-862 fix)
             authenticated_user = get_current_user(request)
 
-            if authenticated_user and authenticated_user.get("db_user_id"):
-                # User authenticated via Clerk - use db_user_id from middleware
-                user_id = authenticated_user["db_user_id"]
-                logger.info(f"Using Clerk-authenticated user: {user_id}")
-            elif request_data.user_id:
-                # Legacy auth - use user_id from request body (DEPRECATED)
-                # TODO: Remove this path after full migration to Clerk
-                user_id = request_data.user_id
-                logger.warning(f"Using legacy user_id from request body: {user_id} (DEPRECATED)")
-            else:
-                # No authentication found
-                logger.error("No user authentication found")
+            if not authenticated_user or not authenticated_user.get("db_user_id"):
+                # No Clerk authentication found - reject request
+                logger.error("Authentication required: No valid Clerk session found")
                 return JSONResponse(
                     status_code=401,
                     content={
@@ -696,6 +812,10 @@ def create_app() -> FastAPI:
                         "message": "Please log in with Clerk to use this endpoint.",
                     },
                 )
+
+            # User authenticated via Clerk - use db_user_id from middleware
+            user_id = authenticated_user["db_user_id"]
+            logger.info(f"Clerk-authenticated user: {user_id}")
 
             # STEP 2: Validate user exists and is active
             user_query = """
@@ -768,26 +888,85 @@ def create_app() -> FastAPI:
             user_key = str(user_id)
             user_email = user_result.get("email")
 
-            # Generate session_id if not provided
-            session_id = request_data.session_id or str(uuid4())
+            # SECURITY (CWE-384 fix): Validate or generate session_id
+            if request_data.session_id:
+                # Validate provided session_id is a valid UUID v4
+                is_valid, error_msg = validate_session_id(request_data.session_id)
+                if not is_valid:
+                    logger.warning(
+                        f"Invalid session_id format from user {user_id}: {error_msg}"
+                    )
+                    # Generate new secure session_id instead of using invalid one
+                    session_id = str(uuid4())
+                else:
+                    session_id = request_data.session_id
+            else:
+                # Generate new secure session_id
+                session_id = str(uuid4())
 
             logger.info(f"Demo query from active user: {user_email} (ID: {user_id})")
 
-            # Process query
+            # SECURITY: Extract client IP using secure service
+            # This validates trusted proxies and prevents IP spoofing
+            client_ip = extract_client_ip(request)
+
+            # Extract other metadata fields safely
+            user_agent = request_data.metadata.user_agent if request_data.metadata else None
+            fingerprint = request_data.metadata.fingerprint if request_data.metadata else None
+            user_timezone = request_data.metadata.timezone if request_data.metadata else None
+
+            logger.debug(
+                f"Request metadata: ip={client_ip}, "
+                f"user_agent={user_agent[:50] if user_agent else None}..., "
+                f"timezone={user_timezone}"
+            )
+
+            # SECURITY (CWE-79 fix): Sanitize user input before processing
+            sanitized_input = sanitize_user_input(request_data.input, max_length=10000)
+
+            if not sanitized_input:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "error": "invalid_input",
+                        "message": "Please provide a valid question.",
+                    },
+                )
+
+            # Process query and measure response time
+            import time
+            start_time = time.time()
+
             response_text, tokens_used, warning, error_msg = (
                 await demo_agent.process_query(
-                    user_input=request_data.input,
+                    user_input=sanitized_input,
                     user_key=user_key,
                     language=request_data.language or "es",
-                    ip_address=request_data.metadata.ip,
-                    user_agent=request_data.metadata.user_agent,
-                    client_fingerprint=request_data.metadata.fingerprint,
+                    ip_address=client_ip,
+                    user_agent=user_agent,
+                    client_fingerprint=fingerprint,
+                    user_timezone=user_timezone,
                 )
             )
+
+            # Calculate response time in milliseconds
+            response_time_ms = int((time.time() - start_time) * 1000)
 
             # If query was blocked, return error response
             if error_msg:
                 status_code = 429 if "quota" in error_msg else 403
+
+                # SECURITY (Phase 4): Set rate limit info for error responses
+                # This ensures rate limit headers are added even for blocked requests
+                try:
+                    user_status = await demo_agent.get_user_status(user_key)
+                    request.state.rate_limit_remaining = user_status.get("tokens_remaining", 0)
+                    request.state.rate_limit_used = user_status.get("tokens_used", 0)
+                    request.state.rate_limit_reset = user_status.get("next_reset")
+                except Exception as e:
+                    logger.warning(f"Failed to get rate limit info for error response: {e}")
+
                 return JSONResponse(
                     status_code=status_code,
                     content={
@@ -802,14 +981,105 @@ def create_app() -> FastAPI:
                     },
                 )
 
+            # SECURITY (CWE-79 fix): Sanitize AI response to prevent XSS
+            # While Gemini shouldn't generate malicious content, defense-in-depth
+            # requires sanitizing all user-facing output
+            sanitized_response = sanitize_html(response_text)
+
+            # Get user status for rate limit headers
+            user_status = await demo_agent.get_user_status(user_key)
+            tokens_remaining_val = user_status.get("tokens_remaining", 0)
+            tokens_used_val = user_status.get("tokens_used", 0)
+            next_reset = user_status.get("next_reset")
+
+            # SECURITY (Phase 4): Set rate limit info in request state
+            # The RateLimitHeadersMiddleware will read these values and add headers
+            request.state.rate_limit_remaining = tokens_remaining_val
+            request.state.rate_limit_used = tokens_used_val
+            request.state.rate_limit_reset = next_reset
+
+            # ================================================================
+            # CONVERSATION HISTORY STORAGE
+            # ================================================================
+            # Store user message and AI response in conversation_messages table
+            # for chat history persistence and reload on page refresh
+            try:
+                # Step 1: Upsert conversation session
+                # Create new session or update last_activity_at if exists
+                session_upsert_query = """
+                    INSERT INTO :SCHEMA_NAME.conversation_sessions
+                        (id, customer_email, session_id, last_activity_at, metadata, created_at, updated_at)
+                    VALUES
+                        (gen_random_uuid(), %s, %s, NOW(), %s, NOW(), NOW())
+                    ON CONFLICT (session_id)
+                    DO UPDATE SET
+                        last_activity_at = NOW(),
+                        updated_at = NOW(),
+                        customer_email = COALESCE(EXCLUDED.customer_email, conversation_sessions.customer_email),
+                        metadata = COALESCE(EXCLUDED.metadata, conversation_sessions.metadata)
+                    RETURNING id
+                """
+                session_metadata = {
+                    "language": request_data.language or "es",
+                    "user_id": user_id,
+                }
+                session_result = await user_service.db.execute_one(
+                    session_upsert_query,
+                    (user_email, session_id, json.dumps(session_metadata))
+                )
+
+                if not session_result:
+                    logger.warning(f"Failed to upsert conversation session: {session_id}")
+                else:
+                    session_uuid = session_result["id"]
+                    logger.debug(f"Session upserted: {session_uuid} for session_id: {session_id}")
+
+                    # Step 2: Insert user message (with user_id for cross-device sync)
+                    user_msg_query = """
+                        INSERT INTO :SCHEMA_NAME.conversation_messages
+                            (session_id, user_id, role, message_text, token_count, created_at)
+                        VALUES
+                            (%s, %s, 'user', %s, 0, NOW())
+                    """
+                    await user_service.db.execute(
+                        user_msg_query,
+                        (session_uuid, user_id, sanitized_input)
+                    )
+                    logger.debug(f"User message stored for user_id: {user_id}, session: {session_id}")
+
+                    # Step 3: Insert AI response (with user_id for cross-device sync and performance metrics)
+                    ai_msg_query = """
+                        INSERT INTO :SCHEMA_NAME.conversation_messages
+                            (session_id, user_id, role, agent_name, message_text, token_count, response_time_ms, created_at)
+                        VALUES
+                            (%s, %s, 'model', %s, %s, %s, %s, NOW())
+                    """
+                    await user_service.db.execute(
+                        ai_msg_query,
+                        (session_uuid, user_id, 'demo', sanitized_response, tokens_used, response_time_ms)
+                    )
+                    logger.debug(
+                        f"AI response stored for user_id: {user_id}, session: {session_id}, "
+                        f"agent: demo, tokens: {tokens_used}, response_time: {response_time_ms}ms"
+                    )
+
+            except Exception as history_error:
+                # IMPORTANT: Do NOT fail the request if history storage fails
+                # This is a non-critical feature - log and continue
+                logger.error(
+                    f"Failed to store conversation history (non-critical): {history_error}",
+                    exc_info=True
+                )
+                # Continue with successful response anyway
+
             # Return successful response
             from datetime import datetime, timezone
 
             return DemoResponse(
                 success=True,
-                response=response_text,
+                response=sanitized_response,
                 tokens_used=tokens_used,
-                tokens_remaining=await get_tokens_remaining(user_key),
+                tokens_remaining=tokens_remaining_val,
                 warning=warning,
                 session_id=session_id,
                 created_at=datetime.now(timezone.utc).isoformat(),
@@ -818,25 +1088,27 @@ def create_app() -> FastAPI:
         except HTTPException:
             raise
         except Exception as e:
+            # SECURITY (CWE-209 fix): Sanitize error messages to prevent information disclosure
             logger.exception(f"Error in demo_query: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error")
+
+            # Don't expose internal error details to users
+            safe_message = sanitize_error_message(e, include_details=False)
+
+            raise HTTPException(
+                status_code=500,
+                detail=safe_message
+            )
 
     # ========================================================================
     # Quota Status Endpoint
     # ========================================================================
 
     @app.get("/v1/demo/status", tags=["Demo"])
-    async def demo_status(
-        user_id: str | None = Query(None, description="Authenticated user ID"),
-        session_id: str | None = Query(None, description="Anonymous session ID"),
-        fingerprint: str | None = Query(None, description="Client fingerprint"),
-    ):
-        """Get user's current quota status.
+    async def demo_status(request: Request):
+        """Get authenticated user's current quota status.
 
-        Query Parameters:
-        - `user_id`: Authenticated user ID (or)
-        - `session_id`: Anonymous session ID (or)
-        - `fingerprint`: Client fingerprint
+        Requires Clerk authentication. Extracts user_id from JWT token.
+        Returns quota information for the authenticated user across ALL devices.
 
         Response:
         ```json
@@ -849,6 +1121,7 @@ def create_app() -> FastAPI:
           "blocked_until": null,
           "last_reset": "2025-10-31T00:00:00Z",
           "next_reset": "2025-11-01T00:00:00Z",
+          "daily_limit": 5000,
           "warning": {
             "is_warning": false,
             "message": null,
@@ -863,29 +1136,197 @@ def create_app() -> FastAPI:
         """
         try:
             global demo_agent
+            logger.info("=== demo_status START ===")
+
             if not demo_agent:
+                logger.error("demo_agent not initialized")
                 raise HTTPException(
                     status_code=500,
                     detail="Demo agent not initialized",
                 )
 
-            # Generate user_key from available identifiers
-            user_key = user_id or session_id or fingerprint
-            if not user_key:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Provide user_id, session_id, or fingerprint",
+            # AUTHENTICATION: Extract user_id from Clerk JWT (same pattern as /v1/demo)
+            logger.info("demo_status: Calling get_current_user")
+            authenticated_user = get_current_user(request)
+            logger.info(f"demo_status: authenticated_user = {authenticated_user}")
+
+            if not authenticated_user:
+                logger.warning("demo_status: No authenticated user found")
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "success": False,
+                        "error": "authentication_required",
+                        "message": "Please log in to view quota status.",
+                    },
                 )
+
+            user_id = authenticated_user.get("db_user_id")
+            logger.info(f"demo_status: Extracted user_id = {user_id}")
+
+            if not user_id:
+                logger.error(f"demo_status: db_user_id not found in authenticated_user: {authenticated_user}")
+                raise HTTPException(status_code=400, detail="User ID not found in authentication token")
+
+            # USER-BASED QUOTA: Use user_id as the key (same across all devices)
+            # This ensures quota is shared across all user's sessions/devices
+            user_key = str(user_id)
+
+            logger.info(f"Quota status requested by user: {user_id}")
 
             # Get quota status
             status = await demo_agent.get_user_status(user_key)
+            logger.info(f"demo_status: Returning status = {status}")
             return status
 
         except HTTPException:
+            logger.error(f"demo_status: HTTPException raised")
             raise
         except Exception as e:
             logger.exception(f"Error in demo_status: {e}")
             raise HTTPException(status_code=500, detail="Internal server error")
+
+    # ========================================================================
+    # Chat History Endpoint
+    # ========================================================================
+
+    @app.get("/v1/demo/history", tags=["Demo"])
+    async def get_demo_history(
+        limit: int = Query(100, description="Maximum number of messages to return"),
+        request: Request = None,
+    ):
+        """Retrieve user's complete conversation history (all devices, all sessions).
+
+        Requires Clerk authentication. Returns all messages for the authenticated user.
+        Messages are returned in chronological order (oldest first).
+
+        Query Parameters:
+        - `limit` (optional): Max messages to return (default: 100, max: 500)
+
+        Response (Success):
+        ```json
+        {
+          "success": true,
+          "messages": [
+            {
+              "id": 1,
+              "role": "user",
+              "message_text": "Hello, how can I book an appointment?",
+              "token_count": 0,
+              "created_at": "2025-11-08T10:30:00Z"
+            },
+            {
+              "id": 2,
+              "role": "model",
+              "message_text": "I'd be happy to help you book an appointment...",
+              "token_count": 45,
+              "created_at": "2025-11-08T10:30:02Z"
+            }
+          ],
+          "total_messages": 2,
+          "session_id": "abc-123-def"
+        }
+        ```
+
+        Response (Empty History):
+        ```json
+        {
+          "success": true,
+          "messages": [],
+          "total_messages": 0,
+          "session_id": "abc-123-def"
+        }
+        ```
+
+        Response (Unauthorized - 401):
+        ```json
+        {
+          "success": false,
+          "error": "authentication_required",
+          "message": "Please log in to access chat history"
+        }
+        ```
+
+        Response (Forbidden - 403):
+        ```json
+        {
+          "success": false,
+          "error": "access_denied",
+          "message": "You do not have access to this chat session"
+        }
+        ```
+        """
+        try:
+            global user_service
+            if not user_service:
+                logger.error("User service not initialized")
+                raise HTTPException(
+                    status_code=500,
+                    detail="Services not initialized",
+                )
+
+            # SECURITY: Require Clerk authentication
+            authenticated_user = get_current_user(request)
+
+            if not authenticated_user or not authenticated_user.get("db_user_id"):
+                logger.error("Unauthorized chat history access attempt")
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "success": False,
+                        "error": "authentication_required",
+                        "message": "Please log in to access chat history.",
+                    },
+                )
+
+            user_id = authenticated_user["db_user_id"]
+            logger.info(f"Chat history requested by user: {user_id}")
+
+            # SECURITY: Limit max messages to prevent abuse
+            limit = min(max(1, limit), 500)  # Clamp between 1 and 500
+
+            # USER-BASED QUERY: Fetch all user's messages across ALL devices/sessions
+            # This is simpler, faster (no JOIN), and more secure than session-based approach
+            messages_query = """
+                SELECT
+                    cm.id,
+                    cm.role,
+                    cm.message_text,
+                    cm.token_count,
+                    cm.created_at
+                FROM :SCHEMA_NAME.conversation_messages cm
+                WHERE cm.user_id = %s
+                ORDER BY cm.created_at ASC
+                LIMIT %s
+            """
+            messages = await user_service.db.execute_all(
+                messages_query,
+                (user_id, limit)
+            )
+
+            # Convert datetime objects to ISO strings for JSON serialization
+            for msg in messages:
+                if msg.get("created_at"):
+                    msg["created_at"] = msg["created_at"].isoformat()
+
+            logger.info(
+                f"Chat history retrieved: {len(messages)} messages for user {user_id} (cross-device sync)"
+            )
+
+            return {
+                "success": True,
+                "messages": messages,
+                "total_messages": len(messages),
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception(f"Error retrieving chat history: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to retrieve chat history",
+            )
 
     # ========================================================================
     # CAPTCHA Verification Endpoint
