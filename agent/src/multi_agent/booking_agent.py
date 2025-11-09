@@ -325,6 +325,7 @@ class BookingAgent(BaseAgent):
         query: str,
         *,
         include_history: bool = True,
+        intent: str | None = None,
         **kwargs: Any,
     ) -> str:
         """Generate response for user query with function calling support.
@@ -377,6 +378,9 @@ class BookingAgent(BaseAgent):
         self._metrics["total_requests"] += 1
 
         try:
+            # Store intent for use in _update_history()
+            self.current_intent = intent
+
             self.logger.info(f"Generating response for: '{query[:100]}...'")
 
             # Auto-detect or use provided language for consistent context
@@ -430,14 +434,32 @@ class BookingAgent(BaseAgent):
                     "generation_config not initialized. Call initialize() first."
                 )
 
+            # GOOGLE BEST PRACTICE: Use temperature=0.0 for deterministic function calling
+            # Reference: https://ai.google.dev/gemini-api/docs/function-calling
+            # "Use low temperature values (e.g., 0) for more deterministic and reliable function calls"
             config_dict = {
-                "temperature": self.generation_config.temperature,
+                "temperature": 0.0,  # Deterministic responses (reduces empty response rate)
                 "top_k": self.generation_config.top_k,
                 "top_p": self.generation_config.top_p,
-                "max_output_tokens": self.generation_config.max_output_tokens,
+                "max_output_tokens": 2048,  # Explicit limit (prevents MAX_TOKENS empty response)
                 "response_mime_type": self.generation_config.response_mime_type,
                 "system_instruction": system_prompt,
             }
+
+            # === GOOGLE BEST PRACTICE: Control thinking budget for Gemini 2.5 ===
+            # Gemini 2.5 Flash has thinking enabled by default (dynamic budget).
+            # Explicitly setting thinking_budget prevents token exhaustion issues.
+            # Reference: https://ai.google.dev/gemini-api/docs/thinking
+            thinking_budget = booking_agent_settings.BOOKING_THINKING_BUDGET
+            if thinking_budget is not None and thinking_budget >= 0:
+                config_dict["thinking_config"] = types.GenerationConfigThinkingConfig(
+                    thinking_budget=thinking_budget
+                )
+                reserved_output = self.generation_config.max_output_tokens - thinking_budget
+                self.logger.info(
+                    f"✅ Thinking budget configured: {thinking_budget} tokens "
+                    f"(reserves ~{reserved_output} for actual output)"
+                )
 
             # CRITICAL FIX: Only add response_schema if NO tools are available
             # When tools are present, response_schema conflicts with function_calling:
@@ -553,25 +575,53 @@ class BookingAgent(BaseAgent):
                     f"Candidate.safety_ratings: {getattr(candidate, 'safety_ratings', 'N/A')}"
                 )
 
+            # CRITICAL FIX: Save original user query BEFORE function calling loop
+            # The loop appends function responses with role="user", making it impossible
+            # to find the original user query later. We need to preserve it now.
+            original_user_query = types.Content(role="user", parts=[types.Part(text=query)])
+
             # Run function calling loop if tools are available
             # Use loop_config (WITHOUT response_schema) to avoid API conflicts
             if self.mcp_tools and self.function_call_handler:
-                final_text = await self._run_function_calling_loop(
+                final_text, tool_calls, token_count = await self._run_function_calling_loop(
                     response, contents, loop_config
                 )
             else:
                 # No tools - extract text directly (fallback to BaseAgent behavior)
                 final_text = await self._extract_text_from_response(response)
+                tool_calls = None  # No tools were called
+                # Extract token count from initial response
+                token_count = None
+                try:
+                    if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                        token_count = response.usage_metadata.total_token_count
+                except (AttributeError, TypeError):
+                    pass
+
+            # Calculate elapsed time BEFORE updating history (for accurate DB storage)
+            elapsed_ms = int((time.time() - start_time) * 1000)
 
             # Update history if requested
             if include_history:
-                self._update_history(
-                    contents[-1],
-                    types.Content(role="model", parts=[types.Part(text=final_text)]),
+                self.logger.info(
+                    f"📝 Updating history (session_id={self.session_id}, "
+                    f"memory_enabled={self._memory_enabled}, "
+                    f"memory_manager={self.memory_manager is not None})"
                 )
 
+                # Use the original user query saved before function calling loop
+                # (not the function response parts that were appended with role="user")
+                self._update_history(
+                    original_user_query,
+                    types.Content(role="model", parts=[types.Part(text=final_text)]),
+                    response_time_ms=elapsed_ms,
+                    tool_calls=tool_calls,
+                    token_count=token_count
+                )
+            else:
+                self.logger.warning("⚠️ History update skipped (include_history=False)")
+
             # Track success metrics
-            elapsed_ms = (time.time() - start_time) * 1000
             self._metrics["successful_requests"] += 1
             self._metrics["total_response_time_ms"] += elapsed_ms
             self._metrics["history_sizes"].append(len(self.conversation_history))
@@ -597,7 +647,7 @@ class BookingAgent(BaseAgent):
         response: Any,
         contents: list[types.Content],
         config: types.GenerateContentConfig,
-    ) -> str:
+    ) -> tuple[str, list[dict[str, Any]] | None, int | None]:
         """Run function calling loop until text response or max iterations.
 
         Args:
@@ -606,7 +656,10 @@ class BookingAgent(BaseAgent):
             config: Generation config with system instruction and language context.
 
         Returns:
-            Final text response.
+            Tuple of (final_text, tool_calls_log, token_count) where:
+            - final_text: The final response text
+            - tool_calls_log: List of tool calls executed during the loop
+            - token_count: Total token count from final Gemini response
         """
         if self.client is None:
             raise RuntimeError(
@@ -614,6 +667,21 @@ class BookingAgent(BaseAgent):
             )
         if not self.function_call_handler:
             raise RuntimeError("Function call handler not available")
+
+        # Track all tool calls for analytics/debugging
+        tool_calls_log: list[dict[str, Any]] = []
+
+        # Helper function to extract token count from response
+        def extract_token_count(resp: Any) -> int | None:
+            try:
+                if hasattr(resp, 'usage_metadata') and resp.usage_metadata:
+                    return resp.usage_metadata.total_token_count
+            except (AttributeError, TypeError):
+                pass
+            return None
+
+        # Track last response for token count extraction
+        last_response = response
 
         iteration = 0
         max_iterations = self.function_call_handler.max_iterations
@@ -638,12 +706,14 @@ class BookingAgent(BaseAgent):
                 if status == ResponseStatus.SAFETY_BLOCKED:
                     # Safety filters triggered - cannot retry, use fallback
                     self.logger.warning(f"🚫 Safety filter blocked response: {diagnostic_msg}")
-                    return await self._create_fallback_response(iteration)
+                    fallback = await self._create_fallback_response(iteration)
+                    return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
                 elif status == ResponseStatus.RECITATION:
                     # Recitation detected - increase temperature and retry
                     self.logger.warning(f"📋 Recitation detected: {diagnostic_msg}")
-                    return await self._create_fallback_response(iteration)
+                    fallback = await self._create_fallback_response(iteration)
+                    return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
                 elif status == ResponseStatus.MAX_TOKENS:
                     # Hit token limit - extract partial response or use fallback
@@ -653,15 +723,17 @@ class BookingAgent(BaseAgent):
                         content = response.candidates[0].content if response.candidates else None
                         text = self.function_call_handler.extract_text_from_content(content)
                         if text and len(text.strip()) > 10:
-                            return text
+                            return (text, tool_calls_log if tool_calls_log else None, extract_token_count(response))
                     except (AttributeError, IndexError):
                         pass
-                    return await self._create_fallback_response(iteration)
+                    fallback = await self._create_fallback_response(iteration)
+                    return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
                 else:
                     # Empty response, no candidates, or unknown error
                     self.logger.warning(f"⚠️ Response validation failed: {status} - {diagnostic_msg}")
-                    return await self._create_fallback_response(iteration)
+                    fallback = await self._create_fallback_response(iteration)
+                    return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
             # === Response is valid - proceed with function calling ===
             # Get parts from response
@@ -674,7 +746,8 @@ class BookingAgent(BaseAgent):
                 self.logger.warning(
                     f"⚠️ Response parts is None after validation (iteration {iteration}) - edge case detected"
                 )
-                return await self._create_fallback_response(iteration)
+                fallback = await self._create_fallback_response(iteration)
+                return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
             # Extract function calls
             function_calls = self.function_call_handler.extract_function_calls(parts)
@@ -684,7 +757,7 @@ class BookingAgent(BaseAgent):
                 text = self.function_call_handler.extract_text(parts)
                 if text:
                     self.logger.debug(f"Extracted final text: {text[:100]}...")
-                    return text
+                    return (text, tool_calls_log if tool_calls_log else None, extract_token_count(response))
                 else:
                     # Try fallback text extraction from content
                     try:
@@ -692,15 +765,24 @@ class BookingAgent(BaseAgent):
                         text = self.function_call_handler.extract_text_from_content(content)
                         if text:
                             self.logger.debug(f"Extracted text from content (fallback): {text[:100]}...")
-                            return text
+                            return (text, tool_calls_log if tool_calls_log else None, extract_token_count(response))
                     except (AttributeError, IndexError):
                         pass
 
                     self.logger.warning(f"No function calls and no text in iteration {iteration}")
-                    return await self._create_fallback_response(iteration)
+                    fallback = await self._create_fallback_response(iteration)
+                    return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
             # Execute function calls
             self.logger.debug(f"Found {len(function_calls)} function calls")
+
+            # Track tool calls for analytics/debugging
+            for fc in function_calls:
+                tool_calls_log.append({
+                    "tool_name": fc.name,
+                    "args": dict(fc.args) if fc.args else {},
+                })
+
             function_response_parts = await self._execute_function_calls(function_calls)
 
             # Add function call parts to contents (model response)
@@ -721,7 +803,8 @@ class BookingAgent(BaseAgent):
 
         # Exhausted iterations
         self.logger.warning(f"Function calling loop exhausted after {iteration} iterations")
-        return await self._create_fallback_response(iteration)
+        fallback = await self._create_fallback_response(iteration)
+        return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
     async def _execute_function_calls(self, function_calls: list[Any]) -> list[types.Part]:
         """Execute function calls and return structured responses.

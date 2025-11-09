@@ -811,8 +811,12 @@ class AgentOrchestrator:
         set_current_language(language)
         logger.debug(f"🌐 Language context set to: {language}")
 
-        # Call SalesAgent's send_message method with language parameter
-        response = await self.sales_agent.send_message(query, language=language)
+        # Call SalesAgent's send_message method with language and intent parameters
+        response = await self.sales_agent.send_message(
+            query,
+            language=language,
+            intent="sales",  # Pass classified intent for future DB storage support
+        )
         return response
 
     async def _route_to_booking(
@@ -856,6 +860,7 @@ class AgentOrchestrator:
             query,
             customer_email=effective_email,
             include_history=include_history,
+            intent="booking",  # Pass classified intent for DB storage
             language=language,  # Pass language to agent for dynamic template selection
         )
 
@@ -891,6 +896,7 @@ class AgentOrchestrator:
         response = await self.general_agent.generate_response(
             query,
             include_history=include_history,
+            intent="general",  # Pass classified intent for DB storage
             language=language,  # Pass language to agent for dynamic template selection
         )
 

@@ -87,6 +87,7 @@
 \i '../01_ddl/demo/05_demo_otp_codes.sql'
 \i '../01_ddl/demo/06_clerk_migration.sql'
 \i '../01_ddl/demo/07_fix_clerk_constraints.sql'
+\i '../01_ddl/demo/08_user_based_chat_history.sql'
 \echo ''
 
 -- ============================================================================

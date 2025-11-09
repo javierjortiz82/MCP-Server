@@ -517,7 +517,7 @@ class SalesAgent(BaseAgent):
 
         Args:
             user_message: User's message/query.
-            **kwargs: Additional parameters including language.
+            **kwargs: Additional parameters including language and intent.
 
         Returns:
             Bot's response text.
@@ -539,6 +539,9 @@ class SalesAgent(BaseAgent):
                     )
                     self.language = new_language
 
+            # Store intent for DB persistence (passed from AgentOrchestrator)
+            self.current_intent = kwargs.get("intent", None)
+
             # 1. Validate client is ready
             self._validate_client_initialized()
 
@@ -550,8 +553,22 @@ class SalesAgent(BaseAgent):
             # 3. Prepare context and generate initial response
             response = await self._prepare_message_context(user_message)
 
-            # 4. Run function calling loop
-            final_response = await self._run_function_calling_loop(response, user_message)
+            # 4. Run function calling loop and get tool_calls and token_count
+            final_response, tool_calls, token_count = await self._run_function_calling_loop(response, user_message)
+
+            # 5. Persist to database if memory is enabled
+            if self._memory_enabled and self.memory_manager and self.session_id:
+                self.logger.info(
+                    f"📝 Persisting to DB (session={self.session_id[:8]}, "
+                    f"intent={self.current_intent}, tokens={token_count}, tools={len(tool_calls) if tool_calls else 0})"
+                )
+                self._update_history(
+                    types.Content(role="user", parts=[types.Part(text=user_message)]),
+                    types.Content(role="model", parts=[types.Part(text=final_response)]),
+                    response_time_ms=None,  # SalesAgent doesn't track response time yet
+                    tool_calls=tool_calls,
+                    token_count=token_count
+                )
 
             return final_response
 
@@ -620,7 +637,7 @@ class SalesAgent(BaseAgent):
             if thoughts and (self.debug_mode or settings.INCLUDE_THOUGHTS):
                 self.thinking_manager.log_thoughts(thoughts)
 
-    async def _run_function_calling_loop(self, response: Any, user_message: str) -> str:
+    async def _run_function_calling_loop(self, response: Any, user_message: str) -> tuple[str, list[dict[str, Any]] | None, int | None]:
         """Run function calling loop until text response or max iterations.
 
         Args:
@@ -628,10 +645,26 @@ class SalesAgent(BaseAgent):
             user_message: Original user message for validation
 
         Returns:
-            Final text response
+            Tuple of (final_text, tool_calls, token_count) where:
+            - final_text: The final response text
+            - tool_calls: List of tool calls executed during the loop
+            - token_count: Total token count from final Gemini response
         """
         iteration = 0
         max_iterations = self.function_call_handler.max_iterations
+
+        # Track all tool calls for analytics/debugging
+        tool_calls_log: list[dict[str, Any]] = []
+        self._current_tool_calls = tool_calls_log  # Store for _execute_function_calls access
+
+        # Helper function to extract token count from response
+        def extract_token_count(resp: Any) -> int | None:
+            try:
+                if hasattr(resp, 'usage_metadata') and resp.usage_metadata:
+                    return resp.usage_metadata.total_token_count
+            except (AttributeError, TypeError):
+                pass
+            return None
 
         while iteration < max_iterations:
             iteration += 1
@@ -642,14 +675,14 @@ class SalesAgent(BaseAgent):
 
             # Check if we got a final response
             if isinstance(result, str):
-                return result
+                return (result, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
             # Otherwise, result is the next response to process
             response = result
 
         # Exhausted iterations
         self.logger.warning(f"Function calling loop exhausted after {iteration} iterations")
-        return settings.FALLBACK_ERROR_MESSAGE_ES
+        return (settings.FALLBACK_ERROR_MESSAGE_ES, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
     async def _process_single_iteration(
         self, response: Any, user_message: str, iteration: int
@@ -705,7 +738,7 @@ class SalesAgent(BaseAgent):
                 final_text, user_message
             )
 
-            # Add to history
+            # Add to conversation manager history (in-memory, for Gemini context)
             self.conversation_manager.add_model_message(processed_text)
             self.logger.debug(f"Extracted text: {processed_text[:100]}...")
             return processed_text
@@ -830,6 +863,13 @@ class SalesAgent(BaseAgent):
         for fc in function_calls:
             function_name = fc.name
             function_args = dict(fc.args)
+
+            # Track tool call for analytics/debugging (if tracking is enabled)
+            if hasattr(self, '_current_tool_calls'):
+                self._current_tool_calls.append({
+                    "tool_name": function_name,
+                    "args": function_args,
+                })
 
             self.logger.info(f"🔧 Executing: {function_name}")
             if self.debug_mode:

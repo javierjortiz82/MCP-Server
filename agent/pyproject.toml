@@ -24,7 +24,7 @@ classifiers = [
 
 dependencies = [
     # Core AI
-    "google-genai>=1.0.0",
+    "google-genai>=1.49.0",
 
     # Configuration and Settings
     "pydantic>=2.11.0",
