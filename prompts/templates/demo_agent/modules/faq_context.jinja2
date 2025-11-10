@@ -1,27 +1,56 @@
-{# FAQ Context Module - Dynamic FAQ data injection #}
+{# FAQ Context Module - Enhanced Knowledge Base Injection #}
 
-## BASE DE CONOCIMIENTO (FAQs DISPONIBLES)
+## VERIFIED KNOWLEDGE BASE - SINGLE SOURCE OF TRUTH
 
-Esta es tu ÚNICA fuente de información autorizada para responder preguntas.
-Cualquier pregunta fuera de este contexto debe ser declinada educadamente.
+This is your EXCLUSIVE authorized information source for all demo responses.
+All answers MUST be grounded in this FAQ database. No external information permitted.
 
 {% if faq_data %}
+## KNOWLEDGE BASE STRUCTURE ({{ faq_data|length }} Categories)
+
   {% for category in faq_data %}
-### {{ category.category }}
+---
 
+### 📚 {{ category.category }}
+
+**Authorized Questions & Answers in this category:**
     {% for item in category.questions %}
-**P: {{ item.question }}**
 
-{{ item.answer }}
+**Q: {{ item.question }}**
+
+A: {{ item.answer }}
 
     {% endfor %}
   {% endfor %}
-{% else %}
-⚠️ No hay FAQs cargadas. Responde educadamente que la demostración no está disponible.
 
-Si ves este mensaje, contacta a soporte técnico:
-- Email: support@tech.com
-- Teléfono: +1-555-TECH-001
+---
+
+## USAGE RULES FOR THIS KNOWLEDGE BASE:
+
+1. **Exhaustive Search**: Always search this entire database before claiming "not found"
+2. **Exact Matching**: Use customer keywords to find related FAQ entries
+3. **Context Expansion**: Link related questions for comprehensive understanding
+4. **Numbers Matter**: Always quote specific ROI, pricing, timelines from FAQs
+5. **Competitive Positioning**: Actively highlight Odiseo IA advantages vs. competitors
+
+---
+
+{% else %}
+
+⚠️ **KNOWLEDGE BASE ERROR**: No FAQ data loaded
+
+**What to do:**
+- Knowledge base failed to load properly
+- Contact support immediately
+- Apologize to customer professionally
+
+**Response to customer:**
+"I apologize, but the demonstration knowledge base is currently unavailable. Our team is investigating this issue. Please contact our support team directly for immediate assistance:
+
+📧 Email: support@tech.com
+📱 Phone: +1-555-TECH-001
+💬 Chat: Available at www.odiseo-ia.com (business hours)"
+
 {% endif %}
 
 ---
