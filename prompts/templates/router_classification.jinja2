@@ -71,99 +71,15 @@ PATRONES DE DATOS PERSONALES (son "booking" si están en contexto de reserva):
 - Solo teléfono (ej: "88459904" o "+506-8888-8888")
 - Confirmaciones simples (ej: "sí", "confirmo", "ok", "de acuerdo") → mantener contexto
 
+REGLAS ADICIONALES PARA AMBIGÜEDAD:
+- Prioridad cuando hay señales conflictivas: booking > sales > general
+- Si menciona tanto productos como reservas, prioriza booking (es más específico)
+- Ejemplos mixtos:
+  * "¿Venden laptops y tienen disponibilidad?" → sales (intención principal es producto)
+  * "Quiero agendar una consultoría de laptops" → booking (intención principal es agendar)
+  * "¿Qué servicios ofrecen?" → general (pregunta abierta sin intención específica)
+- En caso de completa ambigüedad → "general" (fallback seguro)
+
 RESPONDE ÚNICAMENTE con una de estas tres palabras: sales, booking, general
 
 NO agregues explicaciones ni puntuación adicional.
-
-════════════════════════════════════════════════════════════════
-⚠️ HANDLING AMBIGUOUS CLASSIFICATIONS (Google Gemini Best Practice)
-════════════════════════════════════════════════════════════════
-
-SITUATION: Consulta con señales CONFLICTIVAS o MÚLTIPLES INTENCIONES
-- Ejemplo: "Quiero un laptop para la oficina" (sales + booking ambiguo)
-- Ejemplo: "¿Tienes disponibilidad el martes? Quiero agendar un laptop" (sales + booking)
-- Ejemplo: "¿Cuál es el mejor para..." (sales pero también general info)
-
-DECISION RULE - CUANDO HAY AMBIGÜEDAD:
-═══════════════════════════════════════════════════════════════
-
-1️⃣ INTENT CLARITY RANKING (Prioridad - De más específico a más general):
-   booking > sales > general
-
-   ¿Por qué? Booking es más específico (requiere datos, horario, confirmación)
-   Sales es medio (requiere producto específico)
-   General es amplio (cualquier pregunta que no es booking/sales)
-
-2️⃣ DECISION TREE PARA AMBIGÜEDAD:
-
-START (Query recibida)
-  │
-  ├─ ¿Menciona explícitamente CITA/RESERVA/HORARIO/SERVICIO?
-  │  ├─ YES → "booking" ✓
-  │  └─ NO → continua
-  │
-  ├─ ¿Menciona explícitamente PRODUCTO/COMPRA/BUSCA/CARACTERÍSTICAS?
-  │  ├─ YES → "sales" ✓
-  │  └─ NO → continua
-  │
-  └─ AMBIGUO O MÚLTIPLES SEÑALES
-     ├─ ¿Booking + Sales mezclados?
-     │  → Prioriza BOOKING (es más específico, requiere datos)
-     │     Ejemplo: "Quiero agendar" + mention de producto → booking
-     │
-     ├─ ¿Sales + General mezclados?
-     │  → Prioriza SALES (es más específico)
-     │     Ejemplo: "¿Qué es mejor?" sobre producto → sales
-     │
-     └─ ¿Completamente ambiguo?
-        → Default a "general" (safe fallback)
-
-3️⃣ CONFLICTING SIGNALS EXAMPLES:
-
-Example 1: "Quiero agendar una consultoría el viernes"
-  - Señal 1: "agendar" → booking
-  - Señal 2: "consultoría" → podría ser producto (sales) o servicio (booking)
-  - DECISION: "booking" (agendar es booking intent, consultoría es el servicio)
-
-Example 2: "¿Venden laptops? ¿Tienen disponibilidad para mañana?"
-  - Señal 1: "venden laptops" → sales
-  - Señal 2: "disponibilidad" → booking
-  - DECISION: "sales" (la intención principal es buscar producto)
-             (Si preguntara después de seleccionar producto → booking)
-
-Example 3: "¿Qué servicios ofrecen?"
-  - Señal 1: "servicios" → podría ser sales o booking
-  - Señal 2: Contexto: Pregunta abierta sin especificar
-  - DECISION: "general" (información general, no compra ni reserva)
-
-Example 4: "Necesito un especialista en desarrollo web"
-  - Señal 1: "necesito" + "especialista" → services (podría ser booking o sales)
-  - Señal 2: "desarrollo web" → específico
-  - DECISION: Dependencia contextual:
-             ├─ Si es solicitud de servicio (por ej. "quiero contratar") → booking
-             └─ Si es búsqueda de servicio disponible (info) → sales
-
-4️⃣ CONFIDENCE LEVELS:
-
-HIGH CONFIDENCE (clara clasificación):
-  - "Agendar una cita" → 99% booking
-  - "Busco laptop" → 98% sales
-  - "¿Cuál es tu horario?" → 95% general
-
-MEDIUM CONFIDENCE (algunas señales conflictivas):
-  - "Quiero servicio pero también necesito saber el precio" → 70% booking / 30% sales
-  → Decisión: booking (specificity rule)
-
-MIXED SIGNALS (múltiples intenciones):
-  - "¿Tienen disponibilidad para consulta sobre laptops?" → sales + booking
-  → Decisión: booking (explícita mención de "disponibilidad" y horario)
-
-5️⃣ WHEN IN DOUBT - USE THIS RULE:
-
-Si hay CUALQUIER duda entre dos categorías:
-  booking > sales > general
-
-Elige la MÁS ESPECÍFICA, porque:
-- Si routing a booking cuando es sales → Agent general puede reconocerlo y redirigir
-- Si routing a sales cuando es booking → Usuario espera un flujo de reserva, fallará
-- Si routing a general cuando es sales → Usuario verá FAQ, fallará
