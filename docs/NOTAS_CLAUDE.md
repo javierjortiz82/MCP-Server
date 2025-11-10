@@ -49605,3 +49605,60 @@ make db
 
 ---
 
+## 2025-11-10: Optimización del Template del Router (Solución a Respuestas Vacías)
+
+### Problema Original:
+La consulta "quiero reservar" y otras consultas en español devolvían intermitentemente el error:
+```
+2025-11-04 20:04:39 - ERROR - 🚨 EMPTY RESPONSE (content=None or parts=[])
+```
+
+### Causa Raíz (Identificada en docs/ROUTER_EMPTY_RESPONSE_ROOT_CAUSE.md):
+1. **Bug conocido de Gemini 2.5 Flash** - Respuestas vacías intermitentes (~30-40% de las veces)
+2. **Template español demasiado grande** - 8,200 caracteres (64% sobre el límite recomendado de 5,000)
+3. **Prompt complejo** - Árboles de decisión ASCII, ejemplos verbosos, niveles de confianza
+
+### Solución Implementada:
+**Optimización del template** `prompts/templates/router_classification.jinja2`:
+- ❌ **Antes:** 8,200 caracteres, 170 líneas
+- ✅ **Después:** 4,434 caracteres, 85 líneas
+- 📉 **Reducción:** 46% en tamaño, 50% en líneas
+
+### Cambios Realizados:
+1. Eliminadas líneas 78-169 (sección "HANDLING AMBIGUOUS CLASSIFICATIONS")
+2. Removidos:
+   - Árboles de decisión ASCII art (40 líneas)
+   - Ejemplos detallados de señales conflictivas (35 líneas)
+   - Niveles de confianza verbosos (25 líneas)
+3. Reemplazados con reglas concisas en 8 líneas
+
+### Resultados de Testing:
+```
+✅ Test de Clasificación: 8/8 queries correctas (100%)
+✅ Test de Estabilidad: 30/30 iteraciones exitosas (100%)
+❌ Respuestas vacías: 0/30 (0% - antes ~30-40%)
+```
+
+**Queries testeadas (10 iteraciones cada una):**
+- "quiero reservar" → 10/10 booking ✅
+- "quiero comprar unos zapatos" → 10/10 sales ✅
+- "necesito una laptop" → 10/10 sales ✅
+
+### Impacto Esperado:
+- ✅ Reducción de errores de respuesta vacía: 30-40% → <5%
+- ✅ Mejora en latencia de clasificación: ~30-40% más rápido
+- ✅ Menor consumo de tokens (reducción de costos)
+- ✅ Mayor estabilidad en la clasificación
+
+### Archivo Modificado:
+- `prompts/templates/router_classification.jinja2` (optimizado)
+
+### Referencias:
+- Análisis completo: `docs/ROUTER_EMPTY_RESPONSE_ROOT_CAUSE.md`
+- Ubicación del error: `agent/src/gemini_agent/utils/gemini_response_handler.py:365`
+- Validación de idioma: `agent/src/multi_agent/agent_router.py:564-573`
+
+**Estado:** ✅ Implementado y testeado exitosamente
+
+---
+
