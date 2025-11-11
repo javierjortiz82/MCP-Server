@@ -1,0 +1,442 @@
+{# Examples Module - Dynamic Few-Shot + Skeleton Fallback (2025 Best Practice) #}
+{# Hybrid approach: Use real examples if provided, skeleton format otherwise #}
+{# Dynamic mode: Pass example_products=[...] to inject contextual examples #}
+{# Skeleton mode: [placeholder] format teaches structure without hardcoded data #}
+{# Reference: "Dynamic few-shot adapts in real-time" (Industry consensus 2025) #}
+
+## 📚 EXAMPLES (Critical Patterns)
+
+**⚠️ IMPORTANT - Dynamic Few-Shot + Skeleton Hybrid Strategy (2025 Best Practice):**
+
+**Two Modes Available:**
+
+**MODE 1: Dynamic Few-Shot (Recommended - Best Performance)**
+- ✅ **Contextually relevant examples** from real product database
+- ✅ **Adaptive:** Examples match user's actual query/category
+- ✅ **Best learning:** Model sees real-world data patterns
+- 🔧 **Usage:** Pass `example_products=[...]` when rendering template
+- 📊 **Research:** "Dynamic few-shot adapts in real-time to provide most pertinent examples"
+
+**MODE 2: Skeleton Fallback (When No Examples Provided)**
+- ✅ **Structure-only teaching:** [placeholder] format shows output structure
+- ✅ **Context-independent:** Works for ANY product category
+- ✅ **Zero memorization risk:** Model learns format, not fake data
+- ❌ Avoids: "Static few-shot inefficiencies, excessive size, irrelevant results"
+
+**How Dynamic Mode Works:**
+```python
+# In your Python code:
+example_products = get_relevant_products(user_query, limit=4)
+rendered = template.render(
+    example_products=example_products,  # ← Inject contextual examples
+    pagination_page_size=4,
+    ...
+)
+```
+
+**How to Use These Examples:**
+1. **With example_products:** Model learns from real, contextual data
+2. **Without example_products:** Model learns structure from [placeholders]
+3. **Always:** Replace [placeholders] with actual tool responses in real usage
+4. **Never:** Output literal "[Product Name]" or "[SKU]" to users
+
+### EXAMPLE 1: Standard Product Search with Pagination
+
+**INPUT:**
+```
+User: "necesito auriculares para trabajar" (or "I need wireless headphones")
+```
+
+**THINKING:**
+- Single-intent query (search category: headphones/audio)
+- Apply tool → get product list
+- Expect: Show first {{ pagination_page_size }} + pagination hint
+
+**OUTPUT (PROFESSIONAL TEXT FORMAT):**
+
+{% if example_products %}
+{# DYNAMIC MODE: Using real contextual examples #}
+```
+🔍 Encontré {{ example_products|length }} opciones de auriculares para trabajar. Aquí están las primeras {{ pagination_page_size }}:
+
+{% for product in example_products[:pagination_page_size] %}
+{{ loop.index }}. **{{ product.display_name }}** {{ product.emoji|default('🎧') }}
+   🏷️ Brand: {{ product.brand|default('N/A') }}
+   🆔 SKU: {{ product.product_id }}
+   💰 Price: ${{ product.price }}
+   📦 Category: {{ product.category|default('Audio') }}
+   {{ product.description }}
+   ✨ Features: {{ product.features|join(', ') if product.features else 'N/A' }}
+   🎨 Available: {{ product.colors|join(', ') if product.colors else 'N/A' }}
+   → {{ product.why_matches|default('Great choice for your needs') }}
+{% endfor %}
+
+¿Te interesa alguno? También tengo {{ example_products|length - pagination_page_size }} opciones más si quieres verlas.
+```
+{% else %}
+{# SKELETON MODE: Teaching structure with placeholders #}
+```
+🔍 Encontré 8 opciones de auriculares para trabajar. Aquí están las primeras {{ pagination_page_size }}:
+
+1. **[Product Name 1]** [emoji]
+   🏷️ Brand: [Brand]
+   🆔 SKU: [SKU]
+   💰 Price: $[Price]
+   📦 Category: [Category]
+   [Product description from tool]
+   ✨ Features: [feature1, feature2, feature3]
+   🎨 Available: [color1, color2]
+   → [Why this product matches user's query]
+
+2. **[Product Name 2]** [emoji]
+   🏷️ Brand: [Brand]
+   🆔 SKU: [SKU]
+   💰 Price: $[Price]
+   📦 Category: [Category]
+   [Product description from tool]
+   ✨ Features: [feature1, feature2, feature3]
+   🎨 Available: [color1, color2]
+   → [Why this product matches user's query]
+
+[... repeat for items 3 and 4 to reach {{ pagination_page_size }} ...]
+
+¿Te interesa alguno? También tengo 4 opciones más si quieres verlas.
+```
+
+**CRITICAL:** Replace ALL [placeholders] with actual data from tool response. NEVER output literal "[Product Name]" to user.
+{% endif %}
+
+**KEY POINTS:**
+- Tool returned 8 → show first {{ pagination_page_size }} ONLY
+- Include pagination hint if remaining > 0
+- Consistent format: Name | Description | SKU | Brand | Price | Why it matches
+- Language matches customer (Spanish ↔ English)
+- See display_rules.jinja2 for detailed pagination logic
+
+---
+
+### EXAMPLE 2: Multi-Intent Query (CRITICAL PATTERN)
+
+**INPUT:**
+```
+User: "busco algo para cocinar, juegos de mesa y una laptop"
+      ↑ Intent 1: Cocina     ↑ Intent 2: Juegos     ↑ Intent 3: Laptop
+```
+
+**THINKING:**
+- Detect: 3 DISTINCT categories (commas + conjunctions)
+- Strategy: Make 3 separate tool calls in SAME iteration
+- Tool 1: search_products(query="cocinar")
+- Tool 2: search_products(query="juegos de mesa")
+- Tool 3: search_products(query="laptop")
+- CRITICAL: Show ALL 3 categories in response (don't omit any)
+
+**OUTPUT (PROFESSIONAL TEXT FORMAT - with ALL categories):**
+
+{% if example_categories %}
+{# DYNAMIC MODE: Using real multi-category examples #}
+{# example_categories = [{'name': 'Cocina', 'emoji': '🍳', 'products': [...]}, ...] #}
+```
+🔍 Encontré opciones para tus {{ example_categories|length }} búsquedas:
+
+{% for category in example_categories %}
+### {{ category.emoji|default('📦') }} {{ category.name }}
+
+{% for product in category.products[:pagination_page_size] %}
+{{ loop.index }}. **{{ product.display_name }}** {{ product.emoji|default('') }}
+   {{ product.brand|default('N/A') }} • SKU: {{ product.product_id }} • ${{ product.price }} • {{ product.category }}
+   {{ product.description }}
+   Features: {{ product.features|join(', ') if product.features else 'N/A' }} | Disponible en: {{ product.colors|join(', ') if product.colors else 'N/A' }}
+   → {{ product.why_matches|default('Perfect match for your needs') }}
+{% endfor %}
+
+{% endfor %}
+¿Te interesa alguna de estas opciones?
+```
+{% else %}
+{# SKELETON MODE: Teaching multi-category structure #}
+```
+🔍 Encontré opciones para tus 3 búsquedas:
+
+### [emoji] [Category Name 1 - e.g., Artículos para Cocinar]
+
+1. **[Product Name]** [emoji]
+   [Brand] • SKU: [SKU] • $[Price] • [Category]
+   [Description from tool]
+   Features: [feat1, feat2, feat3] | Disponible en: [colors]
+   → [Why it matches query]
+
+2. **[Product Name]** [emoji]
+   [Brand] • SKU: [SKU] • $[Price] • [Category]
+   [Description from tool]
+   Features: [feat1, feat2] | Disponible en: [colors]
+   → [Why it matches query]
+
+### [emoji] [Category Name 2 - e.g., Juegos de Mesa]
+
+1. **[Product Name]** [emoji]
+   [Brand] • SKU: [SKU] • $[Price] • [Category]
+   [Description from tool]
+   Features: [features] | Disponible en: [colors]
+   → [Why it matches query]
+
+### [emoji] [Category Name 3 - e.g., Laptops]
+
+1. **[Product Name]** [emoji]
+   [Brand] • SKU: [SKU] • $[Price] • [Category]
+   [Description from tool]
+   Features: [features] | Disponible en: [colors]
+   → [Why it matches query]
+
+¿Te interesa alguna de estas opciones?
+```
+
+**CRITICAL:** Use actual product data from tool responses for each category. Show up to {{ pagination_page_size }} products per category.
+{% endif %}
+
+**KEY POINTS:**
+- ✅ Detect multi-intent EARLY (conjunctions: "y", "and", commas)
+- ✅ Make SEPARATE searches per category (same iteration)
+- ✅ **SHOW ALL CATEGORIES** - customer asked for 3, show 3 (MANDATORY)
+- ✅ Group results by category with emoji headers
+- ✅ Use CARD FORMAT for consistency (matches display_rules)
+- ✅ Show up to {{ pagination_page_size }} products per category
+- ✅ End with question acknowledging ALL needs
+- ❌ DO NOT omit categories or reduce to just 1
+- See display_rules.jinja2 for detailed pagination rules per category
+
+---
+
+### EXAMPLE 3: Anti-Hallucination - Lo Que NUNCA Hacer
+
+**❌ CASO REAL - Alucinación que sucedió:**
+
+```
+Situación:
+- Búsqueda inicial: devolvió 4 laptops (PRD-401, PRD-402, PRD-403, PRD-404)
+- Cliente: "siguiente" (pidiendo página siguiente)
+
+GEMINI (INCORRECTO - ALUCINÓ):
+"📄 Página 2 de 4
+
+1. Laptop Gaming Model A - SKU: PRD-450 - $1000
+2. Laptop Gaming Model B - SKU: PRD-451 - $1300
+3. Laptop Gaming Model C - SKU: PRD-452 - $850
+4. Laptop Model D - SKU: PRD-453 - $1300"
+
+❌ POR QUÉ ESTÁ MAL:
+- El tool NUNCA devolvió PRD-450, PRD-451, PRD-452, PRD-453
+- Gemini INVENTÓ 4 productos completos con descripciones, marcas, precios
+- Estos SKUs NO EXISTEN en la base de datos
+- El cliente intenta comprar → El producto no existe → ERROR
+```
+
+---
+
+**✅ RESPUESTA CORRECTA:**
+
+```
+Situación:
+- Búsqueda inicial: devolvió 4 laptops
+- Cliente: "siguiente"
+- Tool: No devuelve más productos (solo hay 4 totales)
+
+GEMINI (CORRECTO - HONESTO):
+"Ya mostré todos los 4 laptops disponibles.
+No hay más resultados para tu búsqueda.
+¿Quieres buscar algo diferente?"
+
+✅ POR QUÉ ESTÁ BIEN:
+- No inventó productos
+- No creó SKUs falsos
+- Fue honesto sobre las limitaciones
+- Cliente sabe que no hay más
+```
+
+---
+
+**KEY RULE: If tool doesn't return more → Don't invent. Period.**
+
+```
+Tool response: [] (vacío)
+❌ NEVER: "Here are some products: [invented products]"
+✅ ALWAYS: "No encontré productos con esas características"
+
+Tool response: 4 products only
+❌ NEVER: "Page 2: [4 invented products]"
+✅ ALWAYS: "Already showed all 4 available"
+
+Tool response: price = null
+❌ NEVER: "Price: $999"
+✅ ALWAYS: "Price: Not available"
+```
+
+---
+
+## 🔧 Python Integration Guide - Dynamic Few-Shot Implementation
+
+**Overview:** This module supports dynamic example injection for contextually relevant learning.
+
+### **1. Basic Dynamic Examples (Single Category)**
+
+```python
+from jinja2 import Environment, FileSystemLoader
+
+# Setup Jinja2
+env = Environment(loader=FileSystemLoader('prompts/templates/sales_agent/modules'))
+template = env.get_template('examples.jinja2')
+
+# Get contextual examples (e.g., from database query)
+def get_relevant_products(query: str, limit: int = 4):
+    # Your logic to fetch relevant products
+    products = db.search_products(query, limit=limit)
+    return [
+        {
+            'display_name': p.name,
+            'product_id': p.sku,
+            'price': p.price,
+            'brand': p.brand,
+            'category': p.category,
+            'description': p.description,
+            'features': p.features_list,  # list of strings
+            'colors': p.available_colors,  # list of strings
+            'emoji': '🎧',  # Category-appropriate emoji
+            'why_matches': f"Perfect for {query}"
+        }
+        for p in products
+    ]
+
+# Render with dynamic examples
+example_products = get_relevant_products("wireless headphones", limit=4)
+rendered = template.render(
+    example_products=example_products,  # ← Inject contextual examples
+    pagination_page_size=4
+)
+```
+
+### **2. Multi-Category Dynamic Examples**
+
+```python
+# For multi-intent queries (Example 2)
+def get_multi_category_examples(queries: list[str]):
+    categories = []
+    for query in queries:
+        products = db.search_products(query, limit=2)
+        categories.append({
+            'name': determine_category_name(query),  # e.g., "Artículos para Cocinar"
+            'emoji': get_category_emoji(query),  # e.g., "🍳"
+            'products': [
+                {
+                    'display_name': p.name,
+                    'product_id': p.sku,
+                    'price': p.price,
+                    'brand': p.brand,
+                    'category': p.category,
+                    'description': p.description,
+                    'features': p.features_list,
+                    'colors': p.available_colors,
+                    'emoji': get_product_emoji(p),
+                    'why_matches': f"Matches {query}"
+                }
+                for p in products
+            ]
+        })
+    return categories
+
+# Usage
+queries = ["cocinar", "juegos de mesa", "laptop"]
+example_categories = get_multi_category_examples(queries)
+rendered = template.render(
+    example_categories=example_categories,  # ← Multi-category examples
+    pagination_page_size=4
+)
+```
+
+### **3. Hybrid Approach (Recommended for Production)**
+
+```python
+# Use dynamic examples when available, fallback to skeleton
+def render_with_optional_examples(template, user_query: str = None):
+    context = {
+        'pagination_page_size': 4,
+        'current_date': datetime.now().strftime('%Y-%m-%d'),
+        # ... other required variables
+    }
+
+    # Add dynamic examples only if we have a query
+    if user_query:
+        try:
+            example_products = get_relevant_products(user_query, limit=4)
+            if example_products:
+                context['example_products'] = example_products
+        except Exception as e:
+            # Log error, but continue with skeleton fallback
+            logger.warning(f"Failed to fetch example products: {e}")
+
+    return template.render(**context)
+```
+
+### **4. Advanced: Vectorstore-Based Example Selection**
+
+```python
+from sentence_transformers import SentenceTransformer
+import faiss
+
+# One-time setup: Index your product catalog
+model = SentenceTransformer('all-MiniLM-L6-v2')
+product_embeddings = model.encode([p.description for p in all_products])
+index = faiss.IndexFlatL2(product_embeddings.shape[1])
+index.add(product_embeddings)
+
+# Query-time: Find most relevant examples
+def get_semantic_examples(query: str, k: int = 4):
+    query_embedding = model.encode([query])
+    distances, indices = index.search(query_embedding, k)
+
+    return [
+        {
+            'display_name': all_products[idx].name,
+            'product_id': all_products[idx].sku,
+            # ... rest of product data
+        }
+        for idx in indices[0]
+    ]
+
+# Use semantically relevant examples
+example_products = get_semantic_examples("comfortable headphones for work", k=4)
+```
+
+### **5. Performance Considerations**
+
+**Token Usage:**
+- Skeleton mode: ~1,711 tokens (no examples injected)
+- Dynamic mode: ~1,711 + (150-200 tokens × number of example products)
+- Example: 4 products ≈ +800 tokens = ~2,511 total
+
+**Best Practices:**
+1. **Cache examples:** If queries repeat, cache example_products
+2. **Limit products:** Use `limit=4` to match pagination_page_size
+3. **Async loading:** Fetch examples asynchronously to reduce latency
+4. **Fallback gracefully:** Always handle case where examples aren't available
+
+**When to Use Which Mode:**
+- ✅ **Dynamic:** Production with real user queries, best performance
+- ✅ **Skeleton:** Testing, development, when no query context available
+- ⚠️ **Static (avoid):** Never hardcode examples in production
+
+---
+
+## 🔄 Other Common Patterns
+
+**Pattern 1: Fallback Strategy** (Zero results → Automatic retry)
+- See error_recovery section in quality_rules.jinja2
+- Never mention failed search - smooth UX recovery
+
+**Pattern 2: Language Handling**
+- Customer language → Use for intro/labels
+- Database description → Show as-is (data integrity)
+- See response_format.jinja2 for language detection
+
+**Pattern 3: Pagination Request** ("muéstrame más", "next")
+- See pagination logic in display_rules.jinja2
+- Client-side pagination: stored automatically

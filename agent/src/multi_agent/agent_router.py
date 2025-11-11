@@ -9,6 +9,28 @@ The router analyzes user queries and returns the appropriate intent:
 - booking: Appointments, reservations, scheduling
 - general: FAQ, company info, support
 
+ARCHITECTURE NOTES:
+===================
+
+Classification Methods (PRIMARY vs FALLBACK):
+1. PRIMARY: PromptManager-based classification (ACTIVE)
+   - Uses get_classification_prompt() to load dynamic templates
+   - Supports A/B testing via PromptManager.get_router_prompt()
+   - Used in classify_intent() method
+   - Status: ✅ PRODUCTION-READY (active since v1.1.0)
+
+2. FALLBACK: Legacy CLASSIFICATION_PROMPT (DEPRECATED)
+   - Uses hardcoded CLASSIFICATION_PROMPT constant (lines 96-134)
+   - Only used if PromptManager fails to load
+   - Status: ⚠️ DEPRECATED (kept for backward compatibility)
+   - Timeline: Will be removed when PromptManager is stable (v2.0.0)
+
+3. MEMORY INTEGRATION: Optional (ACTIVE)
+   - Uses MemoryManager to load user context
+   - Improves classification accuracy for returning users
+   - Session-level + user-level memory support
+   - Status: ✅ PRODUCTION-READY (active since v1.2.0)
+
 Memory Integration (Phase 3 - 2025-10-12):
     - Optional MemoryManager integration for context-aware classification
     - Uses memory blocks (user preferences, interests) to improve accuracy
@@ -33,6 +55,7 @@ References:
 Author: Lab01-MCP Team
 Created: 2025-10-11
 Version: 1.2.0 (Memory Integration)
+Last Audited: 2025-10-20
 """
 
 from __future__ import annotations
@@ -40,12 +63,30 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
+from gemini_agent.config import settings
+from gemini_agent.utils.language_detector import detect_user_language
+from gemini_agent.utils.logger import setup_logging
 from google import genai
 from google.genai import types
-
-from gemini_agent.config import settings
-from gemini_agent.utils.logger import setup_logging
 from multi_agent.prompt_manager import PromptManager
+
+# Observability imports (OPCIÓN 7)
+try:
+    from email_service.observability.metrics import get_metrics_collector
+    from email_service.observability.structured_logger import get_structured_logger
+    from email_service.observability.context import (
+        create_request_context,
+        clear_request_context,
+    )
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
+# Try to import MCP server settings for memory configuration
+try:
+    from mcp_server.config.settings import settings as mcp_settings
+except (ImportError, ModuleNotFoundError):
+    mcp_settings = None
 
 # Setup logger for agent router
 logger = setup_logging("agent_router")
@@ -128,6 +169,47 @@ RESPONDE ÚNICAMENTE con una de estas tres palabras: sales, booking, general
 
 NO agregues explicaciones ni puntuación adicional."""
 
+    def _get_classification_prompt_with_language(
+        self, user_lang: str = "es", use_template: bool = True
+    ) -> str:
+        """Get classification prompt using PromptManager with detected language.
+
+        This method ensures the classification prompt respects the user's language,
+        preventing language context loss (e.g., English input → Spanish output).
+
+        Args:
+            user_lang: Detected user language ("en" or "es", default: "es").
+            use_template: Whether to use PromptManager templates (True) or legacy prompt (False).
+
+        Returns:
+            Classification prompt text for router in the specified language.
+
+        Example:
+            >>> prompt = agent_router._get_classification_prompt_with_language("en")
+        """
+        try:
+            if use_template:
+                # Initialize PromptManager if not already done
+                if self.__class__._prompt_manager is None:
+                    logger.debug("Initializing PromptManager for AgentRouter")
+                    self.__class__._prompt_manager = PromptManager()
+
+                # Get prompt from PromptManager with detected language
+                prompt = self.__class__._prompt_manager.get_router_prompt(user_lang=user_lang)
+                logger.debug(
+                    f"Loaded router prompt from PromptManager (lang={user_lang}, {len(prompt)} chars)"
+                )
+                return prompt
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to load prompt from PromptManager (lang={user_lang}): {e}. Using legacy prompt."
+            )
+
+        # Fallback to legacy prompt
+        logger.debug(f"Using legacy CLASSIFICATION_PROMPT (lang={user_lang})")
+        return self.__class__.CLASSIFICATION_PROMPT
+
     @classmethod
     def get_classification_prompt(cls, use_template: bool = True) -> str:
         """Get classification prompt using PromptManager.
@@ -148,17 +230,13 @@ NO agregues explicaciones ni puntuación adicional."""
                     logger.debug("Initializing PromptManager for AgentRouter")
                     cls._prompt_manager = PromptManager()
 
-                # Get prompt from PromptManager
+                # Get prompt from PromptManager (no language specified - will use default "es")
                 prompt = cls._prompt_manager.get_router_prompt()
-                logger.debug(
-                    f"Loaded router prompt from PromptManager ({len(prompt)} chars)"
-                )
+                logger.debug(f"Loaded router prompt from PromptManager ({len(prompt)} chars)")
                 return prompt
 
         except Exception as e:
-            logger.warning(
-                f"Failed to load prompt from PromptManager: {e}. Using legacy prompt."
-            )
+            logger.warning(f"Failed to load prompt from PromptManager: {e}. Using legacy prompt.")
 
         # Fallback to legacy prompt
         logger.debug("Using legacy CLASSIFICATION_PROMPT")
@@ -180,6 +258,14 @@ NO agregues explicaciones ni puntuación adicional."""
             memory_manager: Optional MemoryManager for context-aware classification.
             session_id: Optional session ID for memory integration.
         """
+        # Initialize observability (OPCIÓN 7)
+        if OBSERVABILITY_AVAILABLE:
+            self.structured_logger = get_structured_logger("agent_router")
+            self.metrics = get_metrics_collector()
+        else:
+            self.structured_logger = None
+            self.metrics = None
+
         self.api_key = api_key or settings.GOOGLE_API_KEY
         self.model_name = model_name or settings.MODEL
         self.client: genai.Client | None = None
@@ -193,8 +279,16 @@ NO agregues explicaciones ni puntuación adicional."""
         logger.info(
             f"Initializing AgentRouter - Model: {self.model_name}, "
             f"API Key: {'***REDACTED***' if self.api_key else 'None'}, "
-            f"Memory: {'enabled' if self._memory_enabled else 'disabled'}"
+            f"Memory: {'enabled' if self._memory_enabled else 'disabled'}, "
+            f"Observability: {'✅ Enabled' if OBSERVABILITY_AVAILABLE else '❌ Disabled'}"
         )
+
+        if self.structured_logger:
+            self.structured_logger.info(
+                "Router initialization started",
+                model=self.model_name,
+                memory_enabled=self._memory_enabled
+            )
 
     async def initialize(self) -> None:
         """Initialize the Gemini client for intent classification.
@@ -204,6 +298,10 @@ NO agregues explicaciones ni puntuación adicional."""
         """
         try:
             logger.debug("Initializing Gemini client for AgentRouter...")
+
+            if self.structured_logger:
+                self.structured_logger.debug("Initializing Gemini client for AgentRouter")
+
             self.client = genai.Client(api_key=self.api_key)
 
             # Build generation config with temperature=0 for deterministic classification
@@ -217,9 +315,54 @@ NO agregues explicaciones ni puntuación adicional."""
 
             logger.info("✅ AgentRouter initialized successfully (temperature=0)")
 
+            if self.structured_logger:
+                self.structured_logger.info("Router initialized successfully")
+
         except Exception as e:
             logger.exception(f"Failed to initialize AgentRouter: {e}")
+            if self.structured_logger:
+                self.structured_logger.exception("Router initialization failed")
             raise RuntimeError(f"AgentRouter initialization failed: {e}") from e
+
+    @staticmethod
+    def _validate_memory_block(block: dict[str, Any] | Any, logger_func: Any) -> bool:
+        """Validate memory block structure and content.
+
+        Ensures memory blocks have the required structure to avoid crashes
+        when accessing dictionary keys.
+
+        Args:
+            block: Memory block to validate
+            logger_func: Logger function for warnings
+
+        Returns:
+            True if block is valid, False otherwise
+        """
+        # Type check: block must be a dictionary
+        if not isinstance(block, dict):
+            logger_func(f"Invalid memory block type: {type(block).__name__}, expected dict")
+            return False
+
+        # Required fields check
+        required_fields = {"block_label", "block_value"}
+        missing_fields = required_fields - set(block.keys())
+        if missing_fields:
+            logger_func(f"Memory block missing required fields: {missing_fields}")
+            return False
+
+        # Content type checks
+        block_label = block.get("block_label")
+        block_value = block.get("block_value")
+
+        if not isinstance(block_label, str):
+            logger_func(f"block_label must be str, got {type(block_label).__name__}: {block_label}")
+            return False
+
+        if not isinstance(block_value, str):
+            logger_func(f"block_value must be str, got {type(block_value).__name__}: {block_value}")
+            return False
+
+        return True
 
     def _get_memory_context(self) -> str:
         """Get memory context for classification (session + user-level).
@@ -228,6 +371,13 @@ NO agregues explicaciones ni puntuación adicional."""
         Includes both session-level memory (short-term) and user-level memory
         (cross-session, long-term) for better context understanding.
 
+        Memory thresholds and limits are configurable via settings:
+        - MEMORY_PRIORITY_HIGH_THRESHOLD: Priority threshold for high-priority blocks (default: 7)
+        - MEMORY_PRIORITY_MEDIUM_MIN/MAX: Range for medium-priority blocks (default: 5-7)
+        - MEMORY_HIGH_PRIORITY_LIMIT: Max high-priority blocks in context (default: 3)
+        - MEMORY_MEDIUM_PRIORITY_LIMIT: Max medium-priority blocks in context (default: 2)
+        - MEMORY_USER_BLOCKS_LIMIT: Max user-level blocks in context (default: 5)
+
         Returns:
             Formatted memory context string, or empty string if no memory available.
         """
@@ -235,6 +385,22 @@ NO agregues explicaciones ni puntuación adicional."""
             return ""
 
         try:
+            # Load configurable thresholds from settings (with fallbacks)
+            high_threshold = 7
+            medium_min = 5
+            medium_max = 7
+            high_limit = 3
+            medium_limit = 2
+            user_limit = 5
+
+            if mcp_settings:
+                high_threshold = mcp_settings.MEMORY_PRIORITY_HIGH_THRESHOLD
+                medium_min = mcp_settings.MEMORY_PRIORITY_MEDIUM_MIN
+                medium_max = mcp_settings.MEMORY_PRIORITY_MEDIUM_MAX
+                high_limit = mcp_settings.MEMORY_HIGH_PRIORITY_LIMIT
+                medium_limit = mcp_settings.MEMORY_MEDIUM_PRIORITY_LIMIT
+                user_limit = mcp_settings.MEMORY_USER_BLOCKS_LIMIT
+
             memory_lines = []
 
             # 1. Get session-level memory blocks (shared scope)
@@ -244,20 +410,26 @@ NO agregues explicaciones ni puntuación adicional."""
 
             if session_blocks:
                 memory_lines.append("[MEMORIA DE LA SESIÓN ACTUAL]:")
-                # Prioritize high-priority blocks (7+)
-                high_priority = [b for b in session_blocks if b.get("priority", 0) >= 7]
+                # Prioritize high-priority blocks (configurable threshold)
+                high_priority = [
+                    b for b in session_blocks if b.get("priority", 0) >= high_threshold
+                ]
                 medium_priority = [
-                    b for b in session_blocks if 5 <= b.get("priority", 0) < 7
+                    b for b in session_blocks if medium_min <= b.get("priority", 0) < medium_max
                 ]
 
-                # Add high-priority session memories
-                for block in high_priority[:3]:  # Top 3 high-priority
+                # Add high-priority session memories (configurable limit)
+                for block in high_priority[:high_limit]:
+                    if not self._validate_memory_block(block, logger.warning):
+                        continue
                     label = block.get("block_label", "unknown")
                     value = block.get("block_value", "")
                     memory_lines.append(f"- {label}: {value[:100]}")
 
-                # Add medium-priority if space allows
-                for block in medium_priority[:2]:  # Top 2 medium-priority
+                # Add medium-priority if space allows (configurable limit)
+                for block in medium_priority[:medium_limit]:
+                    if not self._validate_memory_block(block, logger.warning):
+                        continue
                     label = block.get("block_label", "unknown")
                     value = block.get("block_value", "")
                     memory_lines.append(f"- {label}: {value[:100]}")
@@ -276,14 +448,14 @@ NO agregues explicaciones ni puntuación adicional."""
                             memory_lines.append("")
                         memory_lines.append("[MEMORIA HISTÓRICA DEL USUARIO]:")
 
-                        # Take top 5 user-level blocks (already sorted by priority in DB)
-                        for block in user_blocks[:5]:
+                        # Take top user-level blocks (configurable limit, already sorted by priority in DB)
+                        for block in user_blocks[:user_limit]:
+                            if not self._validate_memory_block(block, logger.warning):
+                                continue
                             label = block.get("block_label", "unknown")
                             value = block.get("block_value", "")
                             priority = block.get("priority", 0)
-                            memory_lines.append(
-                                f"- {label}: {value[:100]} (p={priority})"
-                            )
+                            memory_lines.append(f"- {label}: {value[:100]} (p={priority})")
 
                         logger.debug(
                             f"Loaded {len(user_blocks)} user memory blocks for {customer_email}"
@@ -302,7 +474,8 @@ NO agregues explicaciones ni puntuación adicional."""
             logger.debug(
                 f"Loaded {total_blocks} total memory blocks "
                 f"({len(session_blocks)} session + {len(user_blocks) if 'user_blocks' in locals() else 0} user) "
-                f"for classification context"
+                f"for classification context (thresholds: high={high_threshold}, "
+                f"medium={medium_min}-{medium_max}, limits: high={high_limit}, medium={medium_limit}, user={user_limit})"
             )
 
             return memory_context
@@ -317,6 +490,7 @@ NO agregues explicaciones ni puntuación adicional."""
         *,
         context: dict[str, Any] | None = None,
         persist_intent: bool = True,
+        session_language: str | None = None,
     ) -> Intent:
         """Classify user query into sales, booking, or general intent.
 
@@ -334,9 +508,14 @@ NO agregues explicaciones ni puntuación adicional."""
                     - last_bot_message: str - Last bot response
             persist_intent: If True and memory is enabled, persist classified intent
                           to database for analytics (default: True).
+            session_language: Optional language from session ("es" or "en").
+                            If provided, uses this language instead of auto-detecting.
+                            This ensures language consistency across conversation turns.
 
         Returns:
-            Intent enum value (SALES, BOOKING, or GENERAL).
+            Tuple of (Intent, detected_language) where:
+                - Intent: enum value (SALES, BOOKING, or GENERAL)
+                - detected_language: str ("en" or "es") from session or auto-detected
 
         Raises:
             ValueError: If query is empty or whitespace.
@@ -345,10 +524,10 @@ NO agregues explicaciones ni puntuación adicional."""
         Example:
             >>> router = AgentRouter(memory_manager=memory, session_id=session_id)
             >>> await router.initialize()
-            >>> intent = await router.classify_intent("Busco una laptop gaming")
-            >>> print(intent)  # Intent.SALES (uses memory context for better accuracy)
-            >>> intent = await router.classify_intent("Quiero agendar una cita")
-            >>> print(intent)  # Intent.BOOKING
+            >>> intent, lang = await router.classify_intent("Busco una laptop gaming")
+            >>> print(intent, lang)  # Intent.SALES, "es"
+            >>> intent, lang = await router.classify_intent("1", session_language="es")
+            >>> print(intent, lang)  # Intent.BOOKING, "es" (uses session language)
         """
         if not self.client:
             logger.error("AgentRouter not initialized - call initialize() first")
@@ -361,10 +540,49 @@ NO agregues explicaciones ni puntuación adicional."""
         query = query.strip()
 
         try:
+            import time
+            start_time = time.time()
+
             logger.info(f"Classifying query: '{query[:100]}...'")
 
-            # Get classification prompt using PromptManager
-            classification_prompt = self.get_classification_prompt(use_template=True)
+            # Create request context for this classification (OPCIÓN 7)
+            if self.structured_logger:
+                create_request_context(
+                    email_id=None,
+                    recipient=None,
+                    operation="router_classify_intent",
+                    custom_fields={"query_preview": query[:50]}
+                )
+                self.structured_logger.info("Starting intent classification", query_preview=query[:50])
+
+            if self.metrics:
+                self.metrics.increment_counter("router_classifications_attempted", 1)
+
+            # CRITICAL FIX: Always detect query language and validate against session language
+            # This prevents language mismatch when user switches languages mid-conversation
+            # Reference: docs/ROUTER_EMPTY_RESPONSE_ROOT_CAUSE.md
+            query_language = detect_user_language(query)
+
+            if session_language:
+                if query_language != session_language:
+                    logger.warning(
+                        f"⚠️ Language mismatch detected! "
+                        f"Session language: {session_language}, Query language: {query_language}. "
+                        f"Using query language for accurate classification."
+                    )
+                    detected_language = query_language  # Override session with query language
+                else:
+                    detected_language = session_language
+                    logger.info(f"🌐 Using consistent language: {detected_language}")
+            else:
+                # Auto-detect user language from query (first message or when session_language not provided)
+                detected_language = query_language
+                logger.info(f"🌐 Auto-detected language: {detected_language}")
+
+            # Get classification prompt using PromptManager with detected language
+            classification_prompt = self._get_classification_prompt_with_language(
+                detected_language, use_template=True
+            )
 
             # Build query text with context if available
             query_text = f"Consulta: {query}"
@@ -377,9 +595,7 @@ NO agregues explicaciones ni puntuación adicional."""
             # Add additional context information if provided
             if context:
                 if "last_intent" in context:
-                    query_text += (
-                        f"\n[CONTEXTO] Intención previa: {context['last_intent']}"
-                    )
+                    query_text += f"\n[CONTEXTO] Intención previa: {context['last_intent']}"
                 if "last_bot_message" in context:
                     last_msg = context["last_bot_message"]
                     query_text += f"\n[CONTEXTO] Última respuesta del bot: {last_msg}"
@@ -409,22 +625,80 @@ NO agregues explicaciones ni puntuación adicional."""
 
             logger.debug("Generating classification with temperature=0 (deterministic)")
 
-            # Generate classification
-            response = await self.client.aio.models.generate_content(
-                model=self.model_name,
-                contents=contents,
-                config=self.generation_config,
-            )
+            # Generate classification with exponential backoff retry (Google best practice)
+            # Reference: https://ai.google.dev/gemini-api/docs/troubleshooting
+            import asyncio
+            import random
+
+            max_retries = 3
+            base_delay = 1.0  # 1 second initial delay
+            max_delay = 10.0  # 10 seconds max delay
+
+            last_error = None
+            response = None
+
+            for attempt in range(max_retries):
+                try:
+                    # Generate classification (OPCIÓN 7: Track latency)
+                    if self.metrics:
+                        async with self.metrics.record_latency_async(
+                            "router_classify_latency",
+                            tags={"language": detected_language, "attempt": attempt + 1}
+                        ):
+                            response = await self.client.aio.models.generate_content(
+                                model=self.model_name,
+                                contents=contents,
+                                config=self.generation_config,
+                            )
+                    else:
+                        response = await self.client.aio.models.generate_content(
+                            model=self.model_name,
+                            contents=contents,
+                            config=self.generation_config,
+                        )
+
+                    # Validate response has content
+                    if (response and response.candidates and
+                        response.candidates[0].content and
+                        response.candidates[0].content.parts and
+                        response.candidates[0].content.parts[0].text):
+                        # Success - valid response
+                        logger.debug(f"Classification successful on attempt {attempt + 1}/{max_retries}")
+                        break
+                    else:
+                        # Empty response - treat as retriable error
+                        logger.warning(f"Empty response on attempt {attempt + 1}/{max_retries}")
+                        last_error = RuntimeError("Empty response from Gemini API")
+
+                except Exception as e:
+                    logger.warning(f"Error on classification attempt {attempt + 1}/{max_retries}: {e}")
+                    last_error = e
+
+                # Retry with exponential backoff + jitter (unless last attempt)
+                if attempt < max_retries - 1:
+                    # Exponential backoff: delay = min(base * 2^attempt + jitter, max)
+                    delay = min(base_delay * (2 ** attempt) + random.uniform(0, 0.5), max_delay)
+                    logger.info(f"Retrying classification in {delay:.2f}s... (attempt {attempt + 1}/{max_retries})")
+                    await asyncio.sleep(delay)
+
+            # If all retries failed, raise the last error
+            if not response or not (response.candidates and
+                                   response.candidates[0].content and
+                                   response.candidates[0].content.parts):
+                logger.error(f"All {max_retries} retry attempts failed for classification")
+                if last_error:
+                    raise last_error
+                raise RuntimeError("Classification failed after all retries")
 
             # Extract classification result with defensive checks
             if not response.candidates or not response.candidates[0].content:
                 logger.error("Empty response from Gemini API")
                 raise RuntimeError("No classification result from Gemini")
 
-            # Additional defensive checks for None values
+            # Additional defensive checks for None values (should not happen after retry logic)
             candidate = response.candidates[0]
             if not candidate.content.parts:
-                logger.error("Response has no parts")
+                logger.error("Response has no parts (after retries)")
                 logger.debug(f"Response candidates: {len(response.candidates)}")
                 logger.debug(
                     f"Candidate finish_reason: {candidate.finish_reason if hasattr(candidate, 'finish_reason') else 'N/A'}"
@@ -433,31 +707,40 @@ NO agregues explicaciones ni puntuación adicional."""
                     f"Safety ratings: {candidate.safety_ratings if hasattr(candidate, 'safety_ratings') else 'N/A'}"
                 )
 
-                # STICKY SESSION: If in an active conversation, maintain intent
-                if context and "last_intent" in context:
+                # Sticky session ONLY for very short queries (< 5 chars) - likely follow-ups
+                # No hardcoded word lists - just length heuristic
+                is_very_short = len(query.strip()) < 5  # "ok", "sí", "no" = likely follow-up
+
+                if is_very_short and context and "last_intent" in context:
                     last_intent_str = context["last_intent"]
                     logger.warning(
-                        f"⚠️ Empty response but continuing conversation. "
-                        f"Maintaining previous intent: {last_intent_str}"
+                        f"⚠️ Empty response on very short query (len={len(query)}). "
+                        f"Maintaining previous intent: {last_intent_str} (sticky session)"
                     )
-                    return Intent(last_intent_str)
+                    return (Intent(last_intent_str), detected_language)
 
-                raise RuntimeError("No content parts in classification response")
+                # For longer queries, cannot classify safely after all retries
+                logger.error(f"Empty response persists after retries on query (len={len(query)}). Cannot classify.")
+                raise RuntimeError("No content parts in classification response after retries")
 
             if not candidate.content.parts[0].text:
-                logger.error("Response part has no text")
+                logger.error("Response part has no text (after retries)")
                 logger.debug(f"Response structure: {candidate.content}")
 
-                # STICKY SESSION: If in an active conversation, maintain intent
-                if context and "last_intent" in context:
+                # Sticky session ONLY for very short queries (< 5 chars)
+                is_very_short = len(query.strip()) < 5
+
+                if is_very_short and context and "last_intent" in context:
                     last_intent_str = context["last_intent"]
                     logger.warning(
-                        f"⚠️ No text in response but continuing conversation. "
-                        f"Maintaining previous intent: {last_intent_str}"
+                        f"⚠️ No text in response on very short query (len={len(query)}). "
+                        f"Maintaining previous intent: {last_intent_str} (sticky session)"
                     )
-                    return Intent(last_intent_str)
+                    return (Intent(last_intent_str), detected_language)
 
-                raise RuntimeError("No text in classification response")
+                # For longer queries, cannot classify after all retries
+                logger.error(f"No text in response after retries on query (len={len(query)}). Cannot classify.")
+                raise RuntimeError("No text in classification response after retries")
 
             classification_text = candidate.content.parts[0].text.strip().lower()
 
@@ -468,6 +751,12 @@ NO agregues explicaciones ni puntuación adicional."""
 
             logger.info(f"✅ Query classified as: {intent.value}")
             logger.debug(f"Query: '{query[:50]}...' → Intent: {intent.value}")
+
+            # Track metrics (OPCIÓN 7)
+            elapsed_ms = (time.time() - start_time) * 1000
+            if self.metrics:
+                self.metrics.increment_counter("router_classifications_successful", 1)
+                self.metrics.increment_counter(f"router_intent_{intent.value}", 1)
 
             # Persist intent to database if memory is enabled
             if persist_intent and self._memory_enabled:
@@ -480,29 +769,77 @@ NO agregues explicaciones ni puntuación adicional."""
                 except Exception as e:
                     logger.warning(f"Failed to persist intent: {e}")
 
-            return intent
+            if self.structured_logger:
+                self.structured_logger.info(
+                    "Intent classification successful",
+                    intent=intent.value,
+                    elapsed_ms=elapsed_ms,
+                    language=detected_language
+                )
+                clear_request_context()
+
+            return (intent, detected_language)
 
         except ValueError:
             # Re-raise validation errors
             raise
 
         except Exception as e:
+            # Track error metrics (OPCIÓN 7)
+            elapsed_ms = (time.time() - start_time) * 1000
+            error_type = type(e).__name__
+
+            if self.metrics:
+                self.metrics.increment_counter("router_classifications_failed", 1)
+                self.metrics.increment_counter(f"router_error_{error_type}", 1)
+
             logger.exception(f"Error classifying query: {e}")
 
-            # STICKY SESSION FALLBACK: Try to maintain conversation flow
-            if context and "last_intent" in context:
+            if self.structured_logger:
+                self.structured_logger.exception(
+                    "Intent classification failed",
+                    error_type=error_type,
+                    elapsed_ms=elapsed_ms
+                )
+                clear_request_context()
+
+            # IMPROVED STICKY SESSION: Only use for short/ambiguous queries (likely follow-ups)
+            # For longer/complex queries, raise error and require user to repeat/clarify
+            is_short_query = len(query.strip()) < 10  # "¿y ese?" = follow-up
+            is_likely_followup = query.lower().strip() in [
+                "sí",
+                "si",
+                "no",
+                "ok",
+                "okay",
+                "de acuerdo",
+                "bueno",
+                "gracias",
+            ]
+
+            if (is_short_query or is_likely_followup) and context and "last_intent" in context:
+                # Use sticky session ONLY for likely follow-up questions
                 last_intent_str = context["last_intent"]
                 logger.warning(
-                    f"⚠️ Classification failed but context available. "
-                    f"Maintaining previous intent: {last_intent_str} (sticky session)"
+                    f"⚠️ Classification failed on short/follow-up query but context available. "
+                    f"Maintaining previous intent: {last_intent_str} (sticky session for follow-ups)"
                 )
-                return Intent(last_intent_str)
+                # In exception handler, detected_language might not be available
+                try:
+                    detected_lang = detect_user_language(query)
+                except Exception:
+                    detected_lang = "en"  # Default to English (international default)
+                return (Intent(last_intent_str), detected_lang)
 
-            # Final fallback to GENERAL only if no context
-            logger.warning(
-                "⚠️ Classification failed with no context, defaulting to GENERAL intent"
+            # For complex/unrelated queries: Don't hide the error, let it propagate
+            logger.error(
+                f"Classification failed on query: '{query[:50]}...' (length={len(query)}). "
+                f"Not using sticky session because query appears to be independent."
             )
-            return Intent.GENERAL
+            raise RuntimeError(
+                f"Failed to classify query (not a follow-up): {e}. "
+                f"Please try again with a clear query."
+            ) from e
 
     def _parse_classification(self, classification_text: str) -> Intent:
         """Parse classification text into Intent enum.
@@ -532,8 +869,7 @@ NO agregues explicaciones ni puntuación adicional."""
 
         else:
             logger.warning(
-                f"⚠️ Unrecognized classification: '{classification_text}', "
-                f"defaulting to GENERAL"
+                f"⚠️ Unrecognized classification: '{classification_text}', defaulting to GENERAL"
             )
             return Intent.GENERAL
 
@@ -567,9 +903,7 @@ NO agregues explicaciones ni puntuación adicional."""
             try:
                 intent = await self.classify_intent(query)
                 intents.append(intent)
-                logger.debug(
-                    f"Batch {i}/{len(queries)}: '{query[:30]}...' → {intent.value}"
-                )
+                logger.debug(f"Batch {i}/{len(queries)}: '{query[:30]}...' → {intent.value}")
 
             except Exception as e:
                 logger.error(f"Error classifying query {i}: {e}")

@@ -159,7 +159,7 @@ flowchart TD
     ChooseMode -->|Development| LocalStack["🛠️ Local Stack<br/>cd DockerConfig<br/>docker-compose up -d"]
     ChooseMode -->|Production| ProdStack["🚀 Production Stack<br/>cd Lab01-MCP<br/>docker-compose up -d"]
 
-    LocalStack --> InitDB["Initialize Database<br/>bash SQL/scripts/init-db.sh"]
+    LocalStack --> InitDB["Initialize Database<br/>cd ../SQL<br/>./scripts/deploy.sh"]
     ProdStack --> InitDB
 
     InitDB --> HealthCheck["🏥 Health Checks<br/>- PostgreSQL: 5434<br/>- MCP Server: 3000<br/>- Nginx: 80"]
@@ -288,8 +288,6 @@ DockerConfig/
 ├── pgadmin-servers.json        # Servidores pre-configurados
 ├── start.sh                    # Script de inicio
 ├── stop.sh                     # Script de parada
-├── init/                       # Scripts SQL de inicialización
-│   └── 01-create-database.sql
 ├── pgadmin/                    # Configuración de pgAdmin
 │   └── servers.json
 └── README.md                   # Este archivo

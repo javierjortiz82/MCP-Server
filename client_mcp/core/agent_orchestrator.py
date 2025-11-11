@@ -51,6 +51,38 @@ from client_mcp.config.settings import settings  # noqa: E402
 from client_mcp.core.mcp_connector import MCPConnector  # noqa: E402
 from client_mcp.utils.logger import get_logger  # noqa: E402
 
+# Observability imports (OPCIÓN 8)
+try:
+    from email_service.observability.metrics import get_metrics_collector
+    from email_service.observability.structured_logger import get_structured_logger
+    from email_service.observability.context import (
+        create_request_context,
+        clear_request_context,
+    )
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
+# Import language context for setting language in MCP handlers
+try:
+    mcp_server_lang_path = Path(__file__).parent.parent.parent / "mcp_server"
+    if str(mcp_server_lang_path) not in sys.path:
+        sys.path.insert(0, str(mcp_server_lang_path))
+    from utils.language_context import set_current_language  # noqa: E402
+
+    LANGUAGE_CONTEXT_AVAILABLE = True
+except ImportError:
+    LANGUAGE_CONTEXT_AVAILABLE = False
+
+    def set_current_language(lang: str) -> None:  # noqa: F811,ARG001
+        """No-op when language context not available.
+
+        Note: Parameter 'lang' is intentionally unused - this is a fallback stub
+        when contextvars is not available. The real implementation is above.
+        """
+        pass
+
+
 # Setup logger BEFORE using it
 logger = get_logger("agent_orchestrator")
 
@@ -64,9 +96,7 @@ try:
 
     MEMORY_AVAILABLE = True
 except ImportError:
-    logger.warning(
-        "⚠️ MemoryManager not available - agents will run without persistent memory"
-    )
+    logger.warning("⚠️ MemoryManager not available - agents will run without persistent memory")
     MemoryManager = None
     MEMORY_AVAILABLE = False
 
@@ -101,6 +131,14 @@ class AgentOrchestrator:
         Reads feature flags to determine operational mode:
         - ENABLE_AGENT_ROUTING: Multi-agent routing vs single-agent mode
         """
+        # Initialize observability (OPCIÓN 8)
+        if OBSERVABILITY_AVAILABLE:
+            self.structured_logger = get_structured_logger("agent_orchestrator")
+            self.metrics = get_metrics_collector()
+        else:
+            self.structured_logger = None
+            self.metrics = None
+
         self.routing_enabled = settings.ENABLE_AGENT_ROUTING
         self.router_temperature = settings.ROUTER_TEMPERATURE
 
@@ -131,10 +169,22 @@ class AgentOrchestrator:
         self.session_id: str | None = None
         self.customer_email: str | None = None
 
+        # Language preference (es or en, default: es)
+        self.language: str = "es"
+        self._session_language_detected: bool = False  # Track if we've detected language for this session
+
         logger.info(
             f"AgentOrchestrator initialized - "
-            f"Routing: {'ENABLED' if self.routing_enabled else 'DISABLED (single-agent mode)'}"
+            f"Routing: {'ENABLED' if self.routing_enabled else 'DISABLED (single-agent mode)'}, "
+            f"Observability: {'✅ Enabled' if OBSERVABILITY_AVAILABLE else '❌ Disabled'}"
         )
+
+        if self.structured_logger:
+            self.structured_logger.info(
+                "Orchestrator initialization started",
+                routing_enabled=self.routing_enabled,
+                mode="multi_agent" if self.routing_enabled else "single_agent"
+            )
 
     async def initialize(self, customer_email: str | None = None) -> None:
         """Initialize orchestrator and agents based on feature flag.
@@ -150,32 +200,35 @@ class AgentOrchestrator:
             # Initialize memory system if available and customer_email provided
             if MEMORY_AVAILABLE and customer_email and MemoryManager:
                 try:
-                    logger.info(
-                        "🧠 Initializing MemoryManager for persistent memory..."
-                    )
+                    logger.info("🧠 Initializing MemoryManager for persistent memory...")
                     self.memory_manager = MemoryManager()
                     self.customer_email = customer_email
 
                     # Get existing session or create new one
-                    self.session_id = self.memory_manager.get_or_create_session(
-                        customer_email=customer_email
-                    )
+                    self.session_id = self.memory_manager.get_or_create_session(customer_email=customer_email)
                     logger.info(f"✅ Memory session active: {self.session_id}")
+
+                    # Detect user's language preference from memory
+                    try:
+                        detected_language = self.memory_manager.get_user_preferred_language(
+                            customer_email=customer_email, default_language="es"
+                        )
+                        if detected_language in ("es", "en"):
+                            self.language = detected_language
+                            logger.info(f"🌐 User language detected: {self.language.upper()}")
+                    except Exception as lang_error:
+                        logger.debug(f"Could not detect user language: {lang_error}, using default 'es'")
+                        self.language = "es"
+
                 except Exception as mem_error:
                     logger.warning(f"⚠️ Failed to initialize memory system: {mem_error}")
-                    logger.warning(
-                        "   Agents will run without persistent memory (graceful degradation)"
-                    )
+                    logger.warning("   Agents will run without persistent memory (graceful degradation)")
                     self.memory_manager = None
                     self.session_id = None
             elif not MEMORY_AVAILABLE:
-                logger.info(
-                    "ℹ️  MemoryManager not available - agents will run without persistent memory"
-                )
+                logger.info("ℹ️  MemoryManager not available - agents will run without persistent memory")
             elif not customer_email:
-                logger.info(
-                    "ℹ️  No customer_email provided - agents will run without persistent memory"
-                )
+                logger.info("ℹ️  No customer_email provided - agents will run without persistent memory")
 
             if not self.routing_enabled:
                 # Single-agent mode: Initialize only SalesAgent using factory
@@ -184,6 +237,7 @@ class AgentOrchestrator:
                     "sales",
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
                 logger.info("✅ Single-agent mode initialized successfully")
 
@@ -210,12 +264,10 @@ class AgentOrchestrator:
                     "general",
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
 
-                logger.info(
-                    "✅ Multi-agent mode initialized successfully "
-                    "(Router + 3 specialized agents)"
-                )
+                logger.info("✅ Multi-agent mode initialized successfully (Router + 3 specialized agents)")
 
         except Exception as e:
             logger.exception(f"Failed to initialize AgentOrchestrator: {e}")
@@ -231,7 +283,7 @@ class AgentOrchestrator:
         """Process user query through appropriate agent(s).
 
         This is the main entry point for all user queries. It:
-        1. Routes to OdiseoBot if routing disabled (legacy mode)
+        1. Routes to SalesAgent if routing disabled (single-agent mode)
         2. Classifies intent and routes to specialized agent if enabled
 
         Args:
@@ -252,7 +304,7 @@ class AgentOrchestrator:
             ... )
         """
         if not self.routing_enabled:
-            # Legacy mode: Route to OdiseoBot
+            # Single-agent mode: Route to SalesAgent only
             return await self._process_legacy(query)
 
         else:
@@ -274,14 +326,24 @@ class AgentOrchestrator:
 
         Raises:
             RuntimeError: If SalesAgent not initialized.
+
+        Note:
+            Language detection is now handled automatically by Gemini via system instructions.
+            The language parameter passed during initialization is used for template selection,
+            but Gemini will automatically respond in the language of the user's query.
         """
         if not self.sales_bot:
             logger.error("SalesAgent not initialized in single-agent mode")
             raise RuntimeError("SalesAgent not initialized")
 
         logger.debug(f"Processing query in SINGLE-AGENT mode: '{query[:50]}...'")
+        logger.debug(f"🌐 Agent configured for language: {self.language.upper()} (Gemini handles auto-detection)")
+
+        # Set language context for MCP handlers (for tool responses)
+        set_current_language(self.language)
 
         # Call SalesAgent's send_message method
+        # Gemini will automatically respond in the language of the query
         response = await self.sales_bot.send_message(query)
         return response
 
@@ -304,15 +366,51 @@ class AgentOrchestrator:
 
         Raises:
             RuntimeError: If agents not initialized.
+
+        Note:
+            Language detection is now handled automatically by Gemini via system instructions.
+            The language parameter is used for template selection and MCP context, but Gemini
+            will automatically respond in the language of the user's query.
         """
         if not self.router:
             logger.error("AgentRouter not initialized in multi-agent mode")
             raise RuntimeError("AgentRouter not initialized")
 
         logger.debug(f"Processing query in MULTI-AGENT mode: '{query[:50]}...'")
+        logger.debug(f"🌐 Session language: {self.language.upper()}")
 
         # Step 1: Classify intent with context
         try:
+            # PHASE 1: Detect language on first query and cache it
+            if not self._session_language_detected:
+                from gemini_agent.utils.language_detector import detect_user_language
+
+                # Try to retrieve language from existing session first (persistence)
+                retrieved_language = None
+                if self.memory_manager and self.session_id:
+                    try:
+                        retrieved_language = self.memory_manager.get_session_language(self.session_id)
+                        if retrieved_language:
+                            self.language = retrieved_language
+                            logger.info(f"🌐 Language retrieved from session: {self.language.upper()}")
+                    except Exception as retrieve_error:
+                        logger.debug(f"Could not retrieve language from session: {retrieve_error}")
+
+                # If not found in session, detect from first query
+                if not retrieved_language:
+                    self.language = detect_user_language(query)
+                    logger.info(f"🌐 Language detected on first query: {self.language.upper()}")
+
+                    # PHASE 2: Save language to database for persistence
+                    if self.memory_manager and self.session_id:
+                        try:
+                            self.memory_manager.save_session_language(self.session_id, self.language)
+                            logger.debug(f"💾 Language '{self.language}' saved to session {self.session_id[:8]}")
+                        except Exception as lang_save_error:
+                            logger.warning(f"⚠️ Failed to save language to DB: {lang_save_error}")
+
+                self._session_language_detected = True
+
             # Build context for router
             context = {}
             if self.last_intent:
@@ -320,10 +418,14 @@ class AgentOrchestrator:
             if self.last_bot_message:
                 context["last_bot_message"] = self.last_bot_message
 
-            intent = await self.router.classify_intent(
-                query, context=context if context else None
+            # Pass cached session language to router (prevents re-detection of ambiguous queries)
+            intent, detected_language = await self.router.classify_intent(
+                query,
+                context=context if context else None,
+                session_language=self.language  # ← Use cached language, don't re-detect
             )
             logger.info(f"Intent classified: {intent.value}")
+            logger.info(f"🌐 Language (from session cache): {detected_language}")
 
             # Save current intent for next iteration
             self.last_intent = intent
@@ -331,42 +433,39 @@ class AgentOrchestrator:
         except Exception as e:
             logger.exception(f"Intent classification failed: {e}")
             # Fallback to general agent on classification errors
-            logger.warning(
-                "⚠️ Falling back to general agent due to classification error"
-            )
+            logger.warning("⚠️ Falling back to general agent due to classification error")
             intent = Intent.GENERAL
+            # Try to detect language from query as fallback
+            try:
+                from gemini_agent.utils.language_detector import detect_user_language
+                detected_language = detect_user_language(query)
+            except Exception:
+                detected_language = "en"  # Default to English (international default)
 
         # Step 2: Route to specialized agent and save response
         try:
             response = None
             if intent == Intent.SALES:
-                response = await self._route_to_sales(
-                    query, include_history=include_history
-                )
+                response = await self._route_to_sales(query, include_history=include_history, language=detected_language)
 
             elif intent == Intent.BOOKING:
                 response = await self._route_to_booking(
                     query,
                     customer_email=customer_email,
                     include_history=include_history,
+                    language=detected_language,
                 )
 
             elif intent == Intent.GENERAL:
-                response = await self._route_to_general(
-                    query, include_history=include_history
-                )
+                response = await self._route_to_general(query, include_history=include_history, language=detected_language)
 
             else:
                 # Unknown intent - fallback to general
                 logger.warning(f"Unknown intent: {intent}, falling back to general")
-                response = await self._route_to_general(
-                    query, include_history=include_history
-                )
+                response = await self._route_to_general(query, include_history=include_history, language=detected_language)
 
             # Save last bot message for context in next classification
-            self.last_bot_message = (
-                response[:200] if response else None
-            )  # First 200 chars
+            self.last_bot_message = response[:200] if response else None  # First 200 chars
 
             return response
 
@@ -404,11 +503,7 @@ class AgentOrchestrator:
             resource_data = await mcp_client.read_resource(resource_uri)
 
             # Extract text from TextResourceContents object
-            resource_text = (
-                resource_data.text
-                if hasattr(resource_data, "text")
-                else str(resource_data)
-            )
+            resource_text = resource_data.text if hasattr(resource_data, "text") else str(resource_data)
 
             # Parse JSON response
             category_info = json.loads(resource_text)
@@ -420,9 +515,7 @@ class AgentOrchestrator:
             tool_names = category_info.get("tools", [])
             tool_count = category_info.get("count", len(tool_names))
 
-            logger.info(
-                f"✅ Fetched {tool_count} tool names for category '{category}' from MCP resource"
-            )
+            logger.info(f"✅ Fetched {tool_count} tool names for category '{category}' from MCP resource")
             logger.debug(f"   Tools: {tool_names}")
 
             return set(tool_names)
@@ -437,9 +530,7 @@ class AgentOrchestrator:
         agent_name: str,
         agent_class: type,
         tool_category: str | None = None,
-    ) -> tuple[
-        MCPConnector | None, list[types.FunctionDeclaration] | None, list[dict] | None
-    ]:
+    ) -> tuple[MCPConnector | None, list[types.FunctionDeclaration] | None, list[dict] | None]:
         """Connect to MCP server and autodiscover tools (centralized method).
 
         This centralized method eliminates code duplication between different agents.
@@ -491,15 +582,11 @@ class AgentOrchestrator:
                     db_check = health["checks"]["database"]
                     logger.error(f"   Database status: {db_check.get('status')}")
 
-                logger.warning(
-                    f"⚠️ MCP server unhealthy. {agent_name} will run without tools (graceful degradation)."
-                )
+                logger.warning(f"⚠️ MCP server unhealthy. {agent_name} will run without tools (graceful degradation).")
                 return None, None, None
 
             elif health["status"] == "degraded":
-                logger.warning(
-                    f"⚠️ MCP server DEGRADED for {agent_name} (continuing with limited capabilities)"
-                )
+                logger.warning(f"⚠️ MCP server DEGRADED for {agent_name} (continuing with limited capabilities)")
 
             else:
                 # Healthy
@@ -508,9 +595,7 @@ class AgentOrchestrator:
                     db_check = health["checks"]["database"]
                     product_count = db_check.get("product_count", 0)
                     booking_count = db_check.get("booking_count", 0)
-                    logger.info(
-                        f"   📦 Products: {product_count}, 📅 Bookings: {booking_count}"
-                    )
+                    logger.info(f"   📦 Products: {product_count}, 📅 Bookings: {booking_count}")
 
             # Step 3: Connect to MCP server
             logger.debug(f"🔌 Establishing MCP connection for {agent_name}...")
@@ -527,26 +612,18 @@ class AgentOrchestrator:
                 logger.debug(f"🔍 Filtering tools by category: '{tool_category}'")
 
                 # Fetch tool names dynamically from MCP resource
-                allowed_tools = await self._fetch_tool_category(
-                    mcp_client, tool_category
-                )
+                allowed_tools = await self._fetch_tool_category(mcp_client, tool_category)
 
                 if allowed_tools:
                     # Filter tools using dynamically fetched category
-                    mcp_tools_raw = [
-                        tool
-                        for tool in all_tools_raw
-                        if tool.get("name") in allowed_tools
-                    ]
+                    mcp_tools_raw = [tool for tool in all_tools_raw if tool.get("name") in allowed_tools]
                     logger.info(
                         f"✅ Filtered to {len(mcp_tools_raw)} tools for category '{tool_category}' "
                         f"(dynamically discovered from MCP resource)"
                     )
                 else:
                     # Fallback: Return all tools if category fetch failed
-                    logger.warning(
-                        f"⚠️ Failed to fetch category '{tool_category}' from MCP, returning all tools"
-                    )
+                    logger.warning(f"⚠️ Failed to fetch category '{tool_category}' from MCP, returning all tools")
                     mcp_tools_raw = all_tools_raw
             else:
                 # No filtering - return all tools (backward compatible)
@@ -559,9 +636,7 @@ class AgentOrchestrator:
                 for tool in mcp_tools_raw:
                     tool_name = tool.get("name", "unknown")
                     tool_desc = tool.get("description", "")
-                    desc_first_line = (
-                        tool_desc.split("\n")[0] if tool_desc else "No description"
-                    )
+                    desc_first_line = tool_desc.split("\n")[0] if tool_desc else "No description"
                     logger.debug(f"  - {tool_name}: {desc_first_line[:80]}...")
 
             # Step 6: Convert tools to GenAI format
@@ -569,17 +644,13 @@ class AgentOrchestrator:
             # Create temporary agent instance for conversion utility
             temp_agent = agent_class()
             mcp_tools = temp_agent.convert_tools_to_genai(mcp_tools_raw)
-            logger.info(
-                f"✅ Converted {len(mcp_tools)} tools to GenAI format for {agent_name}"
-            )
+            logger.info(f"✅ Converted {len(mcp_tools)} tools to GenAI format for {agent_name}")
 
             return mcp_client, mcp_tools, mcp_tools_raw
 
         except Exception as e:
             logger.exception(f"Error connecting to MCP server for {agent_name}: {e}")
-            logger.warning(
-                f"⚠️ {agent_name} will run without MCP tools (graceful degradation)"
-            )
+            logger.warning(f"⚠️ {agent_name} will run without MCP tools (graceful degradation)")
             return None, None, None
 
     async def _initialize_booking_agent_with_mcp(self) -> None:
@@ -607,28 +678,24 @@ class AgentOrchestrator:
             # Initialize agent with or without MCP tools (using factory)
             if self.booking_mcp_client and self.booking_mcp_tools:
                 # Success: Initialize with MCP tools via factory
-                logger.debug(
-                    "🚀 Initializing BookingAgent with MCP tools via factory..."
-                )
+                logger.debug("🚀 Initializing BookingAgent with MCP tools via factory...")
                 self.booking_agent = await AgentFactory.create(
                     "booking",
                     mcp_tools=self.booking_mcp_tools,
                     mcp_client=self.booking_mcp_client,
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
-                logger.info(
-                    f"✅ BookingAgent initialized with {len(self.booking_mcp_tools)} MCP tools"
-                )
+                logger.info(f"✅ BookingAgent initialized with {len(self.booking_mcp_tools)} MCP tools")
             else:
                 # Graceful degradation: Initialize without tools via factory
-                logger.warning(
-                    "⚠️ Initializing BookingAgent without MCP tools via factory"
-                )
+                logger.warning("⚠️ Initializing BookingAgent without MCP tools via factory")
                 self.booking_agent = await AgentFactory.create(
                     "booking",
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
                 logger.info("✅ BookingAgent initialized in standalone mode (no tools)")
 
@@ -637,20 +704,17 @@ class AgentOrchestrator:
 
             # Last resort: Try to initialize without tools via factory
             try:
-                logger.warning(
-                    "⚠️ Attempting fallback initialization without MCP via factory..."
-                )
+                logger.warning("⚠️ Attempting fallback initialization without MCP via factory...")
                 self.booking_agent = await AgentFactory.create(
                     "booking",
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
                 logger.info("✅ BookingAgent initialized in fallback mode (no tools)")
 
             except Exception as fallback_error:
-                logger.exception(
-                    f"Failed to initialize BookingAgent even in fallback mode: {fallback_error}"
-                )
+                logger.exception(f"Failed to initialize BookingAgent even in fallback mode: {fallback_error}")
                 raise RuntimeError(
                     f"BookingAgent initialization failed completely: {fallback_error}"
                 ) from fallback_error
@@ -688,19 +752,17 @@ class AgentOrchestrator:
                     mcp_tools_raw=self.sales_mcp_tools_raw,
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
-                logger.info(
-                    f"✅ SalesAgent initialized with {len(self.sales_mcp_tools)} MCP tools"
-                )
+                logger.info(f"✅ SalesAgent initialized with {len(self.sales_mcp_tools)} MCP tools")
             else:
                 # Graceful degradation: Initialize without tools via factory
-                logger.warning(
-                    "⚠️ Initializing SalesAgent without MCP tools via factory"
-                )
+                logger.warning("⚠️ Initializing SalesAgent without MCP tools via factory")
                 self.sales_agent = await AgentFactory.create(
                     "sales",
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
                 logger.info("✅ SalesAgent initialized in standalone mode (no tools)")
 
@@ -709,35 +771,32 @@ class AgentOrchestrator:
 
             # Last resort: Try to initialize without tools via factory
             try:
-                logger.warning(
-                    "⚠️ Attempting fallback initialization without MCP via factory..."
-                )
+                logger.warning("⚠️ Attempting fallback initialization without MCP via factory...")
                 self.sales_agent = await AgentFactory.create(
                     "sales",
                     session_id=self.session_id,
                     memory_manager=self.memory_manager,
+                    language=self.language,
                 )
                 logger.info("✅ SalesAgent initialized in fallback mode (no tools)")
 
             except Exception as fallback_error:
-                logger.exception(
-                    f"Failed to initialize SalesAgent even in fallback mode: {fallback_error}"
-                )
-                raise RuntimeError(
-                    f"SalesAgent initialization failed completely: {fallback_error}"
-                ) from fallback_error
+                logger.exception(f"Failed to initialize SalesAgent even in fallback mode: {fallback_error}")
+                raise RuntimeError(f"SalesAgent initialization failed completely: {fallback_error}") from fallback_error
 
     async def _route_to_sales(
         self,
         query: str,
         *,
         include_history: bool = True,
+        language: str = "en",
     ) -> str:
         """Route query to sales agent (SalesAgent).
 
         Args:
             query: User query.
             include_history: Include conversation history.
+            language: Detected user language ("en" or "es").
 
         Returns:
             Response from sales agent.
@@ -748,8 +807,16 @@ class AgentOrchestrator:
 
         logger.debug("Routing to SALES agent (SalesAgent)")
 
-        # Call SalesAgent's send_message method
-        response = await self.sales_agent.send_message(query)
+        # Set language context for MCP handlers (sales tool calls)
+        set_current_language(language)
+        logger.debug(f"🌐 Language context set to: {language}")
+
+        # Call SalesAgent's send_message method with language and intent parameters
+        response = await self.sales_agent.send_message(
+            query,
+            language=language,
+            intent="sales",  # Pass classified intent for future DB storage support
+        )
         return response
 
     async def _route_to_booking(
@@ -758,6 +825,7 @@ class AgentOrchestrator:
         *,
         customer_email: str | None = None,
         include_history: bool = True,
+        language: str = "en",
     ) -> str:
         """Route query to booking agent.
 
@@ -765,6 +833,7 @@ class AgentOrchestrator:
             query: User query.
             customer_email: Customer email (uses session email if not provided).
             include_history: Include conversation history.
+            language: Detected user language ("en" or "es").
 
         Returns:
             Response from booking agent.
@@ -774,6 +843,10 @@ class AgentOrchestrator:
             raise RuntimeError("Booking agent not initialized")
 
         logger.debug("Routing to BOOKING agent")
+
+        # Set language context for MCP handlers (booking tool calls)
+        set_current_language(language)
+        logger.debug(f"🌐 Language context set to: {language}")
 
         # Use stored session email if not provided explicitly
         effective_email = customer_email or self.customer_email
@@ -787,6 +860,8 @@ class AgentOrchestrator:
             query,
             customer_email=effective_email,
             include_history=include_history,
+            intent="booking",  # Pass classified intent for DB storage
+            language=language,  # Pass language to agent for dynamic template selection
         )
 
         return response
@@ -796,12 +871,14 @@ class AgentOrchestrator:
         query: str,
         *,
         include_history: bool = True,
+        language: str = "en",
     ) -> str:
         """Route query to general agent.
 
         Args:
             query: User query.
             include_history: Include conversation history.
+            language: Detected user language ("en" or "es").
 
         Returns:
             Response from general agent.
@@ -812,9 +889,15 @@ class AgentOrchestrator:
 
         logger.debug("Routing to GENERAL agent")
 
+        # Set language context for MCP handlers (general tool calls)
+        set_current_language(language)
+        logger.debug(f"🌐 Language context set to: {language}")
+
         response = await self.general_agent.generate_response(
             query,
             include_history=include_history,
+            intent="general",  # Pass classified intent for DB storage
+            language=language,  # Pass language to agent for dynamic template selection
         )
 
         return response
@@ -895,15 +978,9 @@ class AgentOrchestrator:
                             stats = self.router.get_intent_statistics(intent_history)
                             print("\n📊 Routing Statistics:")
                             print(f"  Total queries: {stats['total']}")
-                            print(
-                                f"  Sales: {stats['sales_count']} ({stats['sales_percentage']:.1f}%)"
-                            )
-                            print(
-                                f"  Booking: {stats['booking_count']} ({stats['booking_percentage']:.1f}%)"
-                            )
-                            print(
-                                f"  General: {stats['general_count']} ({stats['general_percentage']:.1f}%)"
-                            )
+                            print(f"  Sales: {stats['sales_count']} ({stats['sales_percentage']:.1f}%)")
+                            print(f"  Booking: {stats['booking_count']} ({stats['booking_percentage']:.1f}%)")
+                            print(f"  General: {stats['general_count']} ({stats['general_percentage']:.1f}%)")
                         continue
 
                     else:
@@ -966,9 +1043,7 @@ class AgentOrchestrator:
                         await self.sales_mcp_client.__aexit__(None, None, None)
                         logger.info("🔌 Disconnected from sales MCP server")
                     except Exception as mcp_error:
-                        logger.warning(
-                            f"Error disconnecting sales MCP client: {mcp_error}"
-                        )
+                        logger.warning(f"Error disconnecting sales MCP client: {mcp_error}")
                     finally:
                         self.sales_mcp_client = None
                         self.sales_mcp_tools = None
@@ -980,9 +1055,7 @@ class AgentOrchestrator:
                         await self.booking_mcp_client.__aexit__(None, None, None)
                         logger.info("🔌 Disconnected from booking MCP server")
                     except Exception as mcp_error:
-                        logger.warning(
-                            f"Error disconnecting booking MCP client: {mcp_error}"
-                        )
+                        logger.warning(f"Error disconnecting booking MCP client: {mcp_error}")
                     finally:
                         self.booking_mcp_client = None
                         self.booking_mcp_tools = None

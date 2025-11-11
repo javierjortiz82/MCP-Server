@@ -10,6 +10,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
+# Observability imports (OPCIÓN 8)
+try:
+    from email_service.observability.metrics import get_metrics_collector
+    from email_service.observability.structured_logger import get_structured_logger
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
 T = TypeVar("T")
 
 
@@ -41,15 +49,21 @@ class RetryStrategy:
         )
     """
 
-    def __init__(
-        self, config: RetryConfig | None = None, logger: logging.Logger | None = None
-    ):
+    def __init__(self, config: RetryConfig | None = None, logger: logging.Logger | None = None):
         """Initialize retry strategy.
 
         Args:
             config: Retry configuration (uses defaults if None)
             logger: Optional logger for retry events
         """
+        # Initialize observability (OPCIÓN 8)
+        if OBSERVABILITY_AVAILABLE:
+            self.structured_logger = get_structured_logger("retry_strategy")
+            self.metrics = get_metrics_collector()
+        else:
+            self.structured_logger = None
+            self.metrics = None
+
         self.config = config or RetryConfig()
         self.logger = logger or logging.getLogger(__name__)
 
@@ -72,20 +86,49 @@ class RetryStrategy:
         """
         last_exception: Exception | None = None
 
+        # Track retry execution with metrics (OPCIÓN 8)
+        if self.metrics:
+            self.metrics.increment_counter("retry_executions_started", 1)
+
         for attempt in range(1, self.config.max_attempts + 1):
             try:
                 # Execute function
                 result = await func()
+
+                # Track successful execution
+                if self.metrics:
+                    self.metrics.increment_counter("retry_executions_succeeded", 1)
+                    if attempt > 1:
+                        self.metrics.increment_counter(f"retry_succeeded_on_attempt_{attempt}", 1)
+
+                if self.structured_logger and attempt > 1:
+                    self.structured_logger.info(
+                        "Operation succeeded after retries",
+                        attempt=attempt,
+                        max_attempts=self.config.max_attempts
+                    )
+
                 return result
 
             except retryable_exceptions as e:
                 last_exception = e
 
+                # Track retry attempt
+                if self.metrics:
+                    self.metrics.increment_counter(f"retry_attempt_{attempt}", 1)
+                    self.metrics.increment_counter(f"retry_error_{type(e).__name__}", 1)
+
                 # Don't retry on last attempt
                 if attempt == self.config.max_attempts:
-                    self.logger.error(
-                        f"All {self.config.max_attempts} retry attempts failed. Last error: {e}"
-                    )
+                    self.logger.error(f"All {self.config.max_attempts} retry attempts failed. Last error: {e}")
+                    if self.metrics:
+                        self.metrics.increment_counter("retry_executions_failed_all_attempts", 1)
+                    if self.structured_logger:
+                        self.structured_logger.error(
+                            "All retry attempts exhausted",
+                            max_attempts=self.config.max_attempts,
+                            error_type=type(e).__name__
+                        )
                     break
 
                 # Calculate backoff delay
@@ -94,6 +137,10 @@ class RetryStrategy:
                 self.logger.warning(
                     f"Attempt {attempt}/{self.config.max_attempts} failed: {e}. Retrying in {delay_ms:.0f}ms..."
                 )
+
+                # Track backoff delay
+                if self.metrics:
+                    self.metrics.set_gauge(f"retry_backoff_delay_ms_attempt_{attempt}", delay_ms)
 
                 # Wait before retry
                 await asyncio.sleep(delay_ms / 1000.0)
@@ -115,9 +162,7 @@ class RetryStrategy:
             Delay in milliseconds
         """
         # Exponential backoff: initial_delay * (base ^ (attempt - 1))
-        delay = self.config.initial_delay_ms * (
-            self.config.exponential_base ** (attempt - 1)
-        )
+        delay = self.config.initial_delay_ms * (self.config.exponential_base ** (attempt - 1))
 
         # Cap at max delay
         delay = min(delay, self.config.max_delay_ms)
@@ -155,7 +200,7 @@ class RetryStrategy:
         return any(pattern in error_message for pattern in retryable_patterns)
 
 
-async def retry_with_backoff[T](
+async def retry_with_backoff(
     func: Callable[[], T],
     max_attempts: int = 3,
     initial_delay_ms: float = 100.0,

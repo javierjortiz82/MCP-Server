@@ -1,0 +1,31 @@
+{#
+Booking Agent - Data Requirements Module
+=========================================
+Required data fields for creating a booking.
+
+This module defines what information is needed from customers
+to successfully create a reservation.
+
+Author: Lab01-MCP Team
+Created: 2025-10-11
+Version: 1.0
+#}
+REQUIRED DATA FOR BOOKING:
+- Customer full name
+- Contact email
+- Phone number
+- Service type
+- Date (flexible formats accepted):
+  • ISO format: 2025-10-14 ✅
+  • European format: 14/10/2025 or 14/10/25 ✅
+  • Natural language: mañana, próximo viernes, 14 de octubre ✅
+- Time (multiple formats accepted):
+  • 24-hour format: 10:00, 14:30 ✅
+  • 12-hour format: 10am, 2:30pm ✅
+  • Relative: mañana 10am, próximo viernes a las 2pm ✅
+- Notes/Motivo (MANDATORY): Reason or purpose of the appointment
+  • Customer MUST provide the reason for the session
+  • Examples: "Primera consulta", "Problema con el producto X", "Quiero ver las nuevas funcionalidades"
+  • NEVER call create_booking without this field
+  • If customer hasn't provided it yet, ask: "¿Cuál es el motivo de tu cita?" or "What's the reason for your appointment?"
+- Duration (optional, depends on service)

@@ -5,14 +5,14 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+# Test MCP Server health checks
+from mcp.health import ComponentHealth, HealthChecker, HealthStatus
+
 # Test Client health checks
 from client_mcp.monitoring.client_health import (
     ClientHealthMonitor,
-    HealthStatus as ClientHealthStatus,
 )
-
-# Test MCP Server health checks
-from mcp.health import ComponentHealth, HealthChecker, HealthStatus
+from client_mcp.monitoring.client_health import HealthStatus as ClientHealthStatus
 
 
 class TestMCPHealthChecker:
@@ -65,11 +65,13 @@ class TestMCPHealthChecker:
         with patch("mcp.health.psutil.cpu_percent", return_value=50.0):
             with patch("mcp.health.psutil.virtual_memory") as mock_memory:
                 mock_memory.return_value = Mock(
-                    percent=60.0, available=1024 * 1024 * 1024
+                    percent=60.0,
+                    available=1024 * 1024 * 1024,
                 )
                 with patch("mcp.health.psutil.disk_usage") as mock_disk:
                     mock_disk.return_value = Mock(
-                        percent=70.0, free=10 * 1024 * 1024 * 1024
+                        percent=70.0,
+                        free=10 * 1024 * 1024 * 1024,
                     )
 
                     result = await health_checker.check_system_resources()
@@ -84,11 +86,13 @@ class TestMCPHealthChecker:
         with patch("mcp.health.psutil.cpu_percent", return_value=75.0):
             with patch("mcp.health.psutil.virtual_memory") as mock_memory:
                 mock_memory.return_value = Mock(
-                    percent=80.0, available=512 * 1024 * 1024
+                    percent=80.0,
+                    available=512 * 1024 * 1024,
                 )
                 with patch("mcp.health.psutil.disk_usage") as mock_disk:
                     mock_disk.return_value = Mock(
-                        percent=85.0, free=5 * 1024 * 1024 * 1024
+                        percent=85.0,
+                        free=5 * 1024 * 1024 * 1024,
                     )
 
                     result = await health_checker.check_system_resources()
@@ -125,7 +129,8 @@ class TestMCPHealthChecker:
                     )
 
                     with patch.object(
-                        health_checker, "check_system_resources"
+                        health_checker,
+                        "check_system_resources",
                     ) as mock_sys:
                         mock_sys.return_value = ComponentHealth(
                             name="system",
@@ -135,7 +140,8 @@ class TestMCPHealthChecker:
                         )
 
                         with patch.object(
-                            health_checker, "check_external_apis"
+                            health_checker,
+                            "check_external_apis",
                         ) as mock_apis:
                             mock_apis.return_value = ComponentHealth(
                                 name="apis",

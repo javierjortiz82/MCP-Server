@@ -72,7 +72,6 @@ desktop.ini
 # Logs and databases
 logs/
 *.log
-*.sql
 *.sqlite
 *.sqlite3
 *.db
@@ -96,13 +95,24 @@ docker-compose.override.yml
 # Project specific
 pids/
 metrics/
-prompts/
 borrar/
 backups/
+
+# Credentials and secrets (never commit)
+# Note: credentials/ directory structure is committed, but not the actual credential files
+credentials/service-account.json
+credentials/*.json
+!credentials/*.json.example
+*/credentials/
+*.key
+*.pem
+service-account.json
 *.json
 !package.json
 !tsconfig.json
 !servers.json
+!mcp_server/locales/**/*.json
+!SQL/data/*.json
 
 # Test outputs
 test_results/
@@ -160,3 +170,10 @@ $RECYCLE.BIN/
 .directory
 .Trash-*
 .nfs*
+
+# Project-specific: Backup and archive directories
+# These should be managed externally or in CI/CD
+backups/
+/backups/
+*.backup
+*.bak

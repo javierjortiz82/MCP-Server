@@ -2,6 +2,9 @@
 MCP Resource Handlers
 Resource endpoints for MCP protocol.
 Provides URI-based access to data resources.
+
+Resources use the i18n system to provide content in both Spanish (ES)
+and English (EN) based on user language preference.
 """
 
 import json
@@ -9,6 +12,10 @@ import json
 from config import settings
 from mcp_handlers import booking_handlers, product_handlers
 from tools import fetch as fetch_tool
+from utils.i18n import t, get_language
+from utils.logger import setup_logging
+
+logger = setup_logging("mcp_resource_handlers")
 
 # Global mcp instance - will be injected from server.py
 mcp = None
@@ -29,25 +36,34 @@ def register_resources():
         """
         Resource to access product data by SKU.
 
+        Returns product information in the user's preferred language (ES/EN).
+
         Args:
             sku: Product SKU identifier
 
         Returns:
-            Product information as formatted text
+            Product information as formatted text in user's language
         """
         try:
+            lang = get_language()
             product = fetch_tool.fetch_by_sku(sku)
             if product:
-                return f"""Product Information:
-Name: {product.get("name", "N/A")}
-SKU: {product.get("sku", "N/A")}
-Description: {product.get("description", "N/A")}
-Category: {product.get("category", "N/A")}
-Brand: {product.get("brand", "N/A")}
-Price: ${product.get("price", "N/A")}
-"""
-            return f"Product with SKU '{sku}' not found."
+                # Build localized product information
+                header = t("resource.product.sku.header", lang=lang)
+                name = t("resource.product.sku.name", lang=lang, name=product.get("name", "N/A"))
+                sku_line = t("resource.product.sku.sku", lang=lang, sku=product.get("sku", "N/A"))
+                desc = t("resource.product.sku.description", lang=lang, description=product.get("description", "N/A"))
+                cat = t("resource.product.sku.category", lang=lang, category=product.get("category", "N/A"))
+                brand = t("resource.product.sku.brand", lang=lang, brand=product.get("brand", "N/A"))
+                price = t("resource.product.sku.price", lang=lang, price=product.get("price", "N/A"))
+
+                return f"{header}\n{name}\n{sku_line}\n{desc}\n{cat}\n{brand}\n{price}\n"
+
+            not_found = t("resource.product.sku.not_found", lang=lang, sku=sku)
+            return not_found
         except Exception as e:
+            lang = get_language()
+            logger.error(f"Error retrieving product {sku}: {str(e)}")
             return f"Error retrieving product {sku}: {str(e)}"
 
     @mcp.resource("database://stats")  # type: ignore[union-attr]
@@ -55,11 +71,15 @@ Price: ${product.get("price", "N/A")}
         """
         Resource providing database statistics.
 
+        Returns database statistics in the user's preferred language (ES/EN).
+
         Returns:
-            Database statistics as formatted text
+            Database statistics as formatted text in user's language
         """
         try:
             from utils.db import fetchone
+
+            lang = get_language()
 
             stats_query = f"""
             SELECT
@@ -71,15 +91,25 @@ Price: ${product.get("price", "N/A")}
             """
             result = fetchone(stats_query, ())
             if result:
-                return f"""Database Statistics:
-Total Products: {result.get("total_products", 0)}
-Categories: {result.get("categories", 0)}
-Brands: {result.get("brands", 0)}
-Average Price: ${result.get("avg_price", 0):.2f}
-Schema: {settings.SCHEMA_NAME}
-"""
-            return "Unable to retrieve database statistics."
+                # Build localized statistics
+                header = t("resource.database.stats.header", lang=lang)
+                total = t("resource.database.stats.total_products", lang=lang,
+                         total_products=result.get("total_products", 0))
+                cats = t("resource.database.stats.categories", lang=lang,
+                        categories=result.get("categories", 0))
+                brands = t("resource.database.stats.brands", lang=lang,
+                          brands=result.get("brands", 0))
+                avg_p = t("resource.database.stats.avg_price", lang=lang,
+                         avg_price=f"{result.get('avg_price', 0):.2f}")
+                schema = t("resource.database.stats.schema", lang=lang,
+                          schema=settings.SCHEMA_NAME)
+
+                return f"{header}\n{total}\n{cats}\n{brands}\n{avg_p}\n{schema}\n"
+
+            unable = t("resource.database.stats.unable_to_retrieve", lang=lang)
+            return unable
         except Exception as e:
+            logger.error(f"Error retrieving database stats: {str(e)}")
             return f"Error retrieving database stats: {str(e)}"
 
     @mcp.resource("tool-categories://products")  # type: ignore[union-attr]
@@ -115,3 +145,30 @@ Schema: {settings.SCHEMA_NAME}
             return json.dumps({"category": "bookings", "tools": tool_names, "count": len(tool_names)})
         except Exception as e:
             return json.dumps({"error": f"Error retrieving booking tool names: {str(e)}"})
+
+    @mcp.resource("tool-categories://pageable-tools")  # type: ignore[union-attr]
+    def get_pageable_tool_categories() -> str:
+        """
+        Resource providing list of tools that return pageable result lists.
+
+        This resource enables clients to dynamically discover which tools return
+        pageable lists for implementing client-side pagination. This eliminates
+        the need for hardcoding tool lists (like SEARCH_TOOL_NAMES) in client code.
+
+        Pageable tools return results in formats like:
+        - {"items": [...], "count": N}  (most common)
+        - list directly (fallback)
+
+        Returns:
+            JSON string containing list of pageable tool names
+        """
+        try:
+            tool_names = product_handlers.get_pageable_tool_names()
+            return json.dumps({
+                "category": "pageable",
+                "tools": tool_names,
+                "count": len(tool_names),
+                "description": "Tools that return pageable result lists"
+            })
+        except Exception as e:
+            return json.dumps({"error": f"Error retrieving pageable tool names: {str(e)}"})

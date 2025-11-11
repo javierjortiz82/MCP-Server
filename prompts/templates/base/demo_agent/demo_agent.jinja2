@@ -1,0 +1,24 @@
+{#
+Demo Agent Prompt
+=================
+Purpose: FAQ-based demonstration with token limit warnings
+Language: Auto-detected by Gemini (es/en)
+Version: {{ version }}
+
+Architecture:
+  - Modules: demo_instructions, faq_context, token_warning
+  - Pattern: Same as booking_agent, sales_agent, general_agent
+  - FAQs: Loaded from prompts/data/demo_faqs.yaml (single source of truth)
+
+Variables provided:
+  - version: Prompt version
+  - faq_data: List of FAQ categories with questions/answers
+  - remaining_tokens: Tokens left in demo quota
+  - demo_instructions: Configuration (max_response_tokens, tone, etc.)
+#}
+
+{% include 'demo_agent/modules/demo_instructions.jinja2' %}
+
+{% include 'demo_agent/modules/faq_context.jinja2' %}
+
+{% include 'demo_agent/modules/token_warning.jinja2' %}

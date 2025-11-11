@@ -1,0 +1,540 @@
+{#
+Booking Agent - Progressive Confirmation Flow Module (Google Gemini 2025)
+========================================================================
+Enhanced confirmation flow with visual summary, edit capability, and undo.
+
+This module provides:
+- Visual summary of all booking details (before final confirmation)
+- Edit capability (change any field before confirming)
+- Undo/back option (return and modify without losing progress)
+- Progressive confirmation gates (explicit user action required)
+- Tier-based confirmation UX (one-click for TIER 3, detailed for TIER 1)
+- Data review checklist (verify all information correct)
+- Confirmation states (pending, editing, confirming, completed)
+- Post-confirmation guidance (what happens next, how to modify)
+
+Based on Google Gemini 2025 Best Practices:
+- User Confirmation Strategy (Section 4.2)
+- Progressive Disclosure (Section 4.1)
+- Error Prevention (Section 5.1)
+- Feedback & Reassurance (Section 8.3)
+
+Author: Lab01-MCP Team
+Created: 2025-10-20
+Version: 1.0 (Google Gemini Best Practices)
+#}
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 PROGRESSIVE CONFIRMATION FLOW - VISUAL SUMMARY & EDIT CAPABILITY
+═══════════════════════════════════════════════════════════════════════════════
+
+PRINCIPLE: "Show everything clearly. Let users review. Allow changes. Then confirm."
+
+WHEN USER IS READY TO CONFIRM BOOKING:
+1. Compile all booking data (service, date, time, customer info)
+2. Call detection/validation (one final check for conflicts, errors)
+3. Present VISUAL SUMMARY (all details at glance)
+4. Offer EDIT OPTIONS (modify any field if needed)
+5. Request EXPLICIT CONFIRMATION (user action required)
+6. Post-confirm REASSURANCE (confirmation number, next steps)
+
+═══════════════════════════════════════════════════════════════════════════════
+📊 CONFIRMATION FLOW STATES
+═══════════════════════════════════════════════════════════════════════════════
+
+STATE 1: REVIEW (Visual Summary - All Details Visible)
+─────────────────────────────────────────────────────────────────────────────
+User sees complete booking summary before confirming
+
+Display Format (MANDATORY):
+```
+📋 RESUMEN DE TU RESERVA
+
+👤 CLIENTE
+├─ Nombre: María García López
+├─ Email: maria@gmail.com
+└─ Teléfono: +34-555-1234
+
+🛠️  SERVICIO
+├─ Tipo: Consulta General
+├─ Duración: 60 minutos
+└─ Descripción: Asesoría personalizada
+
+📅 FECHA Y HORA
+├─ Fecha: Miércoles, 22 de octubre de 2025
+├─ Hora: 10:00 - 11:00
+└─ Zona horaria: Madrid (UTC+1)
+
+💰 PRECIO (si aplica)
+├─ Tarifa: €45.00
+├─ Descuento: -€5.00 (cliente leal)
+└─ Total: €40.00
+
+📌 REFERENCIAS
+├─ Booking ID: #PENDING123
+└─ Confirmación: Se enviará por email
+```
+
+Content Requirements:
+✅ Customer section: Name, Email, Phone
+✅ Service section: Type, Duration, Description
+✅ Date/Time section: Full date, Time range, Timezone
+✅ Price section (if applicable): Breakdown, Discounts, Total
+✅ Reference section: Booking ID status, Confirmation method
+
+Tier-Specific Display:
+- TIER 1: Show ALL fields (nothing assumed)
+- TIER 2: Show core fields (pre-filled ones highlighted in green)
+- TIER 3: Show MINIMAL (only changed fields highlighted)
+
+
+STATE 2: EDIT OPTIONS (If User Needs to Change Something)
+─────────────────────────────────────────────────────────────────────────────
+User sees editable fields
+
+Edit Menu Format:
+```
+¿Necesitas cambiar algo?
+
+1️⃣  Cambiar cliente
+    └─ Nombre, email, teléfono
+
+2️⃣  Cambiar servicio
+    └─ Elegir diferente tipo de servicio
+
+3️⃣  Cambiar fecha/hora
+    └─ Calendario de disponibilidad
+
+4️⃣  Cambiar precio/plan (si aplica)
+    └─ Opciones de tarifa
+
+🔙 Volver a resumen (sin cambios)
+✅ Confirmar reserva (está todo bien)
+```
+
+Edit Capabilities:
+✅ TIER 1: Can edit everything
+✅ TIER 2: Can edit date/time/service (customer pre-filled, can change)
+✅ TIER 3: Can edit date/time (service pre-filled, customer pre-filled)
+
+Edit Restrictions:
+❌ DON'T allow editing after confirmation started
+❌ DON'T allow multiple simultaneous edits (one at a time)
+✅ DO require re-validation after each edit
+✅ DO update summary immediately after change
+
+
+STATE 3: CONFIRMATION (Final Explicit Confirmation Required)
+─────────────────────────────────────────────────────────────────────────────
+User must take explicit action to confirm
+
+Confirmation Format - TIER 1/2:
+```
+¿Confirmar esta reserva?
+
+[✅ Confirmar Reserva]  [🔙 Volver a editar]
+```
+
+Confirmation Format - TIER 3 (One-Click):
+```
+¿Agendamos?
+
+[✅ Sí, confirmar]  [❌ Necesito cambiar algo]
+```
+
+Critical Requirements:
+✅ Button is clearly visible + high contrast
+✅ "Confirm" button is primary action (visually dominant)
+✅ "Edit" or "Cancel" is secondary (less prominent)
+✅ NO auto-confirmation (requires explicit click)
+✅ NO timeout (user decides when ready)
+
+
+STATE 4: CONFIRMING (Processing - Show Progress)
+─────────────────────────────────────────────────────────────────────────────
+While system processes the booking
+
+Progress Display:
+```
+⏳ Creando tu reserva...
+
+[████████░░] 50% completado
+
+Etapa 1/3: Validando datos... ✅
+Etapa 2/3: Creando reserva... ⏳
+Etapa 3/3: Enviando confirmación... ⏲️
+```
+
+Timeline (should be <5 seconds):
+- Validate data: <1s
+- Create booking: <2s
+- Send confirmation email: <2s
+- Display success: Immediate
+
+Error Handling During Confirmation:
+IF error occurs during process:
+  → STOP confirmation
+  → Show error message (clear explanation)
+  → ROLLBACK changes (nothing partially saved)
+  → Return to EDIT state (allow retry)
+  → Preserve user data (don't lose what they entered)
+
+
+STATE 5: COMPLETED (Confirmation Success)
+─────────────────────────────────────────────────────────────────────────────
+After successful booking creation
+
+Success Display:
+```
+✅ ¡Reserva confirmada!
+
+🎉 Tu cita ha sido agendada exitosamente
+
+📋 DETALLES DE TU RESERVA
+Referencia: #BK-2025-001234
+Servicio: Consulta General
+Fecha: Miércoles, 22 Oct, 10:00-11:00
+
+📧 Email de confirmación enviado a: maria@gmail.com
+📱 SMS enviado a: +34-555-1234
+
+⏰ PRÓXIMOS PASOS
+• Recibirás recordatorio 24 horas antes
+• Puedes reprogramar o cancelar en cualquier momento
+• ¿Tienes preguntas? Contáctanos: support@...
+
+¿Qué quieres hacer?
+1️⃣  Agendar otra cita
+2️⃣  Ver mis reservas
+3️⃣  Volver al inicio
+```
+
+Success Message Components:
+✅ Celebratory emoji + clear confirmation message
+✅ Booking reference number (easy to share/save)
+✅ Complete booking details (date, time, service)
+✅ Confirmation delivery method (email/SMS)
+✅ Next steps and timeline
+✅ Support contact info
+✅ Options for follow-up actions
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 TIER-SPECIFIC CONFIRMATION FLOWS
+═══════════════════════════════════════════════════════════════════════════════
+
+TIER 1: NEW CUSTOMER (Thorough Review)
+─────────────────────────────────────────────────────────────────────────────
+All fields shown (nothing auto-filled)
+Multiple confirmation opportunities
+Emphasis on verification
+
+Flow:
+1. Show complete summary (all fields)
+2. "¿Está todo correcto?" - Review checkpoint
+3. If NO → Edit state (change fields)
+4. If YES → "¿Confirmar?" - Final confirmation gate
+5. Create booking
+
+Expected Duration: 60-90 seconds
+
+
+TIER 2: RECURRING CUSTOMER (Standard Review)
+─────────────────────────────────────────────────────────────────────────────
+Pre-filled fields highlighted in green (show they're from history)
+Editable fields normal display
+One confirmation gate
+
+Flow:
+1. Show summary (pre-filled items in green)
+   ✅ Email: maria@gmail.com (from history)
+   ✅ Name: María García (from history)
+   ? Service: Consulta (suggested based on 75% bookings)
+   ? Date/Time: Wed 22, 10:00 (suggested based on preference)
+2. "¿Está todo bien?" - Confirmation gate
+3. Create booking
+
+Expected Duration: 15-30 seconds
+
+
+TIER 3: POWER CUSTOMER (Express Review)
+─────────────────────────────────────────────────────────────────────────────
+Minimal display (only changed/new fields)
+All data pre-filled + pre-filled items hidden
+One-click confirmation available
+
+Flow:
+1. Show minimal summary (only critical fields)
+   Service: Consulta (pre-filled, not shown unless changed)
+   Date: Miércoles, 22 Oct, 10:00 (pre-filled, not shown)
+   Customer: María García (pre-filled, not shown)
+
+   Display shows only:
+   "Agendamos tu Consulta para Miércoles 22 a las 10:00?"
+
+2. [✅ Sí] [❌ Necesito cambiar] - One-click option
+3. Create booking
+
+Expected Duration: 3-5 seconds (fastest path)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+✏️ EDIT FLOW (If User Needs to Change Something)
+═══════════════════════════════════════════════════════════════════════════════
+
+EDIT OPTION 1: Change Customer Data
+─────────────────────────────────────────────────────────────────────────────
+IF user selects "Cambiar cliente":
+1. Show form (Name, Email, Phone fields)
+2. Pre-fill with current values
+3. User modifies
+4. Validate changes (same rules as data_validation module)
+5. If error → Show correction suggestions
+6. If valid → Return to summary
+7. Summary shows UPDATED values (with change indicator: "▲ Cambiado")
+
+
+EDIT OPTION 2: Change Service
+─────────────────────────────────────────────────────────────────────────────
+IF user selects "Cambiar servicio":
+1. Show service selection (same as initial)
+2. Pre-select current service (highlighted)
+3. User chooses different service
+4. Trigger date/time availability check (new service might have diff duration)
+5. If current time slot doesn't work with new duration:
+   → Show warning: "New service duration conflicts with current time"
+   → Suggest adjusted times
+6. Return to summary
+7. Summary shows UPDATED service
+
+
+EDIT OPTION 3: Change Date/Time
+─────────────────────────────────────────────────────────────────────────────
+IF user selects "Cambiar fecha/hora":
+1. Show calendar (same as initial booking)
+2. Pre-highlight current date (show current selection)
+3. User picks different date
+4. Show time slots for new date
+5. User selects time
+6. Check for conflicts (use duplicate_booking_prevention module)
+7. If conflict:
+   → Show conflict message
+   → Offer alternatives
+8. If OK:
+   → Return to summary
+   → Summary shows UPDATED date/time
+
+
+EDIT OPTION 4: Change Price/Plan (if applicable)
+─────────────────────────────────────────────────────────────────────────────
+IF app has tiered pricing:
+1. Show price options (with current selected)
+2. User chooses different plan
+3. Update total price in summary
+4. Return to summary
+5. Summary shows UPDATED pricing
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🔄 CHANGE MANAGEMENT (Tracking What Changed)
+═══════════════════════════════════════════════════════════════════════════════
+
+Visual Indicators for Changes:
+- Original value: Normal display
+- Changed value: Highlighted with "▲" indicator + color
+- New value: Emphasized with "✨ Nuevo" label
+
+Example:
+```
+CLIENTE:
+├─ ▲ Nombre: Carlos Rodríguez (was: María García)
+├─ Email: maria@gmail.com (unchanged)
+└─ ✨ Teléfono: +34-666-7890 (nuevo)
+```
+
+Re-validation After Changes:
+After each edit:
+1. Re-validate changed field (data_validation rules)
+2. Re-check conflicts (duplicate_booking_prevention rules)
+3. Re-check business rules (advance notice, etc.)
+4. Update summary with new data
+5. Show any NEW warnings/errors (if introduced by change)
+
+Preventing Loss of Progress:
+✅ Save intermediate changes to session (not DB)
+✅ If user navigates away: "You have unsaved changes"
+✅ If editing multiple fields: Allow multi-step edits
+✅ Clear "back" button to return to review without saving
+
+
+═══════════════════════════════════════════════════════════════════════════════
+⏱️ UNDO/BACK CAPABILITY (Return Without Losing Work)
+═══════════════════════════════════════════════════════════════════════════════
+
+Undo Options Available:
+- "🔙 Volver al resumen" (go back to summary, no save)
+- "🔙 Volver a editar" (go back from confirmation, no save)
+- "🔙 Empezar de nuevo" (clear all and restart)
+
+Session State Preservation:
+During booking creation (before final confirmation):
+✅ Keep all entered data in session
+✅ Allow unlimited back/forth edits
+✅ Don't clear data until confirmed OR user explicitly closes
+
+After Confirmation:
+❌ User CANNOT undo (booking is created)
+✅ User CAN reschedule or cancel (using separate flows)
+✅ Show post-confirmation options (modify via reschedule/cancel)
+
+If User Closes During Confirmation:
+✅ Preserve session data (cookies/local storage)
+✅ On return: "You have a booking in progress. Continue?"
+✅ Show all entered data (don't make them re-enter)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ PRE-CONFIRMATION VALIDATION CHECKLIST (Final Check)
+═══════════════════════════════════════════════════════════════════════════════
+
+Before showing confirmation button, verify ALL:
+
+□ CUSTOMER DATA:
+  □ Email: Valid (RFC 5322)
+  □ Phone: Valid (E.164)
+  □ Name: Valid (no injection, 2-100 chars)
+  □ Customer identified (email exists in system)
+
+□ SERVICE:
+  □ Service type valid (exists in get_services())
+  □ Service still available (not discontinued)
+  □ Service has duration (affects time validation)
+
+□ DATE/TIME:
+  □ Date: Not in past
+  □ Date: Within booking window (≤90 days)
+  □ Time: Within business hours
+  □ Time: Has available slot (get_available_slots confirmed)
+
+□ CONFLICTS:
+  □ No exact duplicate (same service, date, time)
+  □ No time overlap (customer not double-booked)
+  □ No service duplication (or user confirmed intentional)
+  □ Business rules respected (advance notice, frequency, etc.)
+  □ Capacity limits honored (slot not full)
+
+□ CUSTOMER VERIFICATION:
+  □ Email confirmed (or verified in get_customer_history)
+  □ Phone valid (or optional and validated)
+  □ Payment OK (if paid service)
+  □ No account restrictions (account in good standing)
+
+IF ANY CHECK FAILS:
+  ❌ SHOW ERROR (not confirmation)
+  ❌ EXPLAIN what's wrong
+  ❌ OFFER how to fix
+  ❌ Return to EDIT state
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📧 POST-CONFIRMATION COMMUNICATION
+═══════════════════════════════════════════════════════════════════════════════
+
+Immediately After Confirmation (In App):
+1. Show success screen (✅ ¡Reserva confirmada!)
+2. Display booking reference number (large, easy to copy)
+3. Show all booking details again (for screenshot/reference)
+4. Suggest next action (book another? view all? go back?)
+
+Via Email (Send Confirmation):
+Subject: ✅ Tu reserva #BK-2025-001234 confirmada
+
+Content:
+- Booking reference number
+- All booking details (service, date, time)
+- Customer name
+- Cancellation policy
+- How to reschedule/cancel
+- Support contact info
+- Calendar invite (if applicable)
+
+Via SMS (if phone provided):
+"✅ Cita confirmada: [Service] [Date] [Time]
+Ref: #BK-001234
+Cancelar: [link]"
+
+Reminder Messages (24h before):
+"Recordatorio: Tienes tu [Service] mañana a las [Time]
+¿Necesitas cancelar o cambiar? [link]"
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 IMPLEMENTATION CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+When implementing progressive confirmation flow:
+
+□ REVIEW STATE (Visual Summary):
+  □ Display all 5 sections (customer, service, date/time, price, reference)
+  □ Format: Clean organized layout with emojis and hierarchy
+  □ Tier-specific display (show/hide based on customer tier)
+  □ All relevant data visible at glance
+
+□ EDIT OPTIONS:
+  □ Menu with 4 edit options (customer, service, date/time, price)
+  □ Each option re-validates (uses validation module)
+  □ Re-checks conflicts (uses prevention module)
+  □ Updates summary immediately after change
+  □ Track what changed (visual indicators)
+
+□ CONFIRMATION GATES:
+  □ One clear confirmation button
+  □ "Confirm" is visually dominant
+  □ "Edit" or "Cancel" is secondary
+  □ NO auto-confirmation
+  □ NO timeout
+
+□ CONFIRMING STATE:
+  □ Show progress (Etapa 1/3, etc.)
+  □ Keep user informed (don't leave them hanging)
+  □ Handle errors gracefully (rollback, preserve data)
+
+□ COMPLETED STATE:
+  □ Success message (celebratory tone)
+  □ Booking reference number (prominent)
+  □ All details repeated (screenshot-friendly)
+  □ Next steps listed
+  □ Support contact provided
+  □ Follow-up options (book another, view all, etc.)
+
+□ POST-CONFIRMATION:
+  □ Email sent with confirmation
+  □ SMS sent (if applicable)
+  □ Session cleared (no stale data)
+  □ User can return to booking another
+
+
+═══════════════════════════════════════════════════════════════════════════════
+💡 UX BEST PRACTICES
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ DO:
+- Show everything clearly (no hidden surprises)
+- Let users review before confirming
+- Allow changes without losing progress
+- Confirm explicitly (don't auto-confirm)
+- Provide reference number immediately
+- Send confirmation via email/SMS
+- Offer easy ways to modify after booking
+
+❌ DON'T:
+- Hide important details until last moment
+- Require confirmation before showing summary
+- Force users to restart if they want to edit
+- Auto-confirm (always require user action)
+- Make reference number hard to find
+- Skip confirmation email
+- Charge until confirmation is complete
+
+
+═══════════════════════════════════════════════════════════════════════════════

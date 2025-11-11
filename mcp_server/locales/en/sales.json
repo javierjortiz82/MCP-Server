@@ -1,0 +1,19 @@
+{
+  "welcome": "Hi! Welcome to Lab01. How can I help you today?",
+  "products": "Our Products",
+  "product_info": "What would you like to know about our products?",
+  "pricing": "💰 Pricing and Plans",
+  "features": "✨ Key Features",
+  "benefits": "🎯 Benefits",
+  "demo": "Request Demo",
+  "contact_sales": "Contact Sales",
+  "success": {
+    "inquiry_received": "Thank you for your inquiry, we'll contact you soon",
+    "demo_scheduled": "Your demo has been scheduled",
+    "contact_info_received": "We've received your information"
+  },
+  "errors": {
+    "no_products": "No products are available",
+    "invalid_request": "Invalid request"
+  }
+}

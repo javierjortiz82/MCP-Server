@@ -21,14 +21,31 @@ Version: 1.0.0
 
 from __future__ import annotations
 
-from typing import Any
-
-from google.genai import types
+from typing import TYPE_CHECKING, Any
 
 from gemini_agent.base_agent import BaseAgent
 from gemini_agent.utils.logger import setup_logging
 
+# Observability imports (OPCIÓN 7)
+try:
+    from email_service.observability.metrics import get_metrics_collector
+    from email_service.observability.structured_logger import get_structured_logger
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
+if TYPE_CHECKING:
+    from google.genai import types
+
 logger = setup_logging("agent_factory")
+
+# Initialize observability for factory
+if OBSERVABILITY_AVAILABLE:
+    _structured_logger = get_structured_logger("agent_factory")
+    _metrics = get_metrics_collector()
+else:
+    _structured_logger = None
+    _metrics = None
 
 
 class AgentFactory:
@@ -87,9 +104,7 @@ class AgentFactory:
         }
 
         cls._registry_initialized = True
-        logger.debug(
-            f"Agent registry initialized with {len(cls._AGENT_REGISTRY)} agent types"
-        )
+        logger.debug(f"Agent registry initialized with {len(cls._AGENT_REGISTRY)} agent types")
 
     @classmethod
     def get_available_agents(cls) -> list[str]:
@@ -171,14 +186,18 @@ class AgentFactory:
         # Validate agent type
         if agent_type not in cls._AGENT_REGISTRY:
             available = ", ".join(cls._AGENT_REGISTRY.keys())
-            raise ValueError(
-                f"Unknown agent type: '{agent_type}'. " f"Available types: {available}"
-            )
+            raise ValueError(f"Unknown agent type: '{agent_type}'. Available types: {available}")
 
         # Get agent class
         agent_class = cls._AGENT_REGISTRY[agent_type]
 
         logger.info(f"Creating {agent_type} agent...")
+
+        # Track creation attempt (OPCIÓN 7)
+        if _metrics:
+            _metrics.increment_counter(f"factory_create_{agent_type}_attempted", 1)
+        if _structured_logger:
+            _structured_logger.info("Agent creation started", agent_type=agent_type)
 
         try:
             # Prepare constructor arguments
@@ -215,19 +234,29 @@ class AgentFactory:
             # Auto-initialize if requested
             if auto_initialize:
                 await agent.initialize()
-                logger.info(
-                    f"✅ {agent_type} agent created and initialized successfully"
-                )
+                logger.info(f"✅ {agent_type} agent created and initialized successfully")
+
+                if _metrics:
+                    _metrics.increment_counter(f"factory_create_{agent_type}_successful", 1)
+                if _structured_logger:
+                    _structured_logger.info("Agent creation successful", agent_type=agent_type)
             else:
                 logger.info(f"✅ {agent_type} agent created (not initialized)")
+
+                if _metrics:
+                    _metrics.increment_counter(f"factory_create_{agent_type}_not_initialized", 1)
 
             return agent
 
         except Exception as e:
             logger.exception(f"Failed to create {agent_type} agent: {e}")
-            raise RuntimeError(
-                f"Agent creation failed for type '{agent_type}': {e}"
-            ) from e
+
+            if _metrics:
+                _metrics.increment_counter(f"factory_create_{agent_type}_failed", 1)
+            if _structured_logger:
+                _structured_logger.exception("Agent creation failed", agent_type=agent_type)
+
+            raise RuntimeError(f"Agent creation failed for type '{agent_type}': {e}") from e
 
     @classmethod
     async def create_booking_agent(
@@ -306,21 +335,15 @@ class AgentFactory:
 
         # Validate agent_class is a subclass of BaseAgent
         if not issubclass(agent_class, BaseAgent):
-            raise ValueError(
-                f"Agent class must inherit from BaseAgent, got {agent_class}"
-            )
+            raise ValueError(f"Agent class must inherit from BaseAgent, got {agent_class}")
 
         # Check if already registered
         if agent_type in cls._AGENT_REGISTRY:
-            logger.warning(
-                f"Agent type '{agent_type}' already registered, overwriting..."
-            )
+            logger.warning(f"Agent type '{agent_type}' already registered, overwriting...")
 
         # Register
         cls._AGENT_REGISTRY[agent_type] = agent_class
-        logger.info(
-            f"Registered new agent type: '{agent_type}' -> {agent_class.__name__}"
-        )
+        logger.info(f"Registered new agent type: '{agent_type}' -> {agent_class.__name__}")
 
     @classmethod
     def is_registered(cls, agent_type: str) -> bool:

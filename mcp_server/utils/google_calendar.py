@@ -25,17 +25,22 @@ Version: 1.0.0
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from mcp_server.utils.logger import setup_logging
+from .logger import setup_logging  # Proper relative import
+from .i18n import t, get_language  # Proper relative import
+
+# Type variable for retry decorator
+T = TypeVar("T")
 
 # Setup module logger
 logger = setup_logging("google_calendar")
@@ -101,6 +106,71 @@ class EventDeletionError(GoogleCalendarError):
     pass
 
 
+def _is_transient_error(http_error: HttpError) -> bool:
+    """Check if an HttpError is transient (should be retried).
+
+    Transient errors include:
+    - 429: Too Many Requests (rate limiting)
+    - 503: Service Unavailable
+    - 500: Internal Server Error (occasional)
+
+    Args:
+        http_error: HttpError to check
+
+    Returns:
+        True if error is transient, False otherwise
+    """
+    try:
+        return http_error.resp.status in (429, 500, 503)
+    except (AttributeError, TypeError):
+        return False
+
+
+def _retry_with_backoff(
+    func: Callable[..., T],
+    max_retries: int = 3,
+    initial_delay: float = 1.0,
+    exponential_base: float = 2.0,
+) -> Callable[..., T]:
+    """Wrapper function for retrying with exponential backoff.
+
+    Retries on transient errors (429, 500, 503).
+
+    Args:
+        func: Function to wrap
+        max_retries: Maximum retry attempts (default: 3)
+        initial_delay: Initial delay in seconds (default: 1.0)
+        exponential_base: Multiplier for exponential backoff (default: 2.0)
+
+    Returns:
+        Wrapped function that retries on transient errors
+    """
+
+    def wrapper(*args: Any, **kwargs: Any) -> T:
+        delay = initial_delay
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except HttpError as e:
+                last_error = e
+                if not _is_transient_error(e) or attempt == max_retries - 1:
+                    raise
+
+                logger.warning(
+                    f"Transient error (HTTP {e.resp.status}) on attempt {attempt + 1}/"
+                    f"{max_retries}. Retrying in {delay:.1f}s..."
+                )
+                time.sleep(delay)
+                delay *= exponential_base
+
+        # This should never happen, but just in case
+        raise last_error or RuntimeError("Retry exhausted without error")
+
+    return wrapper
+
+
 class GoogleCalendarClient:
     """Google Calendar API client using Service Account authentication.
 
@@ -159,9 +229,9 @@ class GoogleCalendarClient:
         """
         try:
             if not self.credentials_path.exists():
-                raise FileNotFoundError(
-                    f"Service account credentials not found: {self.credentials_path}"
-                )
+                lang = get_language()
+                error_msg = t("google_calendar.authentication.credentials_not_found", lang=lang, path=self.credentials_path)
+                raise FileNotFoundError(error_msg)
 
             logger.debug(f"Loading credentials from: {self.credentials_path}")
 
@@ -187,9 +257,9 @@ class GoogleCalendarClient:
 
         except Exception as exc:
             logger.exception(f"Authentication failed: {exc}")
-            raise AuthenticationError(
-                f"Failed to authenticate with Google Calendar: {exc}"
-            ) from exc
+            lang = get_language()
+            error_msg = t("google_calendar.authentication.failed", lang=lang, error=str(exc))
+            raise AuthenticationError(error_msg) from exc
 
     def _refresh_credentials_if_needed(self) -> None:
         """Refresh credentials if expired.
@@ -198,7 +268,9 @@ class GoogleCalendarClient:
             AuthenticationError: If credential refresh fails.
         """
         if not self._credentials:
-            raise AuthenticationError("Credentials not initialized")
+            lang = get_language()
+            error_msg = t("google_calendar.authentication.credentials_not_initialized", lang=lang)
+            raise AuthenticationError(error_msg)
 
         try:
             if self._credentials.expired:
@@ -207,7 +279,9 @@ class GoogleCalendarClient:
                 logger.debug("Credentials refreshed successfully")
         except Exception as exc:
             logger.exception(f"Failed to refresh credentials: {exc}")
-            raise AuthenticationError(f"Credential refresh failed: {exc}") from exc
+            lang = get_language()
+            error_msg = t("google_calendar.authentication.refresh_failed", lang=lang, error=str(exc))
+            raise AuthenticationError(error_msg) from exc
 
     def create_event(
         self,
@@ -245,7 +319,9 @@ class GoogleCalendarClient:
             ... )
         """
         if not self._service:
-            raise AuthenticationError("Service not initialized")
+            lang = get_language()
+            error_msg = t("google_calendar.authentication.service_not_initialized", lang=lang)
+            raise AuthenticationError(error_msg)
 
         try:
             self._refresh_credentials_if_needed()
@@ -265,13 +341,23 @@ class GoogleCalendarClient:
             }
 
             # Add attendee if provided
-            # Note: Service accounts cannot invite attendees without Domain-Wide Delegation
-            # For personal Google accounts, we'll add email to description instead
+            # Best-effort approach: Try to add as attendee, fall back to description
             if attendee_email:
-                # Append email to description for reference
-                event_body["description"] += f"\n\nCustomer Email: {attendee_email}"
-                # Try to add as attendee (will fail for non-Workspace accounts, but that's OK)
-                # event_body["attendees"] = [{"email": attendee_email}]
+                try:
+                    # Try to add attendee (requires Domain-Wide Delegation for service accounts)
+                    event_body["attendees"] = [{"email": attendee_email}]
+                    logger.debug(f"Added attendee: {attendee_email}")
+                except Exception as e:
+                    # If attendee addition fails, fall back to adding email to description
+                    lang = get_language()
+                    warning_msg = t(
+                        "google_calendar.attendee.add_failed_domain_delegation",
+                        lang=lang,
+                        email=attendee_email,
+                        error=str(e)
+                    )
+                    logger.warning(warning_msg)
+                    event_body["description"] += f"\n\nCustomer Email: {attendee_email}"
 
             # Add reminders (30 min and 10 min before)
             event_body["reminders"] = {
@@ -285,29 +371,80 @@ class GoogleCalendarClient:
             logger.info(f"Creating event: {summary} at {start_datetime}")
             logger.debug(f"Event body: {event_body}")
 
-            # Create event
-            created_event = (
-                self._service.events()
-                .insert(
-                    calendarId=self.calendar_id,
-                    body=event_body,
-                    sendNotifications=send_notifications,
+            # Create event with retry logic for transient errors
+            def _create_event_with_retry() -> dict[str, Any]:
+                return (
+                    self._service.events()
+                    .insert(
+                        calendarId=self.calendar_id,
+                        body=event_body,
+                        sendNotifications=send_notifications,
+                    )
+                    .execute()
                 )
-                .execute()
-            )
+
+            try:
+                # Try to create with attendee first
+                created_event = _retry_with_backoff(
+                    _create_event_with_retry,
+                    max_retries=3,
+                    initial_delay=1.0,
+                    exponential_base=2.0,
+                )()
+            except HttpError as exc:
+                # If creation failed with 403 (permission denied) and we have an attendee,
+                # try again without the attendee and add to description instead
+                if exc.resp.status == 403 and attendee_email and "attendees" in event_body:
+                    lang = get_language()
+                    warning_msg = t(
+                        "google_calendar.attendee.permission_denied_retrying",
+                        lang=lang
+                    )
+                    logger.warning(warning_msg)
+                    # Remove attendee and add to description instead
+                    del event_body["attendees"]
+                    event_body["description"] += f"\n\nCustomer Email: {attendee_email}"
+
+                    try:
+                        created_event = _retry_with_backoff(
+                            _create_event_with_retry,
+                            max_retries=3,
+                            initial_delay=1.0,
+                            exponential_base=2.0,
+                        )()
+                    except HttpError as retry_exc:
+                        logger.exception(f"HTTP error creating event (retry): {retry_exc}")
+                        lang = get_language()
+                        error_msg = t(
+                            "google_calendar.event.create.failed_after_retry",
+                            lang=lang,
+                            error=str(retry_exc)
+                        )
+                        raise EventCreationError(error_msg) from retry_exc
+                else:
+                    logger.exception(f"HTTP error creating event: {exc}")
+                    lang = get_language()
+                    error_msg = t(
+                        "google_calendar.event.create.failed",
+                        lang=lang,
+                        error=str(exc)
+                    )
+                    raise EventCreationError(error_msg) from exc
 
             logger.info(f"✅ Event created successfully: {created_event['id']}")
             logger.debug(f"Event link: {created_event.get('htmlLink')}")
 
             return self._parse_event(created_event)
 
-        except HttpError as exc:
-            logger.exception(f"HTTP error creating event: {exc}")
-            raise EventCreationError(f"Failed to create event: {exc}") from exc
-
         except Exception as exc:
             logger.exception(f"Unexpected error creating event: {exc}")
-            raise EventCreationError(f"Event creation failed: {exc}") from exc
+            lang = get_language()
+            error_msg = t(
+                "google_calendar.event.create.failed",
+                lang=lang,
+                error=str(exc)
+            )
+            raise EventCreationError(error_msg) from exc
 
     def update_event(
         self,
@@ -343,7 +480,9 @@ class GoogleCalendarClient:
             ... )
         """
         if not self._service:
-            raise AuthenticationError("Service not initialized")
+            lang = get_language()
+            error_msg = t("google_calendar.authentication.service_not_initialized", lang=lang)
+            raise AuthenticationError(error_msg)
 
         try:
             self._refresh_credentials_if_needed()
@@ -378,28 +517,50 @@ class GoogleCalendarClient:
             logger.info(f"Updating event: {event_id}")
             logger.debug(f"Updated fields: summary={summary}, start={start_datetime}")
 
-            # Update event
-            updated_event = (
-                self._service.events()
-                .update(
-                    calendarId=self.calendar_id,
-                    eventId=event_id,
-                    body=existing_event,
-                    sendNotifications=send_notifications,
+            # Update event with retry logic for transient errors
+            def _update_event_with_retry() -> dict[str, Any]:
+                return (
+                    self._service.events()
+                    .update(
+                        calendarId=self.calendar_id,
+                        eventId=event_id,
+                        body=existing_event,
+                        sendNotifications=send_notifications,
+                    )
+                    .execute()
                 )
-                .execute()
-            )
+
+            updated_event = _retry_with_backoff(
+                _update_event_with_retry,
+                max_retries=3,
+                initial_delay=1.0,
+                exponential_base=2.0,
+            )()
 
             logger.info(f"✅ Event updated successfully: {event_id}")
             return self._parse_event(updated_event)
 
         except HttpError as exc:
             logger.exception(f"HTTP error updating event: {exc}")
-            raise EventUpdateError(f"Failed to update event {event_id}: {exc}") from exc
+            lang = get_language()
+            error_msg = t(
+                "google_calendar.event.update.failed",
+                lang=lang,
+                event_id=event_id,
+                error=str(exc)
+            )
+            raise EventUpdateError(error_msg) from exc
 
         except Exception as exc:
             logger.exception(f"Unexpected error updating event: {exc}")
-            raise EventUpdateError(f"Event update failed: {exc}") from exc
+            lang = get_language()
+            error_msg = t(
+                "google_calendar.event.update.failed",
+                lang=lang,
+                event_id=event_id,
+                error=str(exc)
+            )
+            raise EventUpdateError(error_msg) from exc
 
     def delete_event(
         self,
@@ -424,7 +585,9 @@ class GoogleCalendarClient:
             >>> assert success is True
         """
         if not self._service:
-            raise AuthenticationError("Service not initialized")
+            lang = get_language()
+            error_msg = t("google_calendar.authentication.service_not_initialized", lang=lang)
+            raise AuthenticationError(error_msg)
 
         try:
             self._refresh_credentials_if_needed()
@@ -442,13 +605,25 @@ class GoogleCalendarClient:
 
         except HttpError as exc:
             logger.exception(f"HTTP error deleting event: {exc}")
-            raise EventDeletionError(
-                f"Failed to delete event {event_id}: {exc}"
-            ) from exc
+            lang = get_language()
+            error_msg = t(
+                "google_calendar.event.delete.failed",
+                lang=lang,
+                event_id=event_id,
+                error=str(exc)
+            )
+            raise EventDeletionError(error_msg) from exc
 
         except Exception as exc:
             logger.exception(f"Unexpected error deleting event: {exc}")
-            raise EventDeletionError(f"Event deletion failed: {exc}") from exc
+            lang = get_language()
+            error_msg = t(
+                "google_calendar.event.delete.failed",
+                lang=lang,
+                event_id=event_id,
+                error=str(exc)
+            )
+            raise EventDeletionError(error_msg) from exc
 
     def get_event(self, event_id: str) -> CalendarEvent:
         """Retrieve event details by ID.
@@ -463,7 +638,9 @@ class GoogleCalendarClient:
             GoogleCalendarError: If event retrieval fails.
         """
         if not self._service:
-            raise AuthenticationError("Service not initialized")
+            lang = get_language()
+            error_msg = t("google_calendar.authentication.service_not_initialized", lang=lang)
+            raise AuthenticationError(error_msg)
 
         try:
             self._refresh_credentials_if_needed()
@@ -480,13 +657,25 @@ class GoogleCalendarClient:
 
         except HttpError as exc:
             logger.exception(f"HTTP error fetching event: {exc}")
-            raise GoogleCalendarError(
-                f"Failed to fetch event {event_id}: {exc}"
-            ) from exc
+            lang = get_language()
+            error_msg = t(
+                "google_calendar.event.fetch.failed",
+                lang=lang,
+                event_id=event_id,
+                error=str(exc)
+            )
+            raise GoogleCalendarError(error_msg) from exc
 
         except Exception as exc:
             logger.exception(f"Unexpected error fetching event: {exc}")
-            raise GoogleCalendarError(f"Event fetch failed: {exc}") from exc
+            lang = get_language()
+            error_msg = t(
+                "google_calendar.event.fetch.failed",
+                lang=lang,
+                event_id=event_id,
+                error=str(exc)
+            )
+            raise GoogleCalendarError(error_msg) from exc
 
     def get_busy_times(
         self,
@@ -516,7 +705,9 @@ class GoogleCalendarClient:
             ...     print(f"{slot['start']} - {slot['end']}")
         """
         if not self._service:
-            raise AuthenticationError("Service not initialized")
+            lang = get_language()
+            error_msg = t("google_calendar.authentication.service_not_initialized", lang=lang)
+            raise AuthenticationError(error_msg)
 
         try:
             self._refresh_credentials_if_needed()
@@ -542,11 +733,23 @@ class GoogleCalendarClient:
 
         except HttpError as exc:
             logger.exception(f"HTTP error querying busy times: {exc}")
-            raise GoogleCalendarError(f"Failed to query busy times: {exc}") from exc
+            lang = get_language()
+            error_msg = t(
+                "google_calendar.busy.query_failed",
+                lang=lang,
+                error=str(exc)
+            )
+            raise GoogleCalendarError(error_msg) from exc
 
         except Exception as exc:
             logger.exception(f"Unexpected error querying busy times: {exc}")
-            raise GoogleCalendarError(f"Busy times query failed: {exc}") from exc
+            lang = get_language()
+            error_msg = t(
+                "google_calendar.busy.query_failed",
+                lang=lang,
+                error=str(exc)
+            )
+            raise GoogleCalendarError(error_msg) from exc
 
     def _parse_event(self, event_data: dict[str, Any]) -> CalendarEvent:
         """Parse Google Calendar API event response into CalendarEvent.

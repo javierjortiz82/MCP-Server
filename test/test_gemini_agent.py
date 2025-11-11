@@ -40,7 +40,10 @@ class TestGeminiAgent:
     def test_build_generation_config(self, agent):
         """Test generation configuration building."""
         config = agent._build_generation_config(
-            temperature=0.5, top_k=50, top_p=0.95, max_output_tokens=4096
+            temperature=0.5,
+            top_k=50,
+            top_p=0.95,
+            max_output_tokens=4096,
         )
         assert config.temperature == 0.5
         assert config.top_k == 50
@@ -136,11 +139,11 @@ class TestGeminiAgentIntegration:
             # Mock the aio.models.generate_content method
             mock_response = AsyncMock()
             mock_response.candidates = [
-                Mock(content=Mock(parts=[Mock(text="Test response")]))
+                Mock(content=Mock(parts=[Mock(text="Test response")])),
             ]
 
             mock_client.aio.models.generate_content = AsyncMock(
-                return_value=mock_response
+                return_value=mock_response,
             )
 
             # Initialize and generate
@@ -148,10 +151,13 @@ class TestGeminiAgentIntegration:
 
             # Mock response generation
             with patch.object(
-                agent.client.aio.models, "generate_content", return_value=mock_response
+                agent.client.aio.models,
+                "generate_content",
+                return_value=mock_response,
             ):
                 response = await agent.generate_response(
-                    prompt="Test prompt", system_prompt="Test system"
+                    prompt="Test prompt",
+                    system_prompt="Test system",
                 )
 
             assert response.candidates[0].content.parts[0].text == "Test response"

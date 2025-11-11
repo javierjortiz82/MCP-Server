@@ -13,6 +13,7 @@ from tools import fuzzy_search as fuzzy_search_tool
 from tools import ingest as ingest_tool
 from tools import search as search_tool
 from utils.logger import setup_logging
+from utils.mcp_i18n import mcp_info, mcp_debug, mcp_progress
 
 # Setup logger for tool handlers
 logger = setup_logging("mcp_tool_handlers")
@@ -48,6 +49,27 @@ def get_product_tool_names() -> list[str]:
     ]
 
 
+def get_pageable_tool_names() -> list[str]:
+    """
+    Return list of product tools that return pageable result lists.
+
+    Pageable tools are those that return collections of items (not single items)
+    and support client-side pagination. This enables dynamic tool discovery for
+    pagination features without hardcoding tool lists in client code.
+
+    These tools return results in pageable formats:
+    - {"items": [...], "count": N} - structured format
+    - Direct list - fallback format
+
+    Returns:
+        List of product tool names that support pagination
+    """
+    return [
+        "fuzzy_search_smart",
+        "search_products",
+    ]
+
+
 def register_tools():
     """Register all MCP tools."""
 
@@ -58,18 +80,18 @@ def register_tools():
 
         ** WHEN TO USE THIS TOOL **:
         ✅ Client explicitly mentions a product code/SKU
-        ✅ Query contains patterns like: "SKU XXX", "código YYY", "producto ZZZ-####"
-        ✅ Client asks for "el producto [CODE]"
+        ✅ Query contains patterns like: "SKU XXX", "code YYY", "product ZZZ-####"
+        ✅ Client asks for "the product [CODE]" or "product [CODE]"
 
         ** EXAMPLES OF VALID USE **:
-        - "quiero el TOY-0018"
-        - "busco el producto COMP-0038"
-        - "dame información del SKU HOME-0007"
-        - "producto AUTO-0016"
+        - "I want the TOY-0018"
+        - "looking for product COMP-0038"
+        - "give me info about SKU HOME-0007"
+        - "product AUTO-0016"
 
         ** DON'T USE WHEN **:
-        ❌ Client mentions product name without code ("busco laptop")
-        ❌ Query is conceptual/need-based ("algo para limpiar")
+        ❌ Client mentions product name without code ("looking for laptop")
+        ❌ Query is conceptual/need-based ("something to clean")
         ❌ Query has typos in SKU (use fuzzy_search_smart instead)
 
         ** PERFORMANCE **: Ultra-fast (~9ms average) - Direct database lookup
@@ -84,20 +106,29 @@ def register_tools():
             Returns: {id, sku, name, description, category, brand, tags, color, size, price}
         """
         try:
-            await ctx.info(f"Fetching product by SKU: {sku}")
+            await mcp_info(ctx, "product.fetch.by_sku.info_start", sku=sku)
             logger.debug(f"fetch_by_sku called with sku={sku}")
             result = fetch_tool.fetch_by_sku(sku)
 
             if result:
-                await ctx.info(f"Successfully found product: {result.get('name', 'Unknown')}")
+                await mcp_info(
+                    ctx,
+                    "product.fetch.by_sku.info_found",
+                    product_name=result.get('name', 'Unknown'),
+                )
                 logger.info(f"Product found for SKU {sku}: {result.get('name', 'Unknown')}")
             else:
-                await ctx.info(f"No product found with SKU: {sku}")
+                await mcp_info(ctx, "product.fetch.by_sku.info_not_found", sku=sku)
                 logger.warning(f"No product found for SKU: {sku}")
 
             return result
         except Exception as e:
-            await ctx.debug(f"Error fetching by SKU {sku}: {e}")
+            await mcp_debug(
+                ctx,
+                "product.fetch.by_sku.error_general",
+                sku=sku,
+                error=str(e),
+            )
             logger.error(f"Error in fetch_by_sku for SKU {sku}: {str(e)}", exc_info=True)
             raise
 
@@ -114,17 +145,26 @@ def register_tools():
             Product details if found, None otherwise
         """
         try:
-            await ctx.info(f"Fetching product by ID: {product_id}")
+            await mcp_info(ctx, "product.fetch.by_id.info_start", product_id=product_id)
             result = fetch_tool.fetch_by_id(product_id)
 
             if result:
-                await ctx.info(f"Successfully found product: {result.get('name', 'Unknown')}")
+                await mcp_info(
+                    ctx,
+                    "product.fetch.by_id.info_found",
+                    product_name=result.get('name', 'Unknown'),
+                )
             else:
-                await ctx.info(f"No product found with ID: {product_id}")
+                await mcp_info(ctx, "product.fetch.by_id.info_not_found", product_id=product_id)
 
             return result
         except Exception as e:
-            await ctx.debug(f"Error fetching by ID {product_id}: {e}")
+            await mcp_debug(
+                ctx,
+                "product.fetch.by_id.error_general",
+                product_id=product_id,
+                error=str(e),
+            )
             raise
 
     @mcp.tool()  # type: ignore[union-attr]
@@ -135,21 +175,21 @@ def register_tools():
         ** WHEN TO USE THIS TOOL **:
         ✅ Client describes a NEED or BENEFIT (not a specific product name)
         ✅ Conceptual/abstract queries about PURPOSE or USE CASE
-        ✅ Queries with patterns: "algo para...", "necesito para...", "quiero para..."
+        ✅ Queries with patterns: "something for...", "I need to...", "I want to..."
         ✅ Client describes what they want to ACHIEVE, not what they want to BUY
 
         ** EXAMPLES OF VALID USE **:
-        - "algo para limpiar mi casa automáticamente"
-        - "necesito mejorar mi computadora, quiero más velocidad"
-        - "proteger mi celular de caídas"
-        - "trabajar desde casa profesionalmente"
-        - "hacer ejercicio en casa"
-        - "algo para dormir mejor"
-        - "iluminar mi habitación de forma inteligente"
+        - "something to automatically clean my house"
+        - "I need to improve my computer, I want more speed"
+        - "protect my phone from drops"
+        - "work from home professionally"
+        - "exercise at home"
+        - "something to sleep better"
+        - "light my room intelligently"
 
         ** DON'T USE WHEN **:
-        ❌ Client mentions specific product name ("busco laptop", "quiero teclado")
-        ❌ Client asks about a category ("productos de gaming", "qué hay en hogar")
+        ❌ Client mentions specific product name ("looking for laptop", "want keyboard")
+        ❌ Client asks about a category ("gaming products", "what's in home")
         ❌ Query has typos in product names (use fuzzy_search_smart)
         ❌ Client mentions exact SKU/code (use fetch_by_sku)
 
@@ -157,7 +197,7 @@ def register_tools():
         - Uses Google Gemini embedding-001 to convert query → 1536-dim vector
         - Compares semantic meaning (not exact words) with product embeddings
         - Finds products by WHAT THEY DO, not just what they're called
-        - Example: "limpiar automáticamente" → finds robot vacuums (even without word "robot")
+        - Example: "clean automatically" → finds robot vacuums (even without word "robot")
 
         ** PERFORMANCE **:
         - Average: ~490ms (slower than fuzzy_search_smart due to AI embedding generation)
@@ -175,18 +215,28 @@ def register_tools():
             Each product: {id, sku, name, description, category, brand, tags, color, size, price}
         """
         try:
-            await ctx.info(f"Starting semantic search for: '{query}'")
-            await ctx.report_progress(0, 1, "Initializing semantic search")
+            await mcp_info(ctx, "product.semantic_search.info_start", query=query)
+            await mcp_progress(ctx, 0, 1, "product.semantic_search.progress_init")
 
             results = search_tool.search_products(query, k)
 
-            await ctx.report_progress(1, 1, f"Found {len(results)} results")
-            await ctx.info(f"Semantic search completed: {len(results)} products found")
+            await mcp_progress(
+                ctx,
+                1,
+                1,
+                "product.semantic_search.progress_complete",
+                result_count=len(results),
+            )
+            await mcp_info(
+                ctx,
+                "product.semantic_search.info_completed",
+                result_count=len(results),
+            )
 
             # MCP protocol issue: wrap list in object
             return {"items": results, "count": len(results), "query": query}
         except Exception as e:
-            await ctx.debug(f"Error in semantic search: {e}")
+            await mcp_debug(ctx, "product.semantic_search.error_general", error=str(e))
             raise
 
     @mcp.tool()  # type: ignore[union-attr]
@@ -195,9 +245,9 @@ def register_tools():
         query: str,
         fields: list[str] | None = None,
         limit: int = 20,
-        strict_threshold: float = 0.3,
-        word_threshold: float = 0.4,
-        fallback_threshold: float = 0.2,
+        strict_threshold: float = 0.25,
+        word_threshold: float = 0.35,
+        fallback_threshold: float = 0.15,
         name_weight: float = 2.0,
         description_weight: float = 1.0,
         category_weight: float = 1.5,
@@ -208,46 +258,46 @@ def register_tools():
 
         ** WHEN TO USE THIS TOOL **:
         ✅ Client mentions SPECIFIC PRODUCT NAME (even with typos)
-        ✅ Client asks about PRODUCT CATEGORY ("qué hay en hogar", "productos de gaming")
+        ✅ Client asks about PRODUCT CATEGORY ("what's in home", "gaming products")
         ✅ Query contains TYPOS or SPELLING ERRORS in product names
         ✅ Client wants to browse a category without specific needs
 
         ** EXAMPLES OF VALID USE **:
         Product name searches:
-        - "busco un teclado mecánico"
-        - "necesito auriculares inalámbricos"
-        - "quiero una silla de oficina"
-        - "auriculars de estudio" (with typo 'auriculars')
-        - "roboot aspirador" (with typo 'roboot')
-        - "chaquetta impermeable" (with typo 'chaquetta')
+        - "looking for mechanical keyboard"
+        - "I need wireless headphones"
+        - "I want an office chair"
+        - "studio headphons" (with typo 'headphons')
+        - "robbot vacuum" (with typo 'robbot')
+        - "waterprof jacket" (with typo 'waterprof')
 
         Category searches (NEW - improved from 40% → 100% success rate):
-        - "qué hay en hogar"
-        - "productos de computación"
-        - "tienes cosas de deportes"
-        - "qué vendes de audio"
-        - "muéstrame productos de cocina"
-        - "productos para oficina"
+        - "what's in home"
+        - "computing products"
+        - "do you have sports stuff"
+        - "what do you sell in audio"
+        - "show me kitchen products"
+        - "office products"
 
         ** DON'T USE WHEN **:
-        ❌ Query is conceptual/need-based ("algo para limpiar", "trabajar desde casa")
+        ❌ Query is conceptual/need-based ("something to clean", "work from home")
         ❌ Client mentions exact SKU code (use fetch_by_sku)
         ❌ Query describes benefits/purposes rather than product names (use search_products)
 
         ** HOW IT WORKS - 4-TIER FALLBACK STRATEGY **:
-        1. Tier 1 (strict_threshold=0.3): Standard trigram similarity search
-        2. Tier 2 (word_threshold=0.4): Word similarity for better partial/typo matching (weighted)
-        2.5. Tier 2.5 (word_threshold=0.4): Token-based search (splits query into individual words)
-        3. Tier 3 (fallback_threshold=0.2): Relaxed threshold as final attempt
+        1. Tier 1 (strict_threshold=0.25): Standard trigram similarity search
+        2. Tier 2 (word_threshold=0.35): Word similarity for better partial/typo matching (weighted)
+        2.5. Tier 2.5 (word_threshold=0.35): Token-based search (splits query into individual words)
+        3. Tier 3 (fallback_threshold=0.15): Relaxed threshold as final attempt
 
         Returns results from first successful tier. Each result includes 'search_tier' field
         showing which tier succeeded: 'standard', 'word_similarity', 'token_based', or 'fallback'.
 
         ** TIER 2.5 EXPLANATION (NEW 2025-10-03) **:
         When multi-word queries fail in Tier 2 due to irrelevant terms diluting similarity:
-        - Example: "sartenes electricos" → whole phrase similarity = 0.200 (fails threshold 0.4)
-        - Tier 2.5 splits into tokens: ["sartenes", "electricos"]
-        - Evaluates each token separately: "sartenes" → 0.444 ✅ (passes threshold)
+        - Example: "electric pans" → whole phrase similarity = 0.200 (fails threshold 0.4)
+        - Tier 2.5 splits into tokens: ["electric", "pans"]
+        - Evaluates each token separately: "pans" → 0.444 ✅ (passes threshold)
         - Returns products matching ANY token with highest individual token score
         - This solves the problem where users add modifiers that don't exist in product names
 
@@ -257,8 +307,8 @@ def register_tools():
         - Second token: weight 0.5 (medium priority - typically a modifier)
         - Third+ tokens: weight 0.33, 0.25... (decreasing priority)
         - Formula: position_weight = 1.0 / (position + 1)
-        - Example: "sartenes electricos" → "sartenes" (pos 0, weight 1.0) prioritized over
-          "electricos" (pos 1, weight 0.5), even if "electricos" has higher raw similarity
+        - Example: "electric pans" → "pans" (pos 0, weight 1.0) prioritized over
+          "electric" (pos 1, weight 0.5), even if "electric" has higher raw similarity
         - This prevents irrelevant modifiers from outranking the main search term
 
         ** KEY IMPROVEMENT (2025-10-03) **:
@@ -268,8 +318,8 @@ def register_tools():
 
         ** WEIGHTED SCORING (NEW 2025-10-03) **:
         Tier 2 now uses weighted scoring to prioritize name matches over description matches.
-        This fixes issues like "sartén eléctrico" returning "Escritorio Ajustable" (has "eléctrico"
-        in description) before "Sartén Antiadherente" (has "sartén" in name).
+        This fixes issues like "electric pan" returning "Adjustable Desk" (has "electric"
+        in description) before "Non-Stick Pan" (has "pan" in name).
 
         Default weights:
         - name: 2.0 (highest priority - product name is most important)
@@ -284,8 +334,8 @@ def register_tools():
         - Weighted scoring adds <1ms overhead
 
         ** ACCENT & CASE INSENSITIVE **:
-        - "camara" matches "cámara"
-        - "LAPTOP" matches "laptop"
+        - "camera" matches "cámara" (accent-insensitive)
+        - "LAPTOP" matches "laptop" (case-insensitive)
         - Uses normalize_text() function: unaccent + lowercase
 
         Args:
@@ -296,9 +346,12 @@ def register_tools():
             limit: Maximum results to return (default: 20, max recommended: 50)
                    Balances token efficiency (~800 tokens for 20 products) with UX
                    (enables 5 pages of 4 products). Follows API best practices 2025.
-            strict_threshold: Tier 1 similarity threshold (default: 0.3 = 30% match)
-            word_threshold: Tier 2 word similarity threshold (default: 0.4 = 40% match)
-            fallback_threshold: Tier 3 relaxed threshold (default: 0.2 = 20% match)
+            strict_threshold: Tier 1 similarity threshold (default: 0.25 = 25% match)
+                             Lowered from 0.30 to catch more real-world product names
+            word_threshold: Tier 2 word similarity threshold (default: 0.35 = 35% match)
+                           Lowered from 0.40 for better partial/typo matching
+            fallback_threshold: Tier 3 relaxed threshold (default: 0.15 = 15% match)
+                               Lowered from 0.20 to ensure broad fallback coverage
             name_weight: Weight for name field (default: 2.0 - prioritize name matches)
             description_weight: Weight for description field (default: 1.0)
             category_weight: Weight for category field (default: 1.5)
@@ -310,8 +363,8 @@ def register_tools():
                           max_similarity: float, search_tier: str, [field]_similarity: float}
         """
         try:
-            await ctx.info(f"Starting smart fuzzy search for: '{query}'")
-            await ctx.report_progress(0, 3, "Initializing multi-tier search")
+            await mcp_info(ctx, "product.fuzzy_search.info_start", query=query)
+            await mcp_progress(ctx, 0, 3, "product.fuzzy_search.progress_init")
 
             # Default to searching in name, description, and category
             # This enables category-based searches like "qué hay en hogar"
@@ -331,20 +384,30 @@ def register_tools():
                 brand_weight,
             )
 
-            await ctx.report_progress(3, 3, f"Search completed with {len(results)} results")
+            await mcp_progress(
+                ctx,
+                3,
+                3,
+                "product.fuzzy_search.progress_complete",
+                result_count=len(results),
+            )
 
             # Log search tier information
             if results and len(results) > 0:
                 tier = results[0].get("search_tier", "unknown")
-                await ctx.info(f"Smart fuzzy search succeeded at tier: {tier}")
+                await mcp_info(
+                    ctx,
+                    "product.fuzzy_search.info_succeeded",
+                    tier=tier,
+                )
             else:
-                await ctx.info("Smart fuzzy search found no results")
+                await mcp_info(ctx, "product.fuzzy_search.info_no_results")
 
             # MCP protocol issue: returning a list directly only sends first item
             # Wrap in object to ensure all items are transmitted
             return {"items": results, "count": len(results), "query": query}
         except Exception as e:
-            await ctx.debug(f"Error in smart fuzzy search: {e}")
+            await mcp_debug(ctx, "product.fuzzy_search.error_general", error=str(e))
             raise
 
     @mcp.tool()  # type: ignore[union-attr]
@@ -361,15 +424,15 @@ def register_tools():
         """
         try:
             total_products = len(products)
-            await ctx.info(f"Starting ingestion of {total_products} products")
-            await ctx.report_progress(0, total_products, "Starting product ingestion")
+            await mcp_info(ctx, "product.ingest.info_start", total_products=total_products)
+            await mcp_progress(ctx, 0, total_products, "product.ingest.progress_init")
 
             result = ingest_tool.ingest_products(products)
 
-            await ctx.report_progress(total_products, total_products, "Ingestion completed")
-            await ctx.info(f"Successfully processed {total_products} products")
+            await mcp_progress(ctx, total_products, total_products, "product.ingest.progress_complete")
+            await mcp_info(ctx, "product.ingest.info_completed", total_products=total_products)
 
             return {"processed": result}
         except Exception as e:
-            await ctx.debug(f"Error ingesting products: {e}")
+            await mcp_debug(ctx, "product.ingest.error_general", error=str(e))
             raise

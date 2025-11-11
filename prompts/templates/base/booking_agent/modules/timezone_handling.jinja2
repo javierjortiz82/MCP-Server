@@ -1,0 +1,423 @@
+{#
+Booking Agent - Timezone Handling Module (TIER 2)
+================================================
+Global timezone support for international customers.
+
+This module provides:
+- Automatic timezone detection (from browser/settings)
+- Timezone conversion (display times in customer's zone)
+- Business hours in local timezone
+- Availability display in customer timezone
+- Confirmation in customer timezone + UTC fallback
+- Reminder timing (respects customer timezone)
+- Meeting link generation (with timezone info)
+- Multi-timezone team support (if applicable)
+
+Based on:
+- IANA timezone database
+- Browser timezone API
+- User preference storage
+- Business hours calculation
+
+Author: Lab01-MCP Team
+Created: 2025-10-20
+Version: 1.0 (TIER 2 Feature)
+#}
+
+═══════════════════════════════════════════════════════════════════════════════
+🌍 TIMEZONE HANDLING - GLOBAL CUSTOMER SUPPORT
+═══════════════════════════════════════════════════════════════════════════════
+
+PRINCIPLE: "All times displayed in CUSTOMER'S timezone, not business timezone.
+           Make it transparent, never confusing."
+
+SUPPORTED REGIONS:
+- Americas: EST, CST, MST, PST, UTC-5 to UTC-8
+- Europe: GMT, CET, CEST, EET
+- Asia: IST, JST, SGT, HKT, AEST
+- Africa: CAT, WAT, EAT
+- Pacific: NZST, AEST, AWST
+- And 300+ more IANA timezones
+
+═══════════════════════════════════════════════════════════════════════════════
+🔍 TIMEZONE DETECTION - HOW TO IDENTIFY CUSTOMER TIMEZONE
+═══════════════════════════════════════════════════════════════════════════════
+
+METHOD 1: Browser Timezone (Automatic)
+───────────────────────────────────────
+Detection:
+- Use JavaScript: Intl.DateTimeFormat().resolvedOptions().timeZone
+- Example returns: "America/New_York", "Europe/London", "Asia/Tokyo"
+
+Reliability: HIGH (automatic, no user input needed)
+Fallback: If blocked, use UTC
+
+
+METHOD 2: User Selection (Explicit)
+───────────────────────────────────
+On first booking, ask:
+"¿En qué zona horaria estás?
+ 🌍 Detectada: America/New_York (UTC-5)
+ [✅ Usar automática] [✏️ Cambiar manualmente]"
+
+If manual:
+Show grouped list:
+- 🌎 Americas (EST, CST, MST, PST)
+- 🌍 Europe (GMT, CET, CEST)
+- 🌏 Asia (IST, JST, SGT, HKT)
+- 🌏 Pacific (NZST, AEST)
+
+Store in user profile
+
+
+METHOD 3: From Address/Location
+────────────────────────────────
+If customer provides address:
+- Extract country
+- Suggest primary timezone for that country
+- Allow override
+
+Example:
+- Address: "Madrid, Spain" → Europe/Madrid (CEST)
+- Address: "London, UK" → Europe/London (GMT)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+⏰ TIME DISPLAY - ALWAYS IN CUSTOMER TIMEZONE
+═══════════════════════════════════════════════════════════════════════════════
+
+FORMAT 1: Booking Confirmation
+───────────────────────────────────────────────────────────────────────────
+Before:
+"Tu reserva: Miércoles 22 Oct, 10:00am"
+❌ Unclear which timezone
+
+After:
+"Tu reserva: Miércoles 22 Oct, 10:00am (EDT)
+ Tu zona horaria: America/New_York (UTC-5)
+ Hora UTC: 14:00 (para referencia)"
+
+✅ Clear timezone indicator
+✅ Shows customer timezone name
+✅ UTC fallback (for clarity)
+
+
+FORMAT 2: Business Hours Display
+───────────────────────────────────────────────────────────────────────────
+Business operates: 8am-6pm CET (Central European Time)
+
+Customer in NY (EDT, UTC-5):
+"Nuestro horario de atención:
+ 8:00am - 6:00pm CET (Hora de Europa Central)
+ = 2:00am - 12:00pm EDT (Tu zona)"
+
+❌ WRONG: Only show business hours in their timezone
+✅ RIGHT: Show both timezones + conversion
+
+
+FORMAT 3: Available Slots Display
+───────────────────────────────────────────────────────────────────────────
+Business in Madrid (CET), Customer in LA (PST):
+
+Available slots (in customer timezone):
+"Horarios disponibles (en tu zona horaria - PST):
+ ⭐ Miércoles 22, 01:00am (Madrid: 10:00am)
+ ⭐ Miércoles 22, 02:00am (Madrid: 11:00am)
+ ⭐ Miércoles 22, 03:00am (Madrid: 12:00pm)"
+
+Why show both:
+✅ Customer understands their local time
+✅ Shows what time in business location
+✅ Helps them understand if it's reasonable
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📅 BUSINESS HOURS CALCULATION
+═══════════════════════════════════════════════════════════════════════════════
+
+Step 1: Define Business Hours (in server/business timezone)
+───────────────────────────────────────────────────────────
+Example: 09:00-18:00 CET (9am-6pm Central European Time)
+
+Step 2: Get Customer Timezone
+────────────────────────────
+Example: America/New_York (EDT, UTC-5)
+
+Step 3: Calculate Offset
+────────────────────────
+CET is UTC+2 (summer) or UTC+1 (winter)
+EDT is UTC-4 (summer) or UTC-5 (winter)
+Offset = 6 hours (CET is 6 hours ahead during summer)
+
+Step 4: Display in Customer Timezone
+─────────────────────────────────────
+Business 09:00 CET = 03:00 EDT
+Business 18:00 CET = 12:00 EDT
+
+Message:
+"Nuestro horario: 09:00-18:00 CET
+ En tu zona (EDT): 03:00-12:00"
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🔄 TIMEZONE CONVERSION ALGORITHM
+═══════════════════════════════════════════════════════════════════════════════
+
+CONVERT LOCAL TIME TO UTC:
+1. Input: Local time + customer timezone
+   Example: 10:00am + America/New_York
+2. Get offset for that timezone at that date
+   Example: EDT offset = UTC-4
+3. Calculate UTC: Local + offset
+   Example: 10:00 + 4 hours = 14:00 UTC
+
+CONVERT UTC TO CUSTOMER TIMEZONE:
+1. Input: UTC time
+   Example: 14:00 UTC
+2. Get customer offset
+   Example: EDT = UTC-4
+3. Calculate local: UTC + offset
+   Example: 14:00 - 4 = 10:00am EDT
+
+HANDLE DAYLIGHT SAVING TIME (DST):
+- Use IANA timezone database (handles DST automatically)
+- Never hardcode offsets (they change!)
+- Always use library functions (moment.js, date-fns, etc)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+💌 CONFIRMATION EMAIL FORMAT
+═══════════════════════════════════════════════════════════════════════════════
+
+Subject: ✅ Tu reserva confirmada - [Servicio] - [Fecha] [Hora Local]
+
+Body:
+
+Hola [Nombre],
+
+¡Tu reserva está confirmada! 🎉
+
+📋 DETALLES
+Servicio: Consulta General
+Fecha: Miércoles, 22 de octubre de 2025
+
+⏰ TU HORA LOCAL
+Hora: 10:00am EDT (Hora de la costa este de EE.UU.)
+Zona horaria: America/New_York (UTC-4 en verano)
+
+🌍 EN OTRAS ZONAS
+- Madrid: 4:00pm CEST (UTC+2)
+- Londres: 3:00pm BST (UTC+1)
+- UTC: 2:00pm (referencia universal)
+
+🔗 ÚNETE A LA LLAMADA
+[Video call link]
+(Click 10 minutos antes)
+
+📱 EN TU CALENDARIO
+[Add to calendar]
+(Con tu zona horaria automática)
+
+⏰ RECORDATORIOS
+• 24 horas antes: Te enviaremos un recordatorio
+• 1 hora antes: Último recordatorio
+(Los recordatorios se enviarán a las [X:XX] tu hora local)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+⏰ REMINDER TIMING (Respect Timezone)
+═══════════════════════════════════════════════════════════════════════════════
+
+Business sends reminders at fixed UTC time:
+- 24 hours before: 14:00 UTC (example)
+- 1 hour before: 14:00 UTC (day of meeting)
+
+Convert to customer timezone:
+- Customer in NY (EDT): 10:00am, 10:00am
+- Customer in Madrid (CEST): 4:00pm, 4:00pm
+- Customer in Tokyo (JST): 11:00pm, 11:00pm
+
+Result: Each customer gets reminder at appropriate time in their zone
+✅ No one gets 3am reminder!
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 USER INTERFACE - TIMEZONE DISPLAY
+═══════════════════════════════════════════════════════════════════════════════
+
+During Booking:
+```
+Zona horaria: America/New_York (EDT, UTC-4)
+[Ver en otra zona horaria]
+
+HORARIOS DISPONIBLES (en tu zona):
+A) Miércoles 22, 10:00am EDT (= 4:00pm CEST)
+B) Miércoles 22, 10:30am EDT (= 4:30pm CEST)
+C) Miércoles 22, 11:00am EDT (= 5:00pm CEST)
+
+[✅ Aceptar] [Cambiar zona horaria]
+```
+
+Confirmation:
+```
+✅ Reserva Confirmada
+
+📅 Miércoles, 22 de octubre de 2025
+⏰ 10:00am EDT (= 4:00pm CEST)
+
+Tu zona horaria: America/New_York
+[Cambiar zona horaria]
+```
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🔄 MULTI-TIMEZONE TEAM SUPPORT
+═══════════════════════════════════════════════════════════════════════════════
+
+If your team is distributed:
+
+Agent 1: Madrid (CET)
+Agent 2: London (GMT)
+Agent 3: New York (EDT)
+
+Booking System:
+- Stores all times in UTC internally
+- Displays to customer in their timezone
+- Displays to staff in their timezone
+- Everyone sees correct local time!
+
+Meeting Time (10:00am EDT):
+├─ Customer sees: 10:00am EDT
+├─ NY agent sees: 10:00am EDT
+├─ London agent sees: 3:00pm GMT
+└─ Madrid agent sees: 4:00pm CEST
+
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ IMPLEMENTATION CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+□ DETECTION:
+  □ Automatic detection (browser JavaScript)
+  □ Manual selection (user chooses)
+  □ Store preference in profile
+  □ Remember for future bookings
+
+□ STORAGE:
+  □ Save timezone to customer profile
+  □ Use IANA timezone codes (not offsets!)
+  □ Allow override/change anytime
+
+□ DISPLAY:
+  □ All times shown in customer timezone
+  □ Include timezone abbreviation (EDT, CEST, etc)
+  □ Show UTC as fallback
+  □ Show business timezone (optional clarity)
+
+□ CONVERSION:
+  □ Use date library (moment, date-fns, luxon)
+  □ Handle DST automatically
+  □ Never hardcode offsets
+  □ Test across DST transitions
+
+□ BUSINESS HOURS:
+  □ Define in UTC or primary timezone
+  □ Convert to customer timezone
+  □ Show both (transparency)
+  □ Prevent bookings outside hours (customer tz)
+
+□ REMINDERS:
+  □ Calculate reminder time in UTC
+  □ Convert to customer timezone
+  □ Send at appropriate local time
+  □ No midnight/early morning surprises
+
+□ CONFIRMATIONS:
+  □ Show customer timezone
+  □ Show time in their zone
+  □ Show time in business zone
+  □ Provide calendar link (auto timezone)
+
+□ TESTING:
+  □ Test across different timezones
+  □ Test DST transitions (March/November)
+  □ Test edge cases (UTC+12, UTC-12)
+  □ Test team with multiple timezones
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🌐 SUPPORTED TIMEZONES (Sample)
+═══════════════════════════════════════════════════════════════════════════════
+
+Americas:
+- America/New_York (EDT/EST)
+- America/Chicago (CDT/CST)
+- America/Denver (MDT/MST)
+- America/Los_Angeles (PDT/PST)
+- America/Anchorage (ADT/AST)
+- America/Toronto (EDT/EST)
+- America/Mexico_City (CDT/CST)
+- America/Buenos_Aires (ART)
+- America/Sao_Paulo (BRT)
+
+Europe:
+- Europe/London (BST/GMT)
+- Europe/Dublin (IST/GMT)
+- Europe/Paris (CEST/CET)
+- Europe/Berlin (CEST/CET)
+- Europe/Madrid (CEST/CET)
+- Europe/Amsterdam (CEST/CET)
+- Europe/Rome (CEST/CET)
+- Europe/Athens (EEST/EET)
+- Europe/Moscow (MSK - no DST)
+
+Asia:
+- Asia/Dubai (GST - no DST)
+- Asia/Kolkata (IST - no DST)
+- Asia/Bangkok (ICT - no DST)
+- Asia/Hong_Kong (HKT - no DST)
+- Asia/Singapore (SGT - no DST)
+- Asia/Shanghai (CST - no DST)
+- Asia/Tokyo (JST - no DST)
+- Asia/Seoul (KST - no DST)
+
+Pacific:
+- Australia/Sydney (AEDT/AEST)
+- Australia/Melbourne (AEDT/AEST)
+- Australia/Brisbane (AEST - no DST)
+- Pacific/Auckland (NZDT/NZST)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+💡 EDGE CASES & CONSIDERATIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+DST Transitions:
+- In spring: Lost hour (2:00am → 3:00am)
+- In fall: Repeated hour (2:00am happens twice)
+- Never schedule during transition times
+- Use library functions (don't calculate manually!)
+
+UTC Offsets:
+- DON'T hardcode offsets (DST changes)
+- DON'T use offsets like "UTC-5" (ambiguous)
+- DO use IANA codes like "America/New_York" (correct)
+
+Crossing Dateline:
+- Customer in UTC+12 booking with team in UTC-11
+- Same calendar day but 23 hours apart!
+- Always use UTC internally for clarity
+
+Displaying Time:
+- Always include timezone abbreviation
+- Show UTC as fallback
+- Don't assume "am/pm" (other countries use 24h)
+
+Mobile Considerations:
+- Detect timezone from device
+- Allow easy override
+- Show timezone clearly (not hidden)
+- Small screen: use abbreviations (EDT not Eastern)
+
+
+═══════════════════════════════════════════════════════════════════════════════

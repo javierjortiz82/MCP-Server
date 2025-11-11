@@ -114,17 +114,13 @@ class ResponseValidator:
                                     valid_skus.add(product["sku"])
 
                             # Structure: {"items": [{"sku": "...", ...}, ...]}
-                            if "items" in response_data and isinstance(
-                                response_data["items"], list
-                            ):
+                            if "items" in response_data and isinstance(response_data["items"], list):
                                 for item in response_data["items"]:
                                     if isinstance(item, dict) and "sku" in item:
                                         valid_skus.add(item["sku"])
 
                             # Structure: {"products": [{"sku": "...", ...}, ...]}
-                            if "products" in response_data and isinstance(
-                                response_data["products"], list
-                            ):
+                            if "products" in response_data and isinstance(response_data["products"], list):
                                 for item in response_data["products"]:
                                     if isinstance(item, dict) and "sku" in item:
                                         valid_skus.add(item["sku"])
@@ -184,39 +180,29 @@ class ResponseValidator:
         self.conversation_history.append(strict_instruction)
 
         # Regenerate
-        response = await self.gemini_client.generate_with_retry(
-            self.conversation_history
-        )
+        response = await self.gemini_client.generate_with_retry(self.conversation_history)
 
         # Extract text
         if hasattr(response, "candidates") and response.candidates:
             # Defensive check: content can be None
             content = response.candidates[0].content
             if content is None or not hasattr(content, "parts"):
-                logger.warning(
-                    "Response content is None or missing parts after regeneration"
-                )
+                logger.warning("Response content is None or missing parts after regeneration")
                 return (
                     "No pude generar una respuesta válida después de detectar un error. "
                     "Por favor, intenta reformular tu consulta."
                 )
 
             parts = content.parts
-            text_parts = [
-                part.text for part in parts if hasattr(part, "text") and part.text
-            ]
+            text_parts = [part.text for part in parts if hasattr(part, "text") and part.text]
             if text_parts:
                 regenerated_text = " ".join(text_parts)
 
                 # Validate again (ONE retry only to prevent infinite loop)
-                final_validated = self.validate_response_skus(
-                    regenerated_text, user_query
-                )
+                final_validated = self.validate_response_skus(regenerated_text, user_query)
                 if final_validated is None:
                     # Still hallucinating after retry - force safe fallback
-                    logger.error(
-                        "🚫 Model still hallucinating after retry - using fallback"
-                    )
+                    logger.error("🚫 Model still hallucinating after retry - using fallback")
                     return (
                         "Encontré algunos productos, pero estoy teniendo dificultades técnicas para "
                         "mostrártelos correctamente. Por favor, reformula tu búsqueda o contacta con soporte."

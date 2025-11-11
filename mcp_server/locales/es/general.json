@@ -1,0 +1,20 @@
+{
+  "greeting": "¡Hola! Bienvenido a nuestro servicio. ¿Cómo puedo ayudarte?",
+  "help": "Puedo ayudarte con:",
+  "business_hours": "Nuestros horarios de atención son:",
+  "about": "Somos una empresa dedicada a ofrecerte los mejores servicios.",
+  "contact": "Para contactarnos, puedes:",
+  "email_contact": "Envíanos un correo a {email}",
+  "phone_contact": "Llámanos al {phone}",
+  "faq": "Preguntas Frecuentes",
+  "general_info": "Información General",
+  "services": "Servicios",
+  "booking": "Agendar Cita",
+  "products": "Productos",
+  "pricing": "Precios",
+  "support": "Soporte",
+  "error": "Lo siento, no entendí bien. ¿Podrías reformular tu pregunta?",
+  "not_available": "Esa funcionalidad no está disponible en este momento.",
+  "thank_you": "¡Gracias por tu interés!",
+  "goodbye": "¡Hasta luego! Esperamos verte pronto."
+}

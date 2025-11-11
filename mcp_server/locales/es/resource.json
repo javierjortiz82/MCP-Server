@@ -1,0 +1,35 @@
+{
+  "product": {
+    "sku": {
+      "header": "Información del Producto",
+      "name": "Nombre: {name}",
+      "sku": "SKU: {sku}",
+      "description": "Descripción: {description}",
+      "category": "Categoría: {category}",
+      "brand": "Marca: {brand}",
+      "price": "Precio: ${price}",
+      "not_found": "No se encontró producto con SKU '{sku}'."
+    }
+  },
+  "database": {
+    "stats": {
+      "header": "Estadísticas de la Base de Datos",
+      "total_products": "Total de Productos: {total_products}",
+      "categories": "Categorías: {categories}",
+      "brands": "Marcas: {brands}",
+      "avg_price": "Precio Promedio: ${avg_price}",
+      "schema": "Esquema: {schema}",
+      "unable_to_retrieve": "No se pudieron recuperar las estadísticas de la base de datos."
+    }
+  },
+  "tools": {
+    "products": {
+      "header": "Herramientas Disponibles de Búsqueda de Productos",
+      "error": "Error al recuperar nombres de herramientas de producto: {error}"
+    },
+    "bookings": {
+      "header": "Herramientas Disponibles de Gestión de Reservas",
+      "error": "Error al recuperar nombres de herramientas de reservas: {error}"
+    }
+  }
+}

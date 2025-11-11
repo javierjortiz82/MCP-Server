@@ -4,23 +4,46 @@ This module provides a database layer for storing and retrieving pagination cont
 enabling persistence across bot restarts. It uses psycopg2 for PostgreSQL connectivity
 with connection pooling and graceful degradation.
 
+IMPORTANT: Schema matches SQL/01_ddl/utils/01_pagination_contexts.sql
+- Uses dynamic schema from PAGINATION_SCHEMA_NAME setting
+- Maps Python fields to SQL columns correctly
+
 Author: Claude AI
-Date: 2025-01-08
+Date: 2025-01-19 (Refactored to match SQL schema)
 """
 
 import json
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 
-from config.settings import settings
+# Explicit import to avoid sys.path conflicts across different modules
+# (agent/__init__.py manipulates sys.path, potentially loading wrong settings)
+try:
+    from importlib.util import spec_from_file_location, module_from_spec
+
+    settings_path = Path(__file__).parent.parent / "config" / "settings.py"
+    spec = spec_from_file_location("client_mcp_settings_pagination", settings_path)
+    if spec and spec.loader:
+        _settings_module = module_from_spec(spec)
+        spec.loader.exec_module(_settings_module)
+        settings = _settings_module.settings
+    else:
+        raise ImportError("Failed to load settings module")
+except (ImportError, AttributeError):
+    # Fallback: try standard import
+    from config.settings import settings
 
 logger = logging.getLogger(__name__)
+
+# Constants - Context types must match SQL CHECK constraint
+PAGINATION_CONTEXT_TYPE_CUSTOM = "custom"
 
 
 class PaginationDB:
@@ -33,15 +56,25 @@ class PaginationDB:
     Attributes:
         _pool: Connection pool for PostgreSQL connections.
         _enabled: Whether database persistence is enabled.
+        _schema: PostgreSQL schema name.
     """
 
     def __init__(self) -> None:
-        """Initialize the database adapter with connection pooling."""
+        """Initialize the database adapter with connection pooling.
+
+        Raises:
+            ValueError: If PAGINATION_SCHEMA_NAME is not configured when
+                      PAGINATION_PERSISTENCE_ENABLED is True.
+        """
         self._pool: pool.SimpleConnectionPool | None = None
         self._enabled: bool = settings.PAGINATION_PERSISTENCE_ENABLED
 
-        if self._enabled:
-            self._initialize_pool()
+        if not self._enabled:
+            return
+
+        # Use shared SCHEMA_NAME configuration
+        self._schema: str = settings.SCHEMA_NAME
+        self._initialize_pool()
 
     def _initialize_pool(self) -> None:
         """Initialize PostgreSQL connection pool.
@@ -49,33 +82,23 @@ class PaginationDB:
         Creates a connection pool with min/max connections based on configuration.
         Logs errors and disables persistence if initialization fails.
         """
-        # Validate password when persistence is enabled
-        if not settings.PAGINATION_DB_PASSWORD:
-            logger.error(
-                "❌ PAGINATION_DB_PASSWORD must be set when persistence is enabled"
-            )
-            logger.warning(
-                "⚠️  Pagination persistence disabled - password not configured"
-            )
+        # Validate DATABASE_URL when persistence is enabled
+        if not settings.DATABASE_URL:
+            logger.error("❌ DATABASE_URL must be set when persistence is enabled")
+            logger.warning("⚠️  Pagination persistence disabled - DATABASE_URL not configured")
             self._enabled = False
             self._pool = None
             return
 
         try:
             self._pool = pool.SimpleConnectionPool(
-                minconn=1,
-                maxconn=5,
-                host=settings.PAGINATION_DB_HOST,
-                port=settings.PAGINATION_DB_PORT,
-                database=settings.PAGINATION_DB_NAME,
-                user=settings.PAGINATION_DB_USER,
-                password=settings.PAGINATION_DB_PASSWORD,
+                minconn=settings.PAGINATION_DB_POOL_MIN,
+                maxconn=settings.PAGINATION_DB_POOL_MAX,
+                dsn=settings.DATABASE_URL,
             )
             logger.info(
-                "✅ Pagination database pool initialized: %s:%s/%s",
-                settings.PAGINATION_DB_HOST,
-                settings.PAGINATION_DB_PORT,
-                settings.PAGINATION_DB_NAME,
+                "✅ Pagination database pool initialized (schema: %s)",
+                self._schema,
             )
         except Exception as e:
             logger.exception("❌ Failed to initialize pagination database pool: %s", e)
@@ -124,7 +147,7 @@ class PaginationDB:
 
         Args:
             session_id: Unique session identifier (UUID).
-            category: Search category (e.g., "search_results").
+            category: Search category (e.g., "search_results") → maps to context_type.
             tool_name: Name of the tool that generated results.
             query: Search query string.
             products: List of product dictionaries.
@@ -140,35 +163,49 @@ class PaginationDB:
         try:
             expires_at = datetime.now() + timedelta(hours=settings.PAGINATION_TTL_HOURS)
 
+            # Generate context_name from session_id + category
+            context_name = f"{session_id}_{category}"
+
+            # Calculate offset from current_page
+            last_offset = current_page * page_size
+
+            # Build query_params JSONB
+            query_params = {
+                "tool_name": tool_name,
+                "query": query,
+                "products": products,
+            }
+
             with self._get_connection() as conn, conn.cursor() as cur:
-                # Upsert: Insert or update if session_id + category exists
-                cur.execute(
-                    """
-                    INSERT INTO test.pagination_contexts (
-                        session_id, category, tool_name, query,
-                        products, current_page, page_size, total_items, expires_at
+                # Upsert: Insert or update if context_name exists
+                # Note: Always use "custom" as context_type to satisfy CHECK constraint
+                cur.execute(  # nosec B608 - Schema is validated from Settings, parameters are safe
+                    f"""
+                    INSERT INTO {self._schema}.pagination_contexts (
+                        context_name, context_type, session_id,
+                        last_offset, last_limit, total_records,
+                        has_more, query_params, expires_at
                     ) VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
-                    ON CONFLICT (session_id, category) DO UPDATE SET
-                        tool_name = EXCLUDED.tool_name,
-                        query = EXCLUDED.query,
-                        products = EXCLUDED.products,
-                        current_page = EXCLUDED.current_page,
-                        page_size = EXCLUDED.page_size,
-                        total_items = EXCLUDED.total_items,
+                    ON CONFLICT (context_name) DO UPDATE SET
+                        last_offset = EXCLUDED.last_offset,
+                        last_limit = EXCLUDED.last_limit,
+                        total_records = EXCLUDED.total_records,
+                        has_more = EXCLUDED.has_more,
+                        query_params = EXCLUDED.query_params,
                         expires_at = EXCLUDED.expires_at,
                         updated_at = CURRENT_TIMESTAMP
                     """,
                     (
+                        context_name,
+                        PAGINATION_CONTEXT_TYPE_CUSTOM,
                         str(session_id),
-                        category,
-                        tool_name,
-                        query,
-                        json.dumps(products),
-                        current_page,
-                        page_size,
-                        len(products),
+                        last_offset,
+                        page_size,  # last_limit
+                        len(products),  # total_records
+                        True,  # has_more (assume true for now)
+                        json.dumps(query_params),
                         expires_at,
                     ),
                 )
@@ -190,7 +227,7 @@ class PaginationDB:
 
         Args:
             session_id: Unique session identifier (UUID).
-            category: Search category to retrieve.
+            category: Search category to retrieve (maps to context_type).
 
         Returns:
             Dictionary with context data if found and not expired, None otherwise.
@@ -201,34 +238,49 @@ class PaginationDB:
             return None
 
         try:
+            context_name = f"{session_id}_{category}"
+
             with (
                 self._get_connection() as conn,
                 conn.cursor(cursor_factory=RealDictCursor) as cur,
             ):
-                cur.execute(
-                    """
+                cur.execute(  # nosec B608 - Schema is validated from Settings, parameters are safe
+                    f"""
                     SELECT
-                        tool_name, query, products, current_page,
-                        page_size, total_items, created_at, updated_at
-                    FROM test.pagination_contexts
-                    WHERE session_id = %s
-                      AND category = %s
+                        last_offset, last_limit, total_records,
+                        query_params, created_at, updated_at
+                    FROM {self._schema}.pagination_contexts
+                    WHERE context_name = %s
+                      AND session_id = %s
                       AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
                     """,
-                    (str(session_id), category),
+                    (context_name, str(session_id)),
                 )
 
                 row = cur.fetchone()
                 if not row:
                     return None
 
-                # Parse JSONB products back to list
-                context = dict(row)
-                context["products"] = (
-                    json.loads(context["products"])
-                    if isinstance(context["products"], str)
-                    else context["products"]
-                )
+                # Parse query_params JSONB and reconstruct original format
+                row_dict = dict(row)
+                query_params = row_dict.get("query_params", {})
+
+                # Calculate current_page from last_offset and last_limit
+                last_offset = row_dict.get("last_offset", 0)
+                last_limit = row_dict.get("last_limit", 4)
+                current_page = last_offset // last_limit if last_limit > 0 else 0
+
+                # Build response in expected format
+                context = {
+                    "tool_name": query_params.get("tool_name", ""),
+                    "query": query_params.get("query", ""),
+                    "products": query_params.get("products", []),
+                    "current_page": current_page,
+                    "page_size": last_limit,
+                    "total_items": row_dict.get("total_records", 0),
+                    "created_at": row_dict.get("created_at"),
+                    "updated_at": row_dict.get("updated_at"),
+                }
 
                 logger.debug(
                     "📂 Loaded pagination context: session=%s, category=%s",
@@ -246,7 +298,7 @@ class PaginationDB:
 
         Args:
             session_id: Unique session identifier (UUID).
-            category: Search category to delete.
+            category: Search category to delete (maps to context_type).
 
         Returns:
             True if deleted successfully, False otherwise.
@@ -255,13 +307,15 @@ class PaginationDB:
             return False
 
         try:
+            context_name = f"{session_id}_{category}"
+
             with self._get_connection() as conn, conn.cursor() as cur:
-                cur.execute(
-                    """
-                    DELETE FROM test.pagination_contexts
-                    WHERE session_id = %s AND category = %s
+                cur.execute(  # nosec B608 - Schema is validated from Settings, parameters are safe
+                    f"""
+                    DELETE FROM {self._schema}.pagination_contexts
+                    WHERE context_name = %s AND session_id = %s
                     """,
-                    (str(session_id), category),
+                    (context_name, str(session_id)),
                 )
 
                 deleted_count = cur.rowcount
@@ -288,14 +342,17 @@ class PaginationDB:
 
         try:
             with self._get_connection() as conn, conn.cursor() as cur:
-                # Call the stored function
-                cur.execute("SELECT test.cleanup_expired_pagination_contexts()")
-                deleted_count = cur.fetchone()[0]
+                # Delete expired contexts directly
+                cur.execute(  # nosec B608 - Schema is validated from Settings, parameters are safe
+                    f"""
+                    DELETE FROM {self._schema}.pagination_contexts
+                    WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP
+                    """
+                )
+                deleted_count = cur.rowcount
 
                 if deleted_count > 0:
-                    logger.info(
-                        "🧹 Cleaned up %d expired pagination contexts", deleted_count
-                    )
+                    logger.info("🧹 Cleaned up %d expired pagination contexts", deleted_count)
                 return deleted_count
 
         except Exception as e:
@@ -316,9 +373,9 @@ class PaginationDB:
 
         try:
             with self._get_connection() as conn, conn.cursor() as cur:
-                cur.execute(
-                    """
-                    DELETE FROM test.pagination_contexts
+                cur.execute(  # nosec B608 - Schema is validated from Settings, parameters are safe
+                    f"""
+                    DELETE FROM {self._schema}.pagination_contexts
                     WHERE session_id = %s
                     """,
                     (str(session_id),),

@@ -1,0 +1,17 @@
+{
+  "errors": {
+    "min_similarity_invalid": "min_similarity debe estar entre 0.0 y 1.0, se proporcionó {min_similarity}",
+    "limit_invalid": "limit debe ser positivo, se proporcionó {limit}",
+    "invalid_fields": "Campos inválidos: {invalid_fields}. Campos válidos: {valid_fields}"
+  },
+  "validation": {
+    "min_similarity_required": "Se debe especificar el umbral de similitud",
+    "search_query_required": "La consulta de búsqueda no puede estar vacía",
+    "collection_required": "El nombre de la colección es obligatorio"
+  },
+  "messages": {
+    "searching": "Buscando con coincidencia difusa...",
+    "no_results": "No se encontraron resultados que coincidan con tus criterios",
+    "search_failed": "La operación de búsqueda falló: {error}"
+  }
+}

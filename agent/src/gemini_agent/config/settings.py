@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     # Pydantic Configuration
     # ============================================================================
     model_config = SettingsConfigDict(
-        # Path to .env file (at project root: agent/.env)
+        # Path to .env file (agent service configuration)
+        # Path: settings.py -> config -> gemini_agent -> src -> agent -> .env
         env_file=str(Path(__file__).parent.parent.parent.parent / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,  # Allow GOOGLE_API_KEY or google_api_key
@@ -82,7 +83,7 @@ class Settings(BaseSettings):
     )
 
     AGENT_HOST: str = Field(
-        default="0.0.0.0",
+        default="0.0.0.0",  # nosec B104 - Intentional for Docker networking
         description="Agent service host (0.0.0.0 for Docker, localhost for local)",
     )
 
@@ -134,6 +135,36 @@ class Settings(BaseSettings):
     ENABLE_RATE_LIMITING: bool = Field(
         default=False,
         description="Enable request rate limiting",
+    )
+
+    # ============================================================================
+    # Retry Configuration
+    # ============================================================================
+    RETRY_MAX_ATTEMPTS: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum retry attempts for API calls",
+    )
+
+    RETRY_INITIAL_DELAY_MS: int = Field(
+        default=1000,
+        ge=100,
+        le=60000,
+        description="Initial retry delay in milliseconds",
+    )
+
+    # ============================================================================
+    # Error Pattern Configuration
+    # ============================================================================
+    CACHE_ERROR_PATTERNS: str = Field(
+        default="CacheError,RESOURCE_EXHAUSTED,cache",
+        description="Cache error patterns to detect (comma-separated)",
+    )
+
+    RATE_LIMIT_ERROR_PATTERNS: str = Field(
+        default="429,RATE_LIMIT_EXCEEDED,quota",
+        description="Rate limit error patterns to detect (comma-separated)",
     )
 
     # ============================================================================

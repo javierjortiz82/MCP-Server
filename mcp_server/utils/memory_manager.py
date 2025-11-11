@@ -52,7 +52,7 @@ class ConversationMessage(BaseModel):
     agent_name: str | None = Field(default=None, description="Agent that generated response")
     intent: str | None = Field(default=None, description="'sales', 'booking', or 'general'")
     message_text: str = Field(description="Message content")
-    tool_calls: dict[str, Any] | None = Field(default=None, description="MCP tools used")
+    tool_calls: list[dict[str, Any]] | None = Field(default=None, description="MCP tools used (JSONB array)")
     response_time_ms: int | None = Field(default=None, description="Response latency")
     token_count: int | None = Field(default=None, description="Token count")
 
@@ -236,6 +236,68 @@ class MemoryManager:
         execute(query, (agent_name, session_id))
         logger.debug(f"Session {session_id[:8]} agent updated to: {agent_name}")
 
+    def save_session_language(self, session_id: str, language: str) -> None:
+        """Save user language to session metadata.
+
+        Stores the detected language (es or en) in the session's metadata JSONB field
+        for persistence across conversation turns and sessions.
+
+        Args:
+            session_id: Session UUID
+            language: Language code ('es' or 'en')
+
+        Example:
+            >>> memory.save_session_language(session_id, "es")
+        """
+        query = f"""
+        UPDATE {self.schema}.conversation_sessions
+        SET metadata = jsonb_set(
+            metadata,
+            '{{language}}'::text[],
+            to_jsonb(%s::text),
+            true
+        ),
+        updated_at = NOW()
+        WHERE id = %s
+        """
+        try:
+            execute(query, (language, session_id))
+            logger.debug(f"Language '{language}' saved to session {session_id[:8]}")
+        except Exception as e:
+            logger.error(f"Failed to save language to session: {e}")
+            raise
+
+    def get_session_language(self, session_id: str) -> str | None:
+        """Retrieve user language from session metadata.
+
+        Retrieves the stored language (es or en) from the session's metadata JSONB field.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            str: Language code ('es' or 'en'), or None if not set
+
+        Example:
+            >>> language = memory.get_session_language(session_id)
+            >>> print(language)  # 'es'
+        """
+        query = f"""
+        SELECT metadata->>'language' as language
+        FROM {self.schema}.conversation_sessions
+        WHERE id = %s
+        """
+        try:
+            result = fetchone(query, (session_id,))
+            if result and result.get("language"):
+                language = result["language"]
+                logger.debug(f"Retrieved language '{language}' from session {session_id[:8]}")
+                return language
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to retrieve language from session: {e}")
+            return None
+
     # ========================================================================
     # Message Management
     # ========================================================================
@@ -305,15 +367,16 @@ class MemoryManager:
         )
 
         try:
-            result = fetchone(query, params)
+            logger.info(f"💾 EXECUTING INSERT: schema={self.schema}, session_id={session_id[:8]}, role={role}, agent={agent_name}")
+            result = fetchone(query, params, commit=True)  # ✅ COMMIT REQUIRED for INSERT
             message_id = result["id"] if result else -1
-            logger.debug(
-                f"Message saved (id={message_id}, role={role}, "
-                f"agent={agent_name}, len={len(message_text)})"
+            logger.info(
+                f"✅ Message saved to DB (id={message_id}, role={role}, "
+                f"agent={agent_name}, len={len(message_text)}, response_time={response_time_ms}ms)"
             )
             return message_id
         except Exception as e:
-            logger.error(f"Failed to save message: {e}")
+            logger.error(f"❌ Failed to save message to DB: {e}", exc_info=True)
             raise
 
     def get_recent_messages(
@@ -1036,3 +1099,61 @@ class MemoryManager:
         except Exception as e:
             logger.error(f"Failed to get session retention stats: {e}")
             return {}
+
+    # ========================================================================
+    # Language Preference Management (Simple i18n Support)
+    # ========================================================================
+
+    def set_user_preferred_language(
+        self,
+        customer_email: str,
+        language_code: str,
+    ) -> int:
+        """Store user's preferred language as high-priority memory block.
+
+        Args:
+            customer_email: Customer email
+            language_code: Language code ("es" or "en")
+
+        Returns:
+            int: Memory block ID
+        """
+        if language_code not in ("es", "en"):
+            logger.warning(f"Invalid language code: {language_code}")
+            return -1
+
+        return self.save_user_memory_block(
+            customer_email=customer_email,
+            block_label="preferred_language",
+            block_value=language_code,
+            priority=10,  # Highest priority
+            agent_scope="shared",
+            ttl_days=365,  # Long TTL
+        )
+
+    def get_user_preferred_language(
+        self,
+        customer_email: str,
+        default_language: str = "es",
+    ) -> str:
+        """Retrieve user's preferred language.
+
+        Args:
+            customer_email: Customer email
+            default_language: Default if not found
+
+        Returns:
+            str: Language code ("es" or "en")
+        """
+        try:
+            blocks = self.get_user_memory_blocks(customer_email, agent_scope="shared")
+            for block in blocks:
+                if block.get("block_label") == "preferred_language":
+                    language = block.get("block_value")
+                    if language in ("es", "en"):
+                        return language
+            return default_language
+        except Exception as exc:
+            logger.debug(f"Failed to get language preference: {exc}")
+            return default_language
+

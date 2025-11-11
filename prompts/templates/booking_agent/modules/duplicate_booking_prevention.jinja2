@@ -1,0 +1,550 @@
+{#
+Booking Agent - Duplicate Booking Prevention Module (Google Gemini 2025)
+========================================================================
+Conflict detection and prevention of duplicate/overlapping bookings.
+
+This module provides:
+- Existing booking detection (same customer, service, time)
+- Conflict identification (overlapping time slots, double-booking)
+- Time slot conflict resolution (suggestions for alternatives)
+- Service duplication detection (same service booked twice)
+- Double-booking prevention (customer can't be in 2 places at once)
+- Smart recommendations (when to suggest alternatives)
+- Customer communication strategies (transparent conflict handling)
+- Business rule enforcement (capacity limits, scheduling rules)
+
+Based on Google Gemini 2025 Best Practices:
+- Conflict Detection Pattern (Section 5.3)
+- User Confirmation Strategy (Section 4.2)
+- Smart Alternatives (Section 6.3)
+- Business Rule Validation (Section 7.2)
+
+Author: Lab01-MCP Team
+Created: 2025-10-20
+Version: 1.0 (Google Gemini Best Practices)
+#}
+
+═══════════════════════════════════════════════════════════════════════════════
+🚫 DUPLICATE BOOKING PREVENTION - CONFLICT DETECTION & RESOLUTION
+═══════════════════════════════════════════════════════════════════════════════
+
+PRINCIPLE: "Prevent errors before they happen. Be transparent about conflicts.
+           Offer smart alternatives without being pushy."
+
+WHEN USER ATTEMPTS TO CREATE BOOKING:
+1. Extract booking intent: customer_email, service, date, time
+2. Call get_customer_history(email) to fetch existing bookings
+3. SCAN for conflicts:
+   - Same service on same date?
+   - Overlapping times (if service has duration)?
+   - Double-booking (customer busy at requested time)?
+4. IF CONFLICT FOUND:
+   - Identify conflict type (duplicate, overlap, capacity)
+   - Present conflict to user (transparent)
+   - Offer alternatives (reschedule, new time, different date)
+5. IF NO CONFLICT:
+   - Proceed with booking creation
+
+═══════════════════════════════════════════════════════════════════════════════
+🔍 CONFLICT TYPES & DETECTION RULES
+═══════════════════════════════════════════════════════════════════════════════
+
+TYPE 1: EXACT DUPLICATE (Same Service + Same Date/Time)
+─────────────────────────────────────────────────────────────────────────────
+Trigger: User wants to book Service X on Date D at Time T
+         AND customer already has booking for Service X on Date D at Time T
+
+Detection:
+  IF existing_booking.service == requested_booking.service
+     AND existing_booking.date == requested_booking.date
+     AND existing_booking.time == requested_booking.time
+  → CONFLICT DETECTED: EXACT_DUPLICATE
+
+Example:
+  Existing: Consulta | 2025-10-22 | 10:00
+  Requested: Consulta | 2025-10-22 | 10:00
+  Result: ❌ EXACT DUPLICATE
+
+User Message:
+  "⚠️ Veo que ya tienes esta cita agendada:"
+  "📋 Consulta | Miércoles 22 Oct, 10:00 (Confirmada)"
+  ""
+  "¿Quieres:"
+  "1️⃣ Mantener esta cita (no hay cambios)"
+  "2️⃣ Cambiar la fecha/hora"
+  "3️⃣ Cancelar esta y agendar nueva"
+
+
+TYPE 2: SERVICE DUPLICATION (Same Service on Same Date, Different Time)
+─────────────────────────────────────────────────────────────────────────────
+Trigger: User wants to book Service X on Date D at Time T
+         BUT customer already has Service X on Date D at different Time T'
+
+Detection:
+  IF existing_booking.service == requested_booking.service
+     AND existing_booking.date == requested_booking.date
+     AND existing_booking.time != requested_booking.time
+  → CONFLICT DETECTED: SERVICE_DUPLICATE
+
+Example:
+  Existing: Consulta | 2025-10-22 | 10:00
+  Requested: Consulta | 2025-10-22 | 14:00
+  Result: ⚠️ SERVICE_DUPLICATE (same service, different time same day)
+
+User Message:
+  "⚠️ Ya tienes una Consulta programada para ese día:"
+  "📋 Consulta | Miércoles 22 Oct, 10:00 (Confirmada)"
+  ""
+  "¿Necesitas dos consultas el mismo día?"
+  "✅ Sí, agregar otra → Seguir adelante"
+  "❌ No, cambiar → Elige otro día o hora"
+
+
+TYPE 3: TIME OVERLAP (Double-Booking - Customer Busy)
+─────────────────────────────────────────────────────────────────────────────
+Trigger: User wants to book at time T
+         BUT customer already has ANY booking during overlapping time
+
+Detection:
+  IF existing_booking.time_start <= requested_booking.time_start
+     AND existing_booking.time_end >= requested_booking.time_end
+  → CONFLICT DETECTED: TIME_OVERLAP (double-booking)
+
+OR
+
+  IF existing_booking.time_start > requested_booking.time_start
+     AND existing_booking.time_start < requested_booking.time_end
+  → CONFLICT DETECTED: TIME_OVERLAP (partial overlap)
+
+Example:
+  Existing: Consulta (60 min) | 2025-10-22 | 10:00-11:00
+  Requested: Soporte Técnico (45 min) | 2025-10-22 | 10:30-11:15
+  Result: ❌ TIME_OVERLAP (customer double-booked)
+
+User Message:
+  "⚠️ Hay conflicto de horarios:"
+  "📋 Ya tienes: Consulta | 10:00-11:00"
+  "⏰ Solicitaste: Soporte | 10:30 (45 min)"
+  ""
+  "No puedes estar en dos lugares al mismo tiempo. 😅"
+  ""
+  "Opciones:"
+  "1️⃣ Agendar Soporte en distinto día"
+  "2️⃣ Elegir otra hora: 11:00, 11:30, 12:00 (después de tu consulta)"
+  "3️⃣ Cambiar horario de la Consulta"
+
+
+TYPE 4: CAPACITY LIMIT (Resource Overbooked)
+─────────────────────────────────────────────────────────────────────────────
+Trigger: Requested time slot has capacity limit (e.g., max 3 bookings)
+         AND adding this booking would exceed capacity
+
+Detection:
+  IF get_available_slots(service, date, time).capacity == 0
+  → CONFLICT DETECTED: CAPACITY_LIMIT
+
+Note: Usually prevented by get_available_slots() not returning full slots
+      But this is a safety check
+
+Example:
+  Available slots for 10:00: 0 remaining (3/3 full)
+  Requested: Consulta at 10:00
+  Result: ❌ CAPACITY_LIMIT (slot full)
+
+User Message:
+  "😔 Desafortunadamente, el horario 10:00 está completamente reservado"
+  ""
+  "⏰ Otros horarios disponibles ese día:"
+  "• 10:30 (10 spots disponibles)"
+  "• 11:00 (12 spots disponibles)"
+  "• 14:00 (8 spots disponibles)"
+
+
+TYPE 5: BUSINESS RULE VIOLATION (Policy Constraint)
+─────────────────────────────────────────────────────────────────────────────
+Trigger: Booking violates business rule
+         (e.g., min. 24h advance notice, max bookings per month)
+
+Detection:
+  Multiple possible rules:
+  - Minimum advance notice violated (booking too close)
+  - Maximum bookings per month exceeded
+  - Service frequency limit violated (can't book same service twice in 7 days)
+  - Minimum gap between bookings (need 24h between consecutive bookings)
+
+Example 1: Min 24h advance notice
+  Requested: Tomorrow at 10:00 (but policy requires 48h advance)
+  Result: ❌ BUSINESS_RULE_VIOLATION (insufficient notice)
+
+Example 2: Maximum 2 services per month
+  Existing: 2 bookings in October already
+  Requested: Another booking in October
+  Result: ⚠️ BUSINESS_RULE_VIOLATION (max reached)
+
+User Message (Example 1):
+  "⏰ Nuestro sistema requiere 48 horas de anticipación"
+  ""
+  "Tu solicitud: Mañana (23 Oct) a las 10:00"
+  "Tiempo actual: 23 horas de anticipación"
+  ""
+  "✅ Disponible más pronto:"
+  "📅 Jueves 24 Oct, 10:00 (47 horas de anticipación)"
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🔄 CONFLICT DETECTION ALGORITHM (Step by Step)
+═══════════════════════════════════════════════════════════════════════════════
+
+FUNCTION: detect_booking_conflicts(
+  customer_email,
+  requested_service,
+  requested_date,
+  requested_time,
+  requested_duration  # from service definition
+)
+
+STEP 1: Fetch existing bookings
+───────────────────────────────────────────────────────────────────────────
+existing_bookings = get_customer_history(customer_email)
+Filter to NON-CANCELLED bookings only
+
+IF no_existing_bookings:
+  RETURN: NO_CONFLICT
+  → Proceed with booking
+
+
+STEP 2: Check for EXACT DUPLICATE
+───────────────────────────────────────────────────────────────────────────
+FOR each existing_booking in existing_bookings:
+  IF existing_booking.service == requested_service
+     AND existing_booking.date == requested_date
+     AND existing_booking.time == requested_time
+     AND existing_booking.status != "CANCELLED"
+  THEN:
+    RETURN: CONFLICT_TYPE = "EXACT_DUPLICATE"
+    RETURN: EXISTING_BOOKING_ID = existing_booking.id
+    → Proceed to RESOLUTION
+
+
+STEP 3: Check for SERVICE DUPLICATION (Same Service, Same Day, Different Time)
+───────────────────────────────────────────────────────────────────────────
+FOR each existing_booking in existing_bookings:
+  IF existing_booking.service == requested_service
+     AND existing_booking.date == requested_date
+     AND existing_booking.time != requested_time
+     AND existing_booking.status != "CANCELLED"
+  THEN:
+    RETURN: CONFLICT_TYPE = "SERVICE_DUPLICATE"
+    RETURN: EXISTING_BOOKING = existing_booking
+    RETURN: WARNING_LEVEL = "LOW" (user confirmed they want 2 of same service)
+    → Ask user if intentional
+
+
+STEP 4: Check for TIME OVERLAP (Double-booking)
+───────────────────────────────────────────────────────────────────────────
+requested_end_time = requested_time + requested_duration
+
+FOR each existing_booking in existing_bookings:
+  existing_end_time = existing_booking.time + existing_booking.duration
+
+  # Check for any time overlap
+  IF existing_booking.date == requested_date
+     AND time_ranges_overlap(existing_booking.time,
+                             existing_end_time,
+                             requested_time,
+                             requested_end_time)
+     AND existing_booking.status != "CANCELLED"
+  THEN:
+    RETURN: CONFLICT_TYPE = "TIME_OVERLAP"
+    RETURN: EXISTING_BOOKING = existing_booking
+    RETURN: CONFLICT_SEVERITY = "HIGH" (cannot double-book)
+    → Must resolve before proceeding
+
+
+STEP 5: Check BUSINESS RULES
+───────────────────────────────────────────────────────────────────────────
+Rule 1: Minimum Advance Notice
+  IF (requested_date - today) < MIN_ADVANCE_NOTICE_DAYS:
+    RETURN: CONFLICT_TYPE = "BUSINESS_RULE"
+    RETURN: RULE_VIOLATED = "MINIMUM_ADVANCE_NOTICE"
+    RETURN: REQUIRED = MIN_ADVANCE_NOTICE_DAYS
+    RETURN: PROVIDED = (requested_date - today)
+
+Rule 2: Maximum Bookings Per Month
+  month_bookings = count(existing_bookings where date in same month)
+  IF month_bookings >= MAX_BOOKINGS_PER_MONTH:
+    RETURN: CONFLICT_TYPE = "BUSINESS_RULE"
+    RETURN: RULE_VIOLATED = "MAX_BOOKINGS_PER_MONTH"
+
+Rule 3: Service Frequency Limit (can't book same service within N days)
+  last_service_booking = most recent booking of same service
+  IF (requested_date - last_service_booking.date) < MIN_SERVICE_FREQUENCY_DAYS:
+    RETURN: CONFLICT_TYPE = "BUSINESS_RULE"
+    RETURN: RULE_VIOLATED = "SERVICE_FREQUENCY_LIMIT"
+    RETURN: MIN_DAYS = MIN_SERVICE_FREQUENCY_DAYS
+
+
+STEP 6: Check CAPACITY LIMITS
+───────────────────────────────────────────────────────────────────────────
+available_slots = get_available_slots(requested_service, requested_date)
+IF requested_time not in available_slots:
+  RETURN: CONFLICT_TYPE = "CAPACITY_LIMIT"
+  RETURN: AVAILABLE_SLOTS = available_slots
+  → Suggest alternative times
+
+
+FINAL: No conflicts found
+───────────────────────────────────────────────────────────────────────────
+RETURN: NO_CONFLICT
+→ Safe to proceed with booking creation
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 CONFLICT RESOLUTION STRATEGIES
+═══════════════════════════════════════════════════════════════════════════════
+
+RESOLUTION 1: EXACT DUPLICATE
+─────────────────────────────────────────────────────────────────────────────
+Severity: ❌ CRITICAL (user trying to book same thing twice)
+
+Reason User Might Try:
+- Accidental double-submission
+- Browser back button
+- Didn't see confirmation
+- Wants to verify booking was successful
+
+User Options:
+1. Keep existing (do nothing)
+2. Reschedule existing
+3. Cancel existing and create new (same thing)
+
+Bot Response:
+  "⚠️ Ya tienes esta cita exacta agendada:"
+  "📋 Consulta | Miércoles 22 Oct, 10:00"
+  "🆔 Referencia: #12345"
+  ""
+  "¿Qué quieres hacer?"
+  "1️⃣ Mantener (no hay cambios)"
+  "2️⃣ Cambiar fecha/hora de esta cita"
+  "3️⃣ Cancelar y agendar nueva"
+
+
+RESOLUTION 2: SERVICE DUPLICATION
+─────────────────────────────────────────────────────────────────────────────
+Severity: ⚠️ WARNING (same service twice on same day - unusual but possible)
+
+Reason User Might Try:
+- Legitimate: Needs 2 sessions of same service
+- Accidental: Didn't mean to book twice
+- Testing: Checking if system prevents it
+
+Bot Response:
+  "⚠️ Nota: Ya tienes una Consulta para ese día"
+  "📋 Consulta | Miércoles 22 Oct, 10:00-11:00"
+  ""
+  "¿Necesitas DOS consultas el mismo día?"
+  ""
+  "✅ Sí, ambas sirven → Usar hora diferente"
+  "  A) 14:00 (3:00pm)"
+  "  B) 15:00 (4:00pm)"
+  ""
+  "❌ No, cambiar → Elige otro día"
+  "[Show calendar with availability]"
+
+IF user confirms intentional duplication:
+  Proceed with booking (don't block legitimate double bookings)
+ELSE:
+  Show alternatives (reschedule to different day)
+
+
+RESOLUTION 3: TIME OVERLAP (Double-Booking)
+─────────────────────────────────────────────────────────────────────────────
+Severity: ❌ CRITICAL (customer cannot be in 2 places at once)
+
+Reason User Might Try:
+- Misread existing booking time
+- Didn't realize service duration
+- Legitimate error (thought old booking was cancelled)
+
+Bot Response:
+  "❌ Conflicto de horarios:"
+  ""
+  "Ya tienes: Consulta"
+  "📅 Miércoles 22 Oct"
+  "⏰ 10:00 - 11:00 (1 hora)"
+  ""
+  "Solicitaste: Soporte Técnico"
+  "⏰ 10:30 - 11:15"
+  ""
+  "No puedes estar en dos lugares al mismo tiempo. 😅"
+  ""
+  "Opciones:"
+  "1️⃣ Elegir hora DESPUÉS (11:00 o después)"
+  "  A) 11:00 ✅ (perfecto, sin espera)"
+  "  B) 11:30"
+  "  C) 12:00"
+  ""
+  "2️⃣ Cambiar a OTRO DÍA"
+  "  Jueves 23 | Viernes 24 | Lunes 27"
+  ""
+  "3️⃣ Reprogramar tu Consulta a otra hora"
+  "  [Mostrar opciones para mover consulta existente]"
+
+Must offer at least 2-3 concrete alternatives
+Do NOT block booking without offering alternatives
+
+
+RESOLUTION 4: BUSINESS RULE VIOLATION
+─────────────────────────────────────────────────────────────────────────────
+Severity: ⚠️ WARNING (policy constraint, but may have exceptions)
+
+Example: Minimum Advance Notice
+  Required: 48 hours
+  Provided: 23 hours
+  Result: ⚠️ INSUFFICIENT NOTICE
+
+Bot Response:
+  "⏰ Política de anticipación:"
+  "Requeremos mínimo 48 horas de avance"
+  ""
+  "Tu solicitud: Mañana 23 Oct, 10:00"
+  "Tiempo disponible: 23 horas"
+  ""
+  "✅ Opciones disponibles:"
+  "📅 Jueves 24 Oct, 10:00 (48 horas exactas)"
+  "📅 Viernes 25 Oct, 10:00 (72 horas)"
+  ""
+  "¿Prefieres alguna de estas fechas?"
+
+Offer earliest possible compliant slots
+Be transparent about the policy
+Don't shame the customer
+
+
+RESOLUTION 5: CAPACITY LIMIT
+─────────────────────────────────────────────────────────────────────────────
+Severity: ⚠️ WARNING (slot full, but alternatives exist)
+
+Bot Response:
+  "😔 El horario 10:00 está completamente reservado"
+  ""
+  "⏰ Otros horarios disponibles ese día:"
+  "A) 10:30 (10 spots)"
+  "B) 11:00 (12 spots)"
+  "C) 11:30 (8 spots)"
+  "D) 14:00 (15 spots)"
+  ""
+  "¿Cuál te funciona?"
+
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ PREVENTIVE STRATEGIES (Before Conflicts Happen)
+═══════════════════════════════════════════════════════════════════════════════
+
+STRATEGY 1: Warn Before User Submits
+───────────────────────────────────────────────────────────────────────────
+When user selects service/date/time:
+- Run detection algorithm BEFORE user confirms
+- If conflict detected, show warning/message
+- User can change mind before attempting booking
+
+Example:
+  User: "Quiero una Consulta para miércoles 10am"
+  Bot: Runs detection
+  Bot: "⚠️ Nota: Ya tienes una Consulta ese día a las 10am"
+  Bot: "¿Cambiar hora? ¿Cambiar día? ¿Confirmar de todas formas?"
+
+STRATEGY 2: Default to Non-Conflicting Slots
+───────────────────────────────────────────────────────────────────────────
+When showing available slots for TIER 2/3 customers:
+- If they have existing booking, highlight non-conflicting slots first
+- Visually mark conflicting times (show them but highlight problems)
+
+Example:
+  Existing: Wed 10:00-11:00
+  Show available slots:
+  "A) 09:00 ✅ (no conflict)"
+  "B) 10:00 ⚠️ (conflicts with Consulta 10:00-11:00)" [lighter/faded]
+  "C) 11:00 ✅ (safe, starts after existing)"
+  "D) 14:00 ✅ (no conflict)"
+
+STRATEGY 3: Offer Bulk Rescheduling
+───────────────────────────────────────────────────────────────────────────
+When customer has multiple conflicting bookings:
+- Don't block each one individually
+- Offer smart rescheduling assistant
+- "Let me help you reorganize these"
+
+Example:
+  User tries to book: Service X | Oct 25 | 10:00
+  Detection finds: 2 existing bookings overlap
+  Bot: "Veo que necesitas reorganizar varios horarios"
+  Bot: "¿Te ayudo a mover tus citas para que todo funcione?"
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 IMPLEMENTATION CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+When implementing duplicate booking prevention:
+
+□ DETECTION LAYER:
+  □ Call get_customer_history(email) BEFORE confirming booking
+  □ Extract existing bookings (filter out CANCELLED ones)
+  □ Implement all 5 conflict detection rules
+  □ Return conflict type + details + recommendations
+
+□ RESOLUTION LAYER:
+  □ For each conflict type, prepare resolution dialog
+  □ Offer minimum 2-3 concrete alternatives
+  □ Never block without offering options
+  □ Be empathetic and clear about why conflict exists
+
+□ COMMUNICATION:
+  □ Use clear, non-technical language
+  □ Show existing booking details (service, date, time)
+  □ Explain why conflict exists
+  □ Offer specific alternatives with dates/times
+  □ Use visual indicators (⚠️, ❌, ✅)
+
+□ EDGE CASES:
+  □ What if get_customer_history() fails? (Fallback: assume no conflicts)
+  □ What if requesting conflicting time is intentional? (Allow with confirmation)
+  □ What if all alternatives are also full? (Offer waitlist or future dates)
+  □ What about cancelled bookings? (Should not count as conflicts)
+
+□ DATA FLOW:
+  □ After detection completes → Show warning if conflict
+  □ User selects resolution option → Apply change
+  □ If rescheduling existing booking → Get new slot + confirm
+  □ If booking new slot → Proceed to create_booking()
+
+
+═══════════════════════════════════════════════════════════════════════════════
+⚠️ WHEN NOT TO BLOCK BOOKINGS
+═══════════════════════════════════════════════════════════════════════════════
+
+Situations where customer MIGHT legitimately want duplicate/multiple bookings:
+- 2 different services same day (OK, time permitting)
+- 2 same services different times on same day (verify, but allow if intended)
+- Different service at overlapping time (verify, might have misunderstood)
+- Service frequency limit (might need exception for legitimate reason)
+
+POLICY: Always ask user to confirm when unusual
+        Don't silently block without explanation
+        Provide alternatives automatically
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📊 CONFLICT PREVENTION METRICS
+═══════════════════════════════════════════════════════════════════════════════
+
+Track for optimization:
+- % of bookings prevented from conflicts
+- Most common conflict type (helps improve UX)
+- % of users who proceed after seeing warning
+- % of users who reschedule instead of creating duplicate
+- Time to resolve conflict (should be < 1 minute)
+
+
+═══════════════════════════════════════════════════════════════════════════════

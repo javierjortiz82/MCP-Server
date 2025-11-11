@@ -1,0 +1,7 @@
+include README.md
+include LICENSE
+include .env.example
+include requirements.txt
+include requirements-dev.txt
+recursive-include email_service/templates *.html *.txt
+recursive-include email_service/sql *.sql

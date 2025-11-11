@@ -1,0 +1,20 @@
+{
+  "greeting": "Hello! Welcome to our service. How can I help you?",
+  "help": "I can help you with:",
+  "business_hours": "Our business hours are:",
+  "about": "We are a company dedicated to offering you the best services.",
+  "contact": "To contact us, you can:",
+  "email_contact": "Send us an email at {email}",
+  "phone_contact": "Call us at {phone}",
+  "faq": "Frequently Asked Questions",
+  "general_info": "General Information",
+  "services": "Services",
+  "booking": "Schedule an Appointment",
+  "products": "Products",
+  "pricing": "Pricing",
+  "support": "Support",
+  "error": "Sorry, I didn't understand that. Could you rephrase your question?",
+  "not_available": "That feature is not available at the moment.",
+  "thank_you": "Thank you for your interest!",
+  "goodbye": "Goodbye! We hope to see you soon."
+}

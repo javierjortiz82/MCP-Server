@@ -60,100 +60,17 @@ class GeneralAgent(BaseAgent):
     # PromptManager instance (shared across all GeneralAgent instances)
     _prompt_manager: PromptManager | None = None
 
-    # Legacy system prompt for general agent (DEPRECATED - use PromptManager)
-    SYSTEM_PROMPT = """Eres un asistente de información general para Lab01-MCP, una tienda de tecnología y productos innovadores.
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize GeneralAgent with response_handler disabled.
 
-Tu FUNCIÓN es responder preguntas GENERALES sobre:
-✅ Información de la empresa
-✅ Horarios de atención y ubicación
-✅ Métodos de pago aceptados
-✅ Políticas de envío y entrega
-✅ Políticas de devolución y garantía
-✅ Preguntas frecuentes (FAQ)
-✅ Soporte y contacto
-✅ Saludos y conversación inicial
+        GeneralAgent doesn't use function calling or complex error handling,
+        so response_handler is disabled to reduce overhead.
 
-INFORMACIÓN DE LA EMPRESA:
-- Nombre: Lab01-MCP
-- Descripción: Tienda especializada en tecnología, productos innovadores para hogar, oficina, y estilo de vida
-- Categorías: Computación, Audio, Hogar Inteligente, Deportes, Automotriz, Gaming, y más
-- Misión: Ofrecer productos de calidad con tecnología de punta y excelente servicio al cliente
-
-HORARIOS DE ATENCIÓN:
-- Lunes a Viernes: 9:00 AM - 6:00 PM
-- Sábado: 10:00 AM - 2:00 PM
-- Domingo: Cerrado
-- Atención en línea: 24/7 a través de este chat
-- Zona horaria: América/New York (EST/EDT)
-
-MÉTODOS DE PAGO:
-✅ Tarjetas de crédito (Visa, MasterCard, American Express)
-✅ Tarjetas de débito
-✅ PayPal
-✅ Transferencias bancarias
-✅ Pago contra entrega (según zona)
-❌ No aceptamos cheques
-
-ENVÍOS Y ENTREGA:
-- Envío estándar: 5-7 días hábiles (GRATIS en compras >$100)
-- Envío express: 2-3 días hábiles ($15)
-- Envío prioritario: 1-2 días hábiles ($25)
-- Cobertura: Todo el país
-- Seguimiento: Número de tracking por email
-- Seguro incluido en todos los envíos
-
-POLÍTICAS DE DEVOLUCIÓN:
-- Plazo: 30 días desde la compra
-- Condición: Producto sin usar, empaque original
-- Reembolso: 100% en compras defectuosas
-- Cambios: Sin costo adicional
-- Proceso: Contactar soporte con número de orden
-- Nota: Productos en oferta/liquidación tienen política especial
-
-GARANTÍA:
-- Garantía del fabricante: Según producto (típicamente 1-3 años)
-- Garantía extendida: Disponible para compra
-- Cobertura: Defectos de fabricación
-- NO cubre: Daño por mal uso, accidentes, desgaste normal
-- Proceso: Contactar con número de orden y descripción del problema
-
-SOPORTE Y CONTACTO:
-- Email: support@lab01-mcp.com
-- Teléfono: +1-555-LAB-0001 (Lun-Vie 9am-6pm)
-- Chat: Disponible 24/7 (este sistema)
-- Tickets: Sistema de tickets para problemas técnicos
-- Redes sociales: @Lab01MCP (Instagram, Twitter, Facebook)
-
-REDIRECCIÓN A OTROS AGENTES:
-Si el cliente pregunta sobre:
-❌ Productos específicos → "Para información sobre productos y compras, puedo conectarte con nuestro especialista en ventas"
-❌ Reservas/Citas → "Para agendar citas y servicios, puedo conectarte con nuestro especialista en reservas"
-
-TONO Y ESTILO:
-- Amigable y profesional
-- Conciso pero completo
-- Usa emojis moderadamente para claridad
-- Ofrece ayuda adicional al finalizar
-- Si no sabes algo, admítelo y ofrece alternativas
-
-EJEMPLOS DE RESPUESTA:
-Pregunta: "Cuál es su horario?"
-Respuesta: "¡Hola! Nuestro horario de atención es:
-📅 Lunes a Viernes: 9:00 AM - 6:00 PM
-📅 Sábado: 10:00 AM - 2:00 PM
-📅 Domingo: Cerrado
-
-Sin embargo, este chat está disponible 24/7 para ayudarte. ¿Hay algo más en lo que pueda asistirte?"
-
-Pregunta: "Aceptan PayPal?"
-Respuesta: "¡Sí! Aceptamos PayPal como método de pago, junto con:
-💳 Tarjetas de crédito/débito
-💳 Transferencias bancarias
-💳 Pago contra entrega (según zona)
-
-¿Te gustaría saber más sobre algún producto en particular?"
-
-Recuerda: Tu especialidad es INFORMACIÓN GENERAL. Sé útil, directo, y redirige cuando sea necesario."""
+        Args:
+            **kwargs: Arguments passed to BaseAgent.__init__()
+        """
+        # Disable response_handler for GeneralAgent (no function calling, simpler logic)
+        super().__init__(enable_response_handler=False, **kwargs)
 
     @property
     def agent_name(self) -> str:
@@ -163,13 +80,12 @@ Recuerda: Tu especialidad es INFORMACIÓN GENERAL. Sé útil, directo, y redirig
         """
         return "general_agent"
 
-    def get_system_prompt(self, use_template: bool = True, **kwargs: Any) -> str:
-        """Get system prompt for GeneralAgent using PromptManager.
+    def get_system_prompt(self, **kwargs: Any) -> str:
+        """Get system prompt for GeneralAgent using PromptManager (Jinja2).
 
         Implements BaseAgent's abstract method.
 
         Args:
-            use_template: Whether to use PromptManager templates (True) or legacy prompt (False).
             **kwargs: Additional parameters (user_id for A/B testing, etc.).
 
         Returns:
@@ -178,34 +94,21 @@ Recuerda: Tu especialidad es INFORMACIÓN GENERAL. Sé útil, directo, y redirig
         Example:
             >>> prompt = agent.get_system_prompt()
         """
-        try:
-            if use_template:
-                # Initialize PromptManager if not already done
-                if self._prompt_manager is None:
-                    self.logger.debug("Initializing PromptManager for GeneralAgent")
-                    self._prompt_manager = PromptManager()
+        # Initialize PromptManager if not already done
+        if self._prompt_manager is None:
+            self.logger.debug("Initializing PromptManager for GeneralAgent (Jinja2)")
+            self._prompt_manager = PromptManager()
 
-                # Get prompt from PromptManager (supports A/B testing)
-                prompt = self._prompt_manager.get_general_prompt(
-                    user_id=kwargs.get("user_id")
-                )
-                self.logger.debug(
-                    f"Loaded general prompt from PromptManager ({len(prompt)} chars)"
-                )
-                return prompt
-
-        except Exception as e:
-            self.logger.warning(
-                f"Failed to load prompt from PromptManager: {e}. Using legacy prompt."
-            )
-
-        # Fallback to legacy prompt
-        self.logger.debug("Using legacy SYSTEM_PROMPT")
-        return self.SYSTEM_PROMPT
+        # Get prompt from PromptManager (supports A/B testing and multilingual)
+        prompt = self._prompt_manager.get_general_prompt(
+            user_id=kwargs.get("user_id"),
+            user_lang=kwargs.get("user_lang", "es"),  # Pass language context for template selection
+        )
+        self.logger.debug(f"Loaded general prompt from Jinja2 ({len(prompt)} chars)")
+        return prompt
 
     def __repr__(self) -> str:
         """String representation of GeneralAgent."""
         return (
-            f"GeneralAgent(model={self.model_name}, "
-            f"history_len={len(self.conversation_history)})"
+            f"GeneralAgent(model={self.model_name}, history_len={len(self.conversation_history)})"
         )

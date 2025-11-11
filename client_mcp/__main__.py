@@ -4,12 +4,11 @@
 Main entry point for the Lab01-MCP system with multi-agent routing support.
 This implementation provides:
 - Feature flag for gradual rollout (ENABLE_AGENT_ROUTING)
-- Backward compatibility with OdiseoBot (legacy mode)
 - Multi-agent routing (sales, booking, general)
 - Full compliance with MCP specifications
 
 Usage:
-    # Legacy mode (OdiseoBot only):
+    # Single-agent mode (SalesAgent only):
     ENABLE_AGENT_ROUTING=false python -m client_mcp
 
     # Multi-agent mode (Router + specialized agents):
@@ -17,7 +16,7 @@ Usage:
 
 Features:
     - AgentRouter: Intent classification (sales/booking/general)
-    - Sales Agent: OdiseoBot for product queries
+    - Sales Agent: Product queries and recommendations
     - Booking Agent: Appointment management
     - General Agent: FAQ and company information
     - Official Anthropic MCP SDK
@@ -31,14 +30,32 @@ Version: 2.0.0 (Multi-Agent)
 
 import asyncio
 import sys
+from pathlib import Path
 
-# Support both direct execution and module execution
+# Explicit import to avoid sys.path conflicts across different modules
 try:
-    from .config.settings import settings
+    from importlib.util import spec_from_file_location, module_from_spec
+
+    settings_path = Path(__file__).parent / "config" / "settings.py"
+    spec = spec_from_file_location("client_mcp_settings_main", settings_path)
+    if spec and spec.loader:
+        _settings_module = module_from_spec(spec)
+        spec.loader.exec_module(_settings_module)
+        settings = _settings_module.settings
+    else:
+        raise ImportError("Failed to load settings module")
+except (ImportError, AttributeError):
+    # Fallback: try standard imports
+    try:
+        from .config.settings import settings
+    except ImportError:
+        # Fallback for direct execution: python __main__.py
+        from config.settings import settings
+
+try:
     from .core.agent_orchestrator import AgentOrchestrator
 except ImportError:
-    # Fallback for direct execution: python __main__.py
-    from config.settings import settings
+    # Fallback for direct execution
     from core.agent_orchestrator import AgentOrchestrator
 
 
@@ -82,7 +99,7 @@ async def main():
 
 if __name__ == "__main__":
     # Display startup banner
-    mode = "MULTI-AGENT" if settings.ENABLE_AGENT_ROUTING else "LEGACY (OdiseoBot)"
+    mode = "MULTI-AGENT" if settings.ENABLE_AGENT_ROUTING else "SINGLE-AGENT (SalesAgent)"
 
     print("🚀 Lab01-MCP - Multi-Agent Sales & Booking System")
     print("=" * 70)
