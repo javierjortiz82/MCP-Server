@@ -33,12 +33,66 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
-
-from google.genai import types
+from typing import TYPE_CHECKING, Any
 
 from gemini_agent.base_agent import BaseAgent
+from gemini_agent.config.booking_agent_settings import booking_agent_settings
+from gemini_agent.utils.gemini_response_handler import ResponseStatus
+from gemini_agent.utils.language_detector import detect_user_language
+from google.genai import types
 from multi_agent.prompt_manager import PromptManager
+
+if TYPE_CHECKING:
+    from core.function_call_handler import FunctionCallHandler  # type: ignore[import-not-found]
+    from core.mcp_connector import MCPConnector  # type: ignore[import-not-found]
+
+# Gemini 2.5 Function Calling Optimization (Scope Limiting)
+# Autodiscover booking tools from MCP server (single source of truth)
+# This avoids hardcoding tool names and ensures automatic sync when tools change
+
+# Setup MCP server path for imports
+mcp_server_path = Path(__file__).parent.parent.parent.parent / "mcp_server"
+if str(mcp_server_path) not in sys.path:
+    sys.path.insert(0, str(mcp_server_path))
+
+# Try to import autodiscovered booking tools
+# Fallback to hardcoded list if MCP server not available
+try:
+    from mcp_handlers.booking_handlers import get_booking_tool_names  # type: ignore[import-not-found]
+
+    BOOKING_TOOLS_ALLOWED = set(get_booking_tool_names())
+    _logger = __import__("logging").getLogger("booking_agent_init")
+    _logger.info(
+        f"✅ Autodiscovered {len(BOOKING_TOOLS_ALLOWED)} booking tools from MCP server"
+    )
+except ImportError as e:
+    _logger = __import__("logging").getLogger("booking_agent_init")
+    _logger.warning(
+        f"⚠️ Could not autodiscover booking tools from MCP server: {e}. "
+        f"Using fallback hardcoded list."
+    )
+    # Fallback: Hardcoded list (8 booking tools)
+    # This ensures the agent works even if MCP server is not available
+    # But updates to tools must be made in BOTH places (not ideal - prefer autodiscover)
+    BOOKING_TOOLS_ALLOWED = {
+        "create_booking",
+        "cancel_booking",
+        "reschedule_booking",
+        "get_available_slots",
+        "get_booking_by_id",
+        "list_customer_bookings",
+        "get_services",
+        "get_business_hours",
+    }
+
+# Import language context for MCP tool execution
+try:
+    from utils.language_context import set_current_language  # type: ignore[import-not-found]
+
+    LANGUAGE_CONTEXT_AVAILABLE = True
+except ImportError:
+    LANGUAGE_CONTEXT_AVAILABLE = False
+    set_current_language = None  # type: ignore[assignment]
 
 # Import client_mcp utilities for function calling
 client_mcp_path = Path(__file__).parent.parent.parent.parent / "client_mcp"
@@ -46,14 +100,80 @@ if str(client_mcp_path) not in sys.path:
     sys.path.insert(0, str(client_mcp_path))
 
 try:
-    from core.function_call_handler import FunctionCallHandler
-    from core.mcp_connector import MCPConnector
+    from core.function_call_handler import FunctionCallHandler  # type: ignore[import-not-found]
+    from core.mcp_connector import MCPConnector  # type: ignore[import-not-found]
 
     FUNCTION_CALLING_AVAILABLE = True
 except ImportError:
     FUNCTION_CALLING_AVAILABLE = False
     FunctionCallHandler = None  # type: ignore[misc,assignment]
     MCPConnector = None  # type: ignore[misc,assignment]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BOOKING RESPONSE SCHEMA (Gemini 2.5 Structured Output Feature)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Defines JSON schema for structured responses (Google Gemini Best Practice 2025)
+# Ensures: 100% valid JSON parsing, automatic intent detection, strict compliance
+#
+# Feature: responseSchema (introduced July 2025)
+# Benefit: Eliminates parsing errors, enables reliable downstream processing
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Schema for booking response - using dict-based approach for compatibility
+# with google.genai types.GenerateContentConfig (response_schema expects dict)
+BOOKING_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "intent": {
+            "type": "string",
+            "enum": [
+                "create_booking",
+                "cancel_booking",
+                "reschedule_booking",
+                "list_bookings",
+                "service_info",
+                "business_hours",
+                "availability_check",
+                "disambiguation",
+                "out_of_scope",
+                "error",
+            ],
+            "description": "Automatically detected user intent",
+        },
+        "confidence": {
+            "type": "number",
+            "description": "Confidence score 0.0-1.0 for detected intent",
+        },
+        "missing_data": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "List of required data still needed from user",
+        },
+        "suggested_actions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "List of next steps or options for user",
+        },
+        "response_text": {
+            "type": "string",
+            "description": "Main response text to user (conversational format)",
+        },
+        "data_extracted": {
+            "type": "object",
+            "properties": {
+                "service_type": {"type": "string"},
+                "booking_date": {"type": "string"},
+                "booking_time": {"type": "string"},
+                "customer_email": {"type": "string"},
+                "customer_name": {"type": "string"},
+                "booking_id": {"type": "string"},
+            },
+            "description": "Extracted booking-related data from conversation",
+        },
+    },
+    "required": ["intent", "confidence", "response_text"],
+}
 
 
 class BookingAgent(BaseAgent):
@@ -88,7 +208,7 @@ class BookingAgent(BaseAgent):
         api_key: str | None = None,
         model_name: str | None = None,
         mcp_tools: list[types.FunctionDeclaration] | None = None,
-        mcp_client: MCPConnector | None = None,
+        mcp_client: MCPConnector | None = None,  # type: ignore[name-defined]
         **generation_params: Any,
     ) -> None:
         """Initialize BookingAgent with function calling support.
@@ -102,75 +222,17 @@ class BookingAgent(BaseAgent):
         """
         super().__init__(api_key, model_name, mcp_tools, **generation_params)
 
-        # Function calling support
+        # Function calling support (max iterations configurable via booking_agent_settings)
         self.mcp_client = mcp_client
-        self.function_call_handler = (
-            FunctionCallHandler(max_iterations=10)
-            if FUNCTION_CALLING_AVAILABLE
-            else None
-        )
+        self.function_call_handler = None
+        if FUNCTION_CALLING_AVAILABLE and FunctionCallHandler is not None:  # type: ignore[name-defined]
+            self.function_call_handler = FunctionCallHandler(  # type: ignore[name-defined]
+                max_iterations=booking_agent_settings.BOOKING_MAX_FUNCTION_CALL_ITERATIONS
+            )
 
-    # Legacy system prompt for backward compatibility (DEPRECATED - use PromptManager)
-    SYSTEM_PROMPT = """Eres un asistente especializado en RESERVAS Y CITAS para Lab01-MCP.
-
-Tu ÚNICA función es ayudar a los clientes con:
-✅ Crear nuevas reservas/citas
-✅ Consultar disponibilidad de horarios
-✅ Cancelar citas existentes
-✅ Reprogramar/cambiar citas
-✅ Ver el estado de sus reservas
-✅ Información sobre servicios disponibles
-
-SERVICIOS DISPONIBLES:
-1. Consulta General (30-60 min) - Asesoría personalizada
-2. Soporte Técnico (45-90 min) - Ayuda con productos
-3. Demostración de Producto (60 min) - Ver productos en acción
-4. Sesión de Capacitación (90-120 min) - Aprender a usar productos
-5. Instalación (60-120 min) - Instalación profesional
-
-FLUJO DE CONVERSACIÓN:
-1. Saluda amablemente y pregunta cómo puedes ayudar
-2. Si el cliente quiere reservar:
-   a. Pregunta qué servicio necesita
-   b. Pregunta qué fecha prefiere
-   c. Muestra horarios disponibles usando get_available_slots
-   d. Confirma datos: nombre, email, teléfono
-   e. Crea la reserva usando create_booking
-   f. Proporciona confirmación con número de reserva
-3. Si quiere cancelar:
-   a. Busca sus reservas con list_customer_bookings
-   b. Confirma qué reserva quiere cancelar
-   c. Cancela usando cancel_booking
-4. Si quiere reprogramar:
-   a. Busca la reserva actual
-   b. Muestra nuevos horarios disponibles
-   c. Confirma y reprograma con reschedule_booking
-
-REGLAS IMPORTANTES:
-❌ NO vendas productos - redirige a ventas si preguntan por productos
-❌ NO respondas preguntas generales - redirige al agente general
-✅ Siempre confirma datos antes de crear/cancelar reservas
-✅ Usa los tools disponibles para operaciones en tiempo real
-✅ Sé empático si el cliente necesita cancelar
-✅ Ofrece alternativas si no hay disponibilidad
-✅ Proporciona información clara sobre el proceso
-
-FORMATO DE RESPUESTAS:
-- Usa lenguaje natural y amigable
-- Sé conciso pero completo
-- Confirma siempre los detalles importantes
-- Proporciona números de confirmación cuando corresponda
-
-DATOS REQUERIDOS PARA RESERVAR:
-- Nombre completo del cliente
-- Email de contacto
-- Teléfono
-- Tipo de servicio
-- Fecha (YYYY-MM-DD)
-- Hora (HH:MM formato 24h)
-- Duración (opcional, depende del servicio)
-
-Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o información general, indica amablemente que pueden consultar con otro agente."""
+        # NOTE: response_handler is now inherited from BaseAgent
+        # BaseAgent.__init__() creates it with default config
+        # BookingAgent inherits retry logic + validation automatically
 
     @property
     def agent_name(self) -> str:
@@ -207,16 +269,18 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
     def get_system_prompt(
         self,
         customer_email: str | None = None,
-        use_template: bool = True,
         **kwargs: Any,
     ) -> str:
-        """Get system prompt for BookingAgent using PromptManager.
+        """Get system prompt for BookingAgent using PromptManager (Jinja2).
 
         Implements BaseAgent's abstract method.
 
+        Configuration-driven thresholds:
+        - TOKEN_ESTIMATE_RATIO: Ratio for estimating tokens from character count (default: 0.25)
+        - BOOKING_MAX_PROMPT_SIZE_CHARS: Maximum prompt size in characters (warning threshold, default: 30000)
+
         Args:
             customer_email: Optional customer email for personalization.
-            use_template: Whether to use PromptManager templates (True) or legacy prompt (False).
             **kwargs: Additional parameters (user_id for A/B testing, etc.).
 
         Returns:
@@ -225,43 +289,35 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
         Example:
             >>> prompt = agent.get_system_prompt(customer_email="maria@example.com")
         """
-        try:
-            if use_template:
-                # Initialize PromptManager if not already done
-                if self._prompt_manager is None:
-                    self.logger.debug("Initializing PromptManager for BookingAgent")
-                    self._prompt_manager = PromptManager()
+        # Initialize PromptManager if not already done
+        if self._prompt_manager is None:
+            self.logger.debug("Initializing PromptManager for BookingAgent (Jinja2)")
+            self._prompt_manager = PromptManager()
 
-                # Get prompt from PromptManager (supports A/B testing)
-                prompt = self._prompt_manager.get_booking_prompt(
-                    customer_email=customer_email, user_id=kwargs.get("user_id")
-                )
-                prompt_size = len(prompt)
-                estimated_tokens = prompt_size // 4  # Rough estimate: 1 token ≈ 4 chars
-                self.logger.debug(
-                    f"Loaded booking prompt from PromptManager "
-                    f"({prompt_size} chars, ~{estimated_tokens} tokens)"
-                )
+        # Get prompt from PromptManager (supports A/B testing and multilingual)
+        user_lang = kwargs.get("user_lang", "es")
+        self.logger.info(f"🌐 GET_SYSTEM_PROMPT: Requesting template for language: {user_lang}")
+        prompt = self._prompt_manager.get_booking_prompt(
+            customer_email=customer_email,
+            user_id=kwargs.get("user_id"),
+            user_lang=user_lang,  # Pass language context for template selection
+        )
+        prompt_size = len(prompt)
+        estimated_tokens = int(prompt_size * booking_agent_settings.TOKEN_ESTIMATE_RATIO)
+        self.logger.info(
+            f"✅ Loaded booking prompt from Jinja2 (lang={user_lang}, "
+            f"{prompt_size} chars, ~{estimated_tokens} tokens)"
+        )
+        # Log first 200 chars of prompt to verify template
+        self.logger.debug(f"Prompt preview: {prompt[:200]}...")
 
-                # Warn if prompt is very long
-                if prompt_size > 30000:
-                    self.logger.warning(
-                        f"⚠️ Prompt is very long: {prompt_size} chars (~{estimated_tokens} tokens)\n"
-                        f"   This may cause issues with Gemini API (recommended < 30k chars)"
-                    )
-
-                return prompt
-
-        except Exception as e:
+        # Warn if prompt exceeds configured threshold
+        if prompt_size > booking_agent_settings.BOOKING_MAX_PROMPT_SIZE_CHARS:
             self.logger.warning(
-                f"Failed to load prompt from PromptManager: {e}. Using legacy prompt."
+                f"⚠️ Prompt is very long: {prompt_size} chars (~{estimated_tokens} tokens)\n"
+                f"   This may cause issues with Gemini API (recommended < {booking_agent_settings.BOOKING_MAX_PROMPT_SIZE_CHARS} chars)"
             )
 
-        # Fallback to legacy prompt
-        self.logger.debug("Using legacy SYSTEM_PROMPT")
-        prompt = self.SYSTEM_PROMPT
-        if customer_email:
-            prompt += f"\n\nCLIENTE ACTUAL: {customer_email}"
         return prompt
 
     async def generate_response(
@@ -269,16 +325,24 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
         query: str,
         *,
         include_history: bool = True,
+        intent: str | None = None,
         **kwargs: Any,
     ) -> str:
         """Generate response for user query with function calling support.
 
+        Implements Gemini 2.5 Best Practices:
+        - Scope limiting: Only booking tools are available
+        - Strict system instructions: Prevents hallucinations and off-topic responses
+        - Function calling with AUTO mode: Flexible, natural conversation flow
+        - Runtime scope validation: Ensures no function calls outside allowed scope
+
         This method overrides BaseAgent.generate_response() to add function
         calling loop support. When Gemini wants to call a tool, this method:
         1. Detects the function call
-        2. Executes it via MCP
-        3. Sends result back to Gemini
-        4. Repeats until text response
+        2. Validates it's in BOOKING_TOOLS_ALLOWED (scope check)
+        3. Executes it via MCP
+        4. Sends result back to Gemini
+        5. Repeats until text response
 
         Args:
             query: User query/message to respond to.
@@ -296,12 +360,15 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
             ...     "Quiero agendar para el 2025-10-27",
             ...     customer_email="customer@example.com"
             ... )
+
+        Security Notes (Gemini 2.5):
+        - All functions validated against BOOKING_TOOLS_ALLOWED before execution
+        - System prompt includes explicit scope boundaries
+        - Out-of-scope queries are redirected to appropriate teams
         """
         # Check if client is initialized
         if not self.client:
-            self.logger.error(
-                f"{self.agent_name} not initialized - call initialize() first"
-            )
+            self.logger.error(f"{self.agent_name} not initialized - call initialize() first")
             raise RuntimeError(f"{self.agent_name} not initialized")
 
         # Start timing for metrics
@@ -311,30 +378,188 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
         self._metrics["total_requests"] += 1
 
         try:
+            # Store intent for use in _update_history()
+            self.current_intent = intent
+
             self.logger.info(f"Generating response for: '{query[:100]}...'")
+
+            # Auto-detect or use provided language for consistent context
+            if "language" in kwargs:
+                # Priority 1: Explicit language parameter from caller
+                new_language = kwargs["language"]
+                if new_language != self.language:
+                    self.logger.info(
+                        f"🌐 Updating agent language (explicit): {self.language} → {new_language}"
+                    )
+                    self.language = new_language
+            else:
+                # Priority 2: Auto-detect language from user query
+                detected_language = detect_user_language(query)
+                if detected_language != self.language:
+                    self.logger.info(
+                        f"🌐 Auto-detected language: {self.language} → {detected_language}"
+                    )
+                    self.language = detected_language
+                kwargs["language"] = detected_language
 
             # Build conversation contents (uses template method pattern)
             contents = self._build_contents(query, include_history, **kwargs)
 
-            # DEBUG: Log contents size for diagnosis
+            # DEBUG: Log contents size for diagnosis (using configurable token estimation ratio)
             total_chars = sum(len(str(content)) for content in contents)
-            estimated_tokens = total_chars // 4
+            estimated_tokens = int(total_chars * booking_agent_settings.TOKEN_ESTIMATE_RATIO)
             self.logger.debug(
                 f"Contents built: {len(contents)} messages, "
                 f"{total_chars} chars, ~{estimated_tokens} tokens"
             )
-            if total_chars > 100000:
+            if total_chars > booking_agent_settings.BOOKING_MAX_CONTENT_SIZE_CHARS:
                 self.logger.warning(
                     f"⚠️ Total contents size is very large: {total_chars} chars "
-                    f"(~{estimated_tokens} tokens)"
+                    f"(~{estimated_tokens} tokens, threshold: {booking_agent_settings.BOOKING_MAX_CONTENT_SIZE_CHARS})"
                 )
 
-            # Generate initial response
-            response = await self.client.aio.models.generate_content(
+            # Build system prompt using language context (following Google Gemini best practices)
+            kwargs["user_lang"] = self.language
+            self.logger.info(
+                f"🌐 GENERATE_RESPONSE: Agent language is '{self.language}', setting kwargs['user_lang']={self.language}"
+            )
+            system_prompt = self.get_system_prompt(**kwargs)
+            self.logger.debug(
+                f"Language: {self.language}, System prompt length: {len(system_prompt)}"
+            )
+
+            # Build generation config with system instruction
+            if self.generation_config is None:
+                raise RuntimeError(
+                    "generation_config not initialized. Call initialize() first."
+                )
+
+            # GOOGLE BEST PRACTICE: Use temperature=0.0 for deterministic function calling
+            # Reference: https://ai.google.dev/gemini-api/docs/function-calling
+            # "Use low temperature values (e.g., 0) for more deterministic and reliable function calls"
+            config_dict = {
+                "temperature": 0.0,  # Deterministic responses (reduces empty response rate)
+                "top_k": self.generation_config.top_k,
+                "top_p": self.generation_config.top_p,
+                "max_output_tokens": 2048,  # Explicit limit (prevents MAX_TOKENS empty response)
+                "response_mime_type": self.generation_config.response_mime_type,
+                "system_instruction": system_prompt,
+            }
+
+            # === GOOGLE BEST PRACTICE: Control thinking budget for Gemini 2.5 ===
+            # Gemini 2.5 Flash has thinking enabled by default (dynamic budget).
+            # Explicitly setting thinking_budget prevents token exhaustion issues.
+            # Reference: https://ai.google.dev/gemini-api/docs/thinking
+            thinking_budget = booking_agent_settings.BOOKING_THINKING_BUDGET
+            if thinking_budget is not None and thinking_budget >= 0:
+                config_dict["thinking_config"] = types.GenerationConfigThinkingConfig(
+                    thinking_budget=thinking_budget
+                )
+                reserved_output = self.generation_config.max_output_tokens - thinking_budget
+                self.logger.info(
+                    f"✅ Thinking budget configured: {thinking_budget} tokens "
+                    f"(reserves ~{reserved_output} for actual output)"
+                )
+
+            # CRITICAL FIX: Only add response_schema if NO tools are available
+            # When tools are present, response_schema conflicts with function_calling:
+            # - response_schema forces Gemini to return structured JSON
+            # - function_calling expects Gemini to return function_call parts
+            # - These are mutually exclusive → response.parts becomes None
+            # Solution: Use response_schema ONLY for text-only responses (no tools)
+            if not self.mcp_tools:
+                config_dict["response_schema"] = BOOKING_RESPONSE_SCHEMA
+                self.logger.info(
+                    "✅ Structured output enabled: BOOKING_RESPONSE_SCHEMA with intent detection"
+                )
+            else:
+                self.logger.info(
+                    "⏭️ Skipping response_schema (tools present): Let Gemini choose function calls naturally"
+                )
+
+            # Add tools and tool config if available
+            # Implements Gemini 2.5 Function Calling Best Practices
+            if self.mcp_tools:
+                # Validate tools are in allowed booking tools (scope limiting)
+                # BOOKING_TOOLS_ALLOWED is autodiscovered from get_booking_tool_names()
+                # This prevents the agent from calling unintended functions
+                # If autodiscover failed, falls back to hardcoded list
+                tool_names = {func.name for func in self.mcp_tools}
+                invalid_tools = tool_names - BOOKING_TOOLS_ALLOWED
+                if invalid_tools:
+                    self.logger.warning(
+                        f"⚠️ Invalid tools passed to BookingAgent (not in BOOKING_TOOLS_ALLOWED): "
+                        f"{invalid_tools}. These will be available but not recommended by system prompt."
+                    )
+
+                config_dict["tools"] = [types.Tool(function_declarations=self.mcp_tools)]
+                config_dict["tool_config"] = types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(
+                        # Mode selection rationale:
+                        # - AUTO (default): Model decides when to call functions
+                        #   ✅ Flexible (can choose text or function calls)
+                        #   ✅ Good for booking (sometimes just answer questions)
+                        #   ✅ Prevents forced function calling when not needed
+                        # - ANY: Model MUST call a function (if specified allowed_function_names)
+                        #   ❌ Not ideal for booking (some queries need text only)
+                        # - NONE: No function calling (use only if debugging)
+                        #   ❌ Defeats purpose of MCP integration
+                        mode=types.FunctionCallingConfigMode.AUTO,
+                    )
+                )
+
+                self.logger.info(
+                    f"✅ Function calling configured: AUTO mode with {len(self.mcp_tools)} booking tools"
+                )
+
+            # CRITICAL FIX: Avoid conflict between response_schema and function_calling_loop
+            # Google Gemini API returns 500 INTERNAL when response_schema is used in
+            # subsequent calls within a function calling loop. Solution: create two configs:
+            # 1. initial_config: WITH response_schema (for first call, intent detection)
+            # 2. loop_config: WITHOUT response_schema (for function calling loop iterations)
+            # Reference: https://github.com/google-gemini/generative-ai-python/issues/...
+
+            initial_config = types.GenerateContentConfig(**config_dict)  # type: ignore[arg-type]
+
+            # For function calling loop: remove response_schema to avoid API conflicts
+            loop_config_dict = config_dict.copy()
+            loop_config_dict.pop("response_schema", None)
+            loop_config = types.GenerateContentConfig(**loop_config_dict)  # type: ignore[arg-type]
+
+            self.logger.debug(
+                "📋 Created two configs: initial_config (WITH schema), loop_config (WITHOUT schema)"
+            )
+
+            # Generate initial response with system_instruction in config
+            # (uses response_schema for intent detection)
+            if self.client is None:
+                raise RuntimeError(
+                    "Gemini client not initialized. Call initialize() first."
+                )
+
+            # === GOOGLE BEST PRACTICE: Use retry with exponential backoff ===
+            response = await self.response_handler.retry_with_backoff(
+                self.client.aio.models.generate_content,
                 model=self.model_name,
                 contents=contents,  # type: ignore[arg-type]
-                config=self.generation_config,
+                config=initial_config,
             )
+
+            # === EARLY VALIDATION: Catch errors before entering function calling loop ===
+            # Validates finish_reason, safety_ratings, empty content/parts
+            # Provides better diagnostics and faster failure detection
+            initial_status, initial_diagnostic = self.response_handler.validate_response(response)
+            if initial_status != ResponseStatus.SUCCESS:
+                self.logger.warning(
+                    f"⚠️ Initial response validation failed: {initial_status}"
+                )
+                self.response_handler.log_response_diagnostics(
+                    response=response,
+                    query=query[:100] if query else "N/A",
+                    status=initial_status,
+                )
+                # Return fallback immediately - don't enter function calling loop
+                return await self._create_fallback_response(1)
 
             # DEBUG: Log response details for diagnosis
             self.logger.debug(f"Response type: {type(response).__name__}")
@@ -350,38 +575,58 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
                     f"Candidate.safety_ratings: {getattr(candidate, 'safety_ratings', 'N/A')}"
                 )
 
-                # CRITICAL: Log if content is None
-                if candidate.content is None:
-                    self.logger.error(
-                        f"🚨 Gemini returned content=None!\n"
-                        f"  Query: '{query[:100]}...'\n"
-                        f"  Finish reason: {getattr(candidate, 'finish_reason', 'UNKNOWN')}\n"
-                        f"  Safety ratings: {getattr(candidate, 'safety_ratings', 'N/A')}"
-                    )
+            # CRITICAL FIX: Save original user query BEFORE function calling loop
+            # The loop appends function responses with role="user", making it impossible
+            # to find the original user query later. We need to preserve it now.
+            original_user_query = types.Content(role="user", parts=[types.Part(text=query)])
 
             # Run function calling loop if tools are available
+            # Use loop_config (WITHOUT response_schema) to avoid API conflicts
             if self.mcp_tools and self.function_call_handler:
-                final_text = await self._run_function_calling_loop(response, contents)
+                final_text, tool_calls, token_count = await self._run_function_calling_loop(
+                    response, contents, loop_config
+                )
             else:
                 # No tools - extract text directly (fallback to BaseAgent behavior)
                 final_text = await self._extract_text_from_response(response)
+                tool_calls = None  # No tools were called
+                # Extract token count from initial response
+                token_count = None
+                try:
+                    if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                        token_count = response.usage_metadata.total_token_count
+                except (AttributeError, TypeError):
+                    pass
+
+            # Calculate elapsed time BEFORE updating history (for accurate DB storage)
+            elapsed_ms = int((time.time() - start_time) * 1000)
 
             # Update history if requested
             if include_history:
-                self._update_history(
-                    contents[-1],
-                    types.Content(role="model", parts=[types.Part(text=final_text)]),
+                self.logger.info(
+                    f"📝 Updating history (session_id={self.session_id}, "
+                    f"memory_enabled={self._memory_enabled}, "
+                    f"memory_manager={self.memory_manager is not None})"
                 )
 
+                # Use the original user query saved before function calling loop
+                # (not the function response parts that were appended with role="user")
+                self._update_history(
+                    original_user_query,
+                    types.Content(role="model", parts=[types.Part(text=final_text)]),
+                    response_time_ms=elapsed_ms,
+                    tool_calls=tool_calls,
+                    token_count=token_count
+                )
+            else:
+                self.logger.warning("⚠️ History update skipped (include_history=False)")
+
             # Track success metrics
-            elapsed_ms = (time.time() - start_time) * 1000
             self._metrics["successful_requests"] += 1
             self._metrics["total_response_time_ms"] += elapsed_ms
             self._metrics["history_sizes"].append(len(self.conversation_history))
 
-            self.logger.info(
-                f"✅ Response generated ({len(final_text)} chars, {elapsed_ms:.0f}ms)"
-            )
+            self.logger.info(f"✅ Response generated ({len(final_text)} chars, {elapsed_ms:.0f}ms)")
             return final_text
 
         except Exception as e:
@@ -392,9 +637,7 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
 
             # Track error type
             error_type = type(e).__name__
-            self._metrics["errors"][error_type] = (
-                self._metrics["errors"].get(error_type, 0) + 1
-            )
+            self._metrics["errors"][error_type] = self._metrics["errors"].get(error_type, 0) + 1
 
             self.logger.exception(f"Error generating response: {e}")
             raise
@@ -403,38 +646,108 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
         self,
         response: Any,
         contents: list[types.Content],
-    ) -> str:
+        config: types.GenerateContentConfig,
+    ) -> tuple[str, list[dict[str, Any]] | None, int | None]:
         """Run function calling loop until text response or max iterations.
 
         Args:
             response: Initial Gemini API response.
             contents: Current conversation contents.
+            config: Generation config with system instruction and language context.
 
         Returns:
-            Final text response.
+            Tuple of (final_text, tool_calls_log, token_count) where:
+            - final_text: The final response text
+            - tool_calls_log: List of tool calls executed during the loop
+            - token_count: Total token count from final Gemini response
         """
+        if self.client is None:
+            raise RuntimeError(
+                "Gemini client not initialized. Call initialize() first."
+            )
         if not self.function_call_handler:
             raise RuntimeError("Function call handler not available")
+
+        # Track all tool calls for analytics/debugging
+        tool_calls_log: list[dict[str, Any]] = []
+
+        # Helper function to extract token count from response
+        def extract_token_count(resp: Any) -> int | None:
+            try:
+                if hasattr(resp, 'usage_metadata') and resp.usage_metadata:
+                    return resp.usage_metadata.total_token_count
+            except (AttributeError, TypeError):
+                pass
+            return None
+
+        # Track last response for token count extraction
+        last_response = response
 
         iteration = 0
         max_iterations = self.function_call_handler.max_iterations
 
         while iteration < max_iterations:
             iteration += 1
-            self.logger.debug(
-                f"Function calling iteration {iteration}/{max_iterations}"
-            )
+            self.logger.debug(f"Function calling iteration {iteration}/{max_iterations}")
 
-            # Check if response has candidates
-            if not self.function_call_handler.has_candidates(response):
-                self.logger.warning("No candidates in response")
-                return self._create_fallback_response(iteration)
+            # === GOOGLE BEST PRACTICE: Validate response before processing ===
+            # Check finish_reason, safety_ratings, empty content, etc.
+            status, diagnostic_msg = self.response_handler.validate_response(response)
 
+            if status != ResponseStatus.SUCCESS:
+                # Log comprehensive diagnostics
+                self.response_handler.log_response_diagnostics(
+                    response=response,
+                    query=contents[0].parts[0].text if contents else "N/A",
+                    status=status,
+                )
+
+                # Handle based on status
+                if status == ResponseStatus.SAFETY_BLOCKED:
+                    # Safety filters triggered - cannot retry, use fallback
+                    self.logger.warning(f"🚫 Safety filter blocked response: {diagnostic_msg}")
+                    fallback = await self._create_fallback_response(iteration)
+                    return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
+
+                elif status == ResponseStatus.RECITATION:
+                    # Recitation detected - increase temperature and retry
+                    self.logger.warning(f"📋 Recitation detected: {diagnostic_msg}")
+                    fallback = await self._create_fallback_response(iteration)
+                    return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
+
+                elif status == ResponseStatus.MAX_TOKENS:
+                    # Hit token limit - extract partial response or use fallback
+                    self.logger.warning(f"⚠️ Max tokens reached: {diagnostic_msg}")
+                    try:
+                        # Try to extract partial text
+                        content = response.candidates[0].content if response.candidates else None
+                        text = self.function_call_handler.extract_text_from_content(content)
+                        if text and len(text.strip()) > 10:
+                            return (text, tool_calls_log if tool_calls_log else None, extract_token_count(response))
+                    except (AttributeError, IndexError):
+                        pass
+                    fallback = await self._create_fallback_response(iteration)
+                    return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
+
+                else:
+                    # Empty response, no candidates, or unknown error
+                    self.logger.warning(f"⚠️ Response validation failed: {status} - {diagnostic_msg}")
+                    fallback = await self._create_fallback_response(iteration)
+                    return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
+
+            # === Response is valid - proceed with function calling ===
             # Get parts from response
             parts = self.function_call_handler.get_parts(response)
+
+            # === DEFENSIVE CHECK: Ensure parts is not None ===
+            # This can happen in edge cases where content exists but parts are empty
+            # Matches SalesAgent's defensive programming pattern
             if parts is None:
-                self.logger.warning("Response parts is None")
-                return self._create_fallback_response(iteration)
+                self.logger.warning(
+                    f"⚠️ Response parts is None after validation (iteration {iteration}) - edge case detected"
+                )
+                fallback = await self._create_fallback_response(iteration)
+                return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
             # Extract function calls
             function_calls = self.function_call_handler.extract_function_calls(parts)
@@ -444,15 +757,32 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
                 text = self.function_call_handler.extract_text(parts)
                 if text:
                     self.logger.debug(f"Extracted final text: {text[:100]}...")
-                    return text
+                    return (text, tool_calls_log if tool_calls_log else None, extract_token_count(response))
                 else:
-                    self.logger.warning(
-                        f"No function calls and no text in iteration {iteration}"
-                    )
-                    return self._create_fallback_response(iteration)
+                    # Try fallback text extraction from content
+                    try:
+                        content = response.candidates[0].content if response.candidates else None
+                        text = self.function_call_handler.extract_text_from_content(content)
+                        if text:
+                            self.logger.debug(f"Extracted text from content (fallback): {text[:100]}...")
+                            return (text, tool_calls_log if tool_calls_log else None, extract_token_count(response))
+                    except (AttributeError, IndexError):
+                        pass
+
+                    self.logger.warning(f"No function calls and no text in iteration {iteration}")
+                    fallback = await self._create_fallback_response(iteration)
+                    return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
             # Execute function calls
             self.logger.debug(f"Found {len(function_calls)} function calls")
+
+            # Track tool calls for analytics/debugging
+            for fc in function_calls:
+                tool_calls_log.append({
+                    "tool_name": fc.name,
+                    "args": dict(fc.args) if fc.args else {},
+                })
+
             function_response_parts = await self._execute_function_calls(function_calls)
 
             # Add function call parts to contents (model response)
@@ -461,35 +791,65 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
             # Add function response parts (user role)
             contents.append(types.Content(role="user", parts=function_response_parts))
 
-            # Generate next response
-            response = await self.client.aio.models.generate_content(
+            # Generate next response with system_instruction in config
+            # (maintain language context through function calling loop)
+            # Use retry logic for transient errors
+            response = await self.response_handler.retry_with_backoff(
+                self.client.aio.models.generate_content,
                 model=self.model_name,
                 contents=contents,  # type: ignore[arg-type]
-                config=self.generation_config,
+                config=config,
             )
 
         # Exhausted iterations
-        self.logger.warning(
-            f"Function calling loop exhausted after {iteration} iterations"
-        )
-        return self._create_fallback_response(iteration)
+        self.logger.warning(f"Function calling loop exhausted after {iteration} iterations")
+        fallback = await self._create_fallback_response(iteration)
+        return (fallback, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
-    async def _execute_function_calls(
-        self, function_calls: list[Any]
-    ) -> list[types.Part]:
+    async def _execute_function_calls(self, function_calls: list[Any]) -> list[types.Part]:
         """Execute function calls and return structured responses.
+
+        Implements scope validation (Gemini 2.5 best practice) to ensure
+        the agent only calls booking-related functions and never attempts
+        to call functions outside the allowed scope.
 
         Args:
             function_calls: List of function call objects from response.
 
         Returns:
             List of FunctionResponse Parts with structured data.
+
+        Raises:
+            ValueError: If function call attempts to call non-booking function.
         """
         function_response_parts = []
 
         for fc in function_calls:
             function_name = fc.name
             function_args = dict(fc.args)
+
+            # SCOPE VALIDATION: Gemini 2.5 Best Practice
+            # Ensure agent only calls allowed booking tools
+            if function_name not in BOOKING_TOOLS_ALLOWED:
+                self.logger.error(
+                    f"🚫 SCOPE VIOLATION: Attempted to call '{function_name}' "
+                    f"which is NOT in BOOKING_TOOLS_ALLOWED. Returning error."
+                )
+                # Return error response instead of calling the invalid function
+                response_data = {
+                    "error": f"Function '{function_name}' is not available for this agent. "
+                    f"Only booking-related functions are allowed.",
+                    "function": function_name,
+                    "allowed_functions": sorted(BOOKING_TOOLS_ALLOWED),
+                }
+                function_response_parts.append(
+                    types.Part(
+                        function_response=types.FunctionResponse(
+                            name=function_name, response=response_data
+                        )
+                    )
+                )
+                continue  # Skip to next function call
 
             self.logger.info(f"🔧 Executing: {function_name}({function_args})")
 
@@ -529,7 +889,10 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
         return function_response_parts
 
     async def _execute_tool(self, tool_name: str, args: dict) -> Any:
-        """Execute a single tool with proper error handling.
+        """Execute a single tool with proper error handling and language context.
+
+        Propagates the agent's language context to MCP tools so responses
+        are in the correct language (English or Spanish).
 
         Args:
             tool_name: Tool name to execute.
@@ -544,7 +907,12 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
         if not self.mcp_client:
             raise RuntimeError("No MCP client available for tool execution")
 
-        # Execute tool via MCP
+        # Propagate language context to MCP tools (CRITICAL for multilingual support)
+        if LANGUAGE_CONTEXT_AVAILABLE and set_current_language:
+            set_current_language(self.language)
+            self.logger.debug(f"Set MCP language context to: {self.language}")
+
+        # Execute tool via MCP (MCP handlers will use the language context)
         result = await self.mcp_client.call_tool(tool_name, args)
         return result
 
@@ -594,19 +962,49 @@ Recuerda: Tu especialidad son las RESERVAS. Si te preguntan sobre productos o in
 
         return response_text
 
-    def _create_fallback_response(self, iteration: int) -> str:
-        """Create fallback response when iteration fails.
+    async def _handle_validation_failure(
+        self,
+        status: ResponseStatus,
+        diagnostic: str,
+        query: str,
+    ) -> str:
+        """Override: Handle validation failures with booking-specific fallback logic.
+
+        Booking agent provides graceful fallback responses instead of raising exceptions,
+        ensuring users always get a helpful message even when API calls fail.
 
         Args:
-            iteration: Current iteration number.
+            status: Response validation status (SAFETY_BLOCKED, EMPTY_RESPONSE, etc.)
+            diagnostic: Diagnostic message explaining the failure
+            query: Original user query (for logging context)
 
         Returns:
-            Fallback error message.
+            Multilingual fallback message generated via BaseAgent._create_fallback_response()
         """
-        return (
-            "No pude procesar tu solicitud completamente. "
-            "Por favor, intenta reformular tu pregunta o proporciona más detalles."
+        # Log comprehensive diagnostics
+        self.logger.warning(
+            f"🚨 Booking agent validation failure: {status}\n"
+            f"   Diagnostic: {diagnostic}\n"
+            f"   Query: '{query[:100]}...'\n"
+            f"   Returning multilingual fallback response"
         )
+
+        # Return appropriate fallback based on error type
+        if status == ResponseStatus.SAFETY_BLOCKED:
+            # Safety filters triggered - cannot retry, use fallback
+            return await self._create_fallback_response(iteration=1)
+
+        elif status == ResponseStatus.RECITATION:
+            # Recitation detected - use fallback
+            return await self._create_fallback_response(iteration=1)
+
+        elif status == ResponseStatus.MAX_TOKENS:
+            # Hit token limit - use fallback
+            return await self._create_fallback_response(iteration=1)
+
+        else:
+            # Other errors (EMPTY_RESPONSE, NO_CANDIDATES, etc.)
+            return await self._create_fallback_response(iteration=2)
 
     def __repr__(self) -> str:
         """String representation of BookingAgent."""

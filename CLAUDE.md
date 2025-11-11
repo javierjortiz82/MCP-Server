@@ -13,3 +13,8 @@
 - Code Review:  El proyecto está completamente funcional y listo para producción.
 - Muestra los productos correctamente
 - Producto funcional
+- Conexión con servicio de coreo
+- Implementacion clerk en backend existosa
+- Implementacion de clerk en frontend
+- Aplicación de estandares de seguridad
+- Chat completo

@@ -59,11 +59,22 @@ if mcp_server_path.exists():
     sys.path.insert(0, _mcp_path_str)
 
 # Now safe to import modules
-from multi_agent.agent_factory import AgentFactory
-from multi_agent.agent_router import AgentRouter, Intent
-from multi_agent.booking_agent import BookingAgent
-from multi_agent.general_agent import GeneralAgent
-from multi_agent.sales_agent import SalesAgent
+from multi_agent.agent_factory import AgentFactory  # noqa: E402
+from multi_agent.agent_router import AgentRouter, Intent  # noqa: E402
+from multi_agent.booking_agent import BookingAgent  # noqa: E402
+from multi_agent.general_agent import GeneralAgent  # noqa: E402
+from multi_agent.sales_agent import SalesAgent  # noqa: E402
+
+# Import exceptions from gemini_agent
+from gemini_agent.exceptions import (  # noqa: E402
+    AgentError,
+    ConfigurationError,
+    ConnectionError,
+    GenerationError,
+    InitializationError,
+    PromptError,
+    ValidationError,
+)
 
 # Import MemoryManager from mcp_server using absolute file path
 # NOTE: Complex import required due to client_mcp/utils and mcp_server/utils namespace conflict
@@ -86,9 +97,7 @@ try:
 
     # Clear module cache for utils and config modules (client_mcp pollutes sys.modules)
     _saved_modules = {}
-    _modules_to_clear = [
-        k for k in sys.modules.keys() if k.startswith(("utils", "config"))
-    ]
+    _modules_to_clear = [k for k in sys.modules if k.startswith(("utils", "config"))]
     for _mod in _modules_to_clear:
         _saved_modules[_mod] = sys.modules.pop(_mod)
 
@@ -100,9 +109,7 @@ try:
             raise ImportError(f"MemoryManager file not found at {_memory_manager_file}")
 
         # Load module from file path
-        _spec = importlib.util.spec_from_file_location(
-            "mcp_memory_manager", _memory_manager_file
-        )
+        _spec = importlib.util.spec_from_file_location("mcp_memory_manager", _memory_manager_file)
         if _spec is None or _spec.loader is None:
             raise ImportError("Failed to create module spec")
 
@@ -135,6 +142,14 @@ __all__ = [
     "Intent",
     "MemoryManager",
     "SalesAgent",
+    # Exceptions
+    "AgentError",
+    "ConfigurationError",
+    "ConnectionError",
+    "GenerationError",
+    "InitializationError",
+    "PromptError",
+    "ValidationError",
 ]
 
 __version__ = "3.1.0"  # Added MemoryManager

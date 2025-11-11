@@ -16,8 +16,24 @@ from mcp_handlers import (
 )
 from utils.logger import setup_logging
 
+# Observability imports (OPCIÓN 9)
+try:
+    from email_service.observability.metrics import get_metrics_collector
+    from email_service.observability.structured_logger import get_structured_logger
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
 # Setup logger for MCP server
 logger = setup_logging("mcp_server")
+
+# Initialize observability for server (OPCIÓN 9)
+if OBSERVABILITY_AVAILABLE:
+    structured_logger = get_structured_logger("mcp_server")
+    metrics = get_metrics_collector()
+else:
+    structured_logger = None
+    metrics = None
 
 # Create MCP server with official configuration
 mcp = FastMCP(
@@ -46,18 +62,51 @@ prompt_handlers.init_prompt_handlers(mcp)
 async def startup():
     """Initialize database and other resources on server startup."""
     try:
+        # Track server startup with metrics (OPCIÓN 9)
+        if metrics:
+            latency_ctx = metrics.record_latency("mcp_server_startup_latency")
+            latency_ctx.__enter__()
+        else:
+            latency_ctx = None
+
+        if structured_logger:
+            structured_logger.info("MCP server initialization starting")
+
+        if metrics:
+            metrics.increment_counter("mcp_server_startup_attempts", 1)
+
         logger.info("Starting MCP server initialization...")
         db.init_db()
         logger.info("Database initialized successfully for official MCP server")
         logger.info("Server startup completed successfully")
+
+        if metrics:
+            metrics.increment_counter("mcp_server_startup_successful", 1)
+        if structured_logger:
+            structured_logger.info("MCP server initialization completed successfully")
+
     except Exception as e:
+        if metrics:
+            metrics.increment_counter("mcp_server_startup_failed", 1)
+        if structured_logger:
+            structured_logger.exception("MCP server initialization failed")
+
         logger.exception("Critical error during server initialization: %s", e)
         logger.error("Server startup failed - shutting down")
         raise
 
+    finally:
+        if latency_ctx:
+            latency_ctx.__exit__(None, None, None)
+
 
 async def shutdown():
     """Clean up resources on server shutdown."""
+    if metrics:
+        metrics.increment_counter("mcp_server_shutdown", 1)
+    if structured_logger:
+        structured_logger.info("MCP server shutdown initiated")
+
     logger.info("Official MCP server shutting down...")
 
 

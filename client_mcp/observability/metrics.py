@@ -92,9 +92,7 @@ class MetricsCollector:
         # Update execution time stats
         exec_time = metric.execution_time_ms
         stats["total_execution_time_ms"] += exec_time
-        stats["avg_execution_time_ms"] = (
-            stats["total_execution_time_ms"] / stats["total_calls"]
-        )
+        stats["avg_execution_time_ms"] = stats["total_execution_time_ms"] / stats["total_calls"]
         stats["min_execution_time_ms"] = min(stats["min_execution_time_ms"], exec_time)
         stats["max_execution_time_ms"] = max(stats["max_execution_time_ms"], exec_time)
 
@@ -122,15 +120,9 @@ class MetricsCollector:
         Returns:
             Summary statistics across all tools
         """
-        total_calls = sum(
-            stats["total_calls"] for stats in self._aggregated_stats.values()
-        )
-        total_success = sum(
-            stats["successful_calls"] for stats in self._aggregated_stats.values()
-        )
-        total_failures = sum(
-            stats["failed_calls"] for stats in self._aggregated_stats.values()
-        )
+        total_calls = sum(stats["total_calls"] for stats in self._aggregated_stats.values())
+        total_success = sum(stats["successful_calls"] for stats in self._aggregated_stats.values())
+        total_failures = sum(stats["failed_calls"] for stats in self._aggregated_stats.values())
 
         success_rate = (total_success / total_calls * 100) if total_calls > 0 else 0.0
 
@@ -151,10 +143,7 @@ class MetricsCollector:
         Returns:
             List of (tool_name, call_count) tuples, sorted by count descending
         """
-        tool_counts = [
-            (tool_name, stats["total_calls"])
-            for tool_name, stats in self._aggregated_stats.items()
-        ]
+        tool_counts = [(tool_name, stats["total_calls"]) for tool_name, stats in self._aggregated_stats.items()]
 
         return sorted(tool_counts, key=lambda x: x[1], reverse=True)[:top_n]
 
@@ -168,8 +157,7 @@ class MetricsCollector:
             List of (tool_name, avg_time_ms) tuples, sorted by time descending
         """
         tool_times = [
-            (tool_name, stats["avg_execution_time_ms"])
-            for tool_name, stats in self._aggregated_stats.items()
+            (tool_name, stats["avg_execution_time_ms"]) for tool_name, stats in self._aggregated_stats.items()
         ]
 
         return sorted(tool_times, key=lambda x: x[1], reverse=True)[:top_n]

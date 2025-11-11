@@ -1,21 +1,21 @@
 # Core AI Dependencies
-google-genai>=1.41.0      # Official Google SDK for Gemini AI
+google-genai>=1.49.0      # Official Google SDK for Gemini AI
 anthropic>=0.39.0         # For future Claude integration
 
 # MCP Dependencies
-mcp>=1.2.0                # Model Context Protocol SDK
+mcp==1.21.0               # Model Context Protocol SDK (latest stable)
 fastmcp>=0.3.0            # Fast MCP server implementation
 
 # Database Dependencies
 psycopg2-binary>=2.9.10   # PostgreSQL adapter
 pgvector>=0.4.1           # Vector database support
-sqlalchemy>=2.0.0         # ORM for database operations
+sqlalchemy>=2.0.36        # ORM for database operations
 
 # Web Framework
-fastapi>=0.95.0           # Modern async web framework
-uvicorn>=0.22.0           # ASGI server
-pydantic>=2.0.0           # Data validation
-httpx>=0.24.0             # Async HTTP client
+fastapi>=0.115.0          # Modern async web framework
+uvicorn>=0.32.0           # ASGI server
+pydantic>=2.11.0          # Data validation
+httpx>=0.28.0             # Async HTTP client
 
 # Google Services
 google-api-python-client>=2.100.0  # Google Calendar API
@@ -32,13 +32,13 @@ typer>=0.9.0              # CLI interface
 jinja2>=3.1.0             # Template engine for modular prompts
 
 # Development & Testing
-pytest>=7.4.0             # Testing framework
-pytest-asyncio>=0.21.0    # Async test support
+pytest>=8.3.0             # Testing framework
+pytest-asyncio>=0.24.0    # Async test support
 pytest-cov>=4.1.0         # Coverage reporting
-pytest-mock>=3.11.0       # Mock support
-mypy>=1.5.0               # Type checking
-ruff>=0.1.0               # Fast Python linter
-black>=23.0.0             # Code formatter
+pytest-mock>=3.14.0       # Mock support
+mypy>=1.13.0              # Type checking
+ruff>=0.8.0               # Fast Python linter
+black>=24.0.0             # Code formatter
 
 # Observability
 prometheus-client>=0.17.0  # Metrics collection

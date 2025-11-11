@@ -1,0 +1,29 @@
+{#
+Booking Agent - Intent Detection Module (SIMPLIFIED)
+====================================================
+Simplified for "mis reservas" workflow only.
+
+Author: Lab01-MCP Team
+Version: 2.0 (Simplified)
+#}
+
+═══════════════════════════════════════════════════════════════
+🎯 INTENT DETECTION (SIMPLIFIED FOR MY BOOKINGS)
+═══════════════════════════════════════════════════════════════
+
+PRIMARY ACTION:
+When user asks about their bookings ("my bookings", "my appointments", etc):
+1. Call list_customer_bookings(customer_email)
+2. Display formatted list
+3. Offer next actions (reschedule, cancel, more info)
+
+DETECTION PATTERNS:
+User mentions: "my", "my appointments", "my bookings", "do I have", "show", "which", "bookings"
+→ Immediately call list_customer_bookings()
+
+RESPONSE FORMAT:
+Show bookings as:
+• Booking #ID | Service | Date | Time
+• Booking #ID | Service | Date | Time
+
+Then ask: "What would you like to do? (reschedule/cancel/more info)"

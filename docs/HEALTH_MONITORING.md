@@ -209,7 +209,7 @@ Each service in `docker-compose.yml` includes health checks:
 services:
   postgres:
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mcp_user -d mcp_db"]
+      test: ["CMD-SHELL", "pg_isready -U mcp_user -d mcpdb"]
       interval: 10s
       timeout: 5s
       retries: 5

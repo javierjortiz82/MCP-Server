@@ -4,29 +4,104 @@ This module provides the Google Gemini AI integration layer, extracted from
 the main application for better separation of concerns.
 
 Updated to use Pydantic v2 configuration and structured logging.
+
+DEPRECATED: This module is deprecated. Use BaseAgent or specialized agents instead.
+See migration guide in the class docstring.
 """
 
 import asyncio
+import warnings
 from typing import Any
-
-from google import genai
-from google.genai import types
+from functools import wraps
 
 from gemini_agent.config import settings
 from gemini_agent.utils.logger import setup_logging
+from google import genai
+from google.genai import types
 
 # Setup logger for Gemini Agent
 logger = setup_logging("gemini_agent")
 
 
+def deprecated(reason: str = "", removal_date: str = "") -> type:
+    """Decorator to mark a class as deprecated with migration guidance."""
+
+    def decorator(cls: type) -> type:
+        message = f"{cls.__name__} is deprecated"
+        if reason:
+            message += f": {reason}"
+        if removal_date:
+            message += f" (will be removed on {removal_date})"
+
+        original_init = cls.__init__
+
+        @wraps(original_init)
+        def new_init(self: Any, *args: Any, **kwargs: Any) -> None:
+            warnings.warn(message, category=DeprecationWarning, stacklevel=2)
+            return original_init(self, *args, **kwargs)
+
+        cls.__init__ = new_init
+        cls.__deprecated__ = True
+        return cls
+
+    return decorator
+
+
+@deprecated(
+    reason="Use BaseAgent instead (provides same functionality with better architecture)",
+    removal_date="2025-12-31",
+)
 class GeminiAgent:
     """Google Gemini AI Agent for natural language processing.
+
+    ⚠️ DEPRECATED: This class is deprecated. Use BaseAgent or specialized agents instead.
 
     This class encapsulates all Gemini-specific functionality:
     - Client initialization
     - Response generation
     - Conversation history management
     - Configuration management
+
+    Migration Guide:
+    ===============
+
+    Before (using GeminiAgent):
+        >>> from gemini_agent import GeminiAgent
+        >>> agent = GeminiAgent(api_key="key")
+        >>> await agent.initialize()
+        >>> response = await agent.generate_response("Hello")
+
+    After (using BaseAgent):
+        >>> from gemini_agent import BaseAgent
+        >>> class CustomAgent(BaseAgent):
+        ...     @property
+        ...     def agent_name(self) -> str:
+        ...         return "my_agent"
+        ...
+        ...     def get_system_prompt(self, **kwargs) -> str:
+        ...         return "You are helpful"
+        >>> agent = CustomAgent()
+        >>> await agent.initialize()
+        >>> response = await agent.generate_response("Hello")
+
+    After (using Specialized Agents - RECOMMENDED):
+        >>> from multi_agent import BookingAgent, SalesAgent, GeneralAgent
+        >>> agent = BookingAgent()  # or SalesAgent(), GeneralAgent()
+        >>> await agent.initialize()
+        >>> response = await agent.generate_response("Hello")
+
+    Why deprecate?
+    ==============
+    - BaseAgent eliminates ~280 lines of duplicate code
+    - Provides unified interface for all agent types
+    - Built-in memory management and MCP tools support
+    - A/B testing framework
+    - Better separation of concerns
+
+    Removal Timeline:
+    =================
+    - Now: DeprecationWarning emitted on instantiation
+    - 2025-12-31: Class will be removed from codebase
     """
 
     def __init__(
@@ -60,9 +135,7 @@ class GeminiAgent:
         """Initialize the Gemini client."""
         logger.debug("Initializing Gemini client...")
         self.client = genai.Client(api_key=self.api_key)
-        self.generation_config = self._build_generation_config(
-            **self._generation_params
-        )
+        self.generation_config = self._build_generation_config(**self._generation_params)
         logger.info("Gemini client initialized successfully")
 
     def _build_generation_config(
@@ -87,11 +160,7 @@ class GeminiAgent:
         temp = temperature if temperature is not None else settings.TEMPERATURE
         k = top_k if top_k is not None else settings.TOP_K
         p = top_p if top_p is not None else settings.TOP_P
-        tokens = (
-            max_output_tokens
-            if max_output_tokens is not None
-            else settings.MAX_OUTPUT_TOKENS
-        )
+        tokens = max_output_tokens if max_output_tokens is not None else settings.MAX_OUTPUT_TOKENS
 
         logger.debug(
             "Generation config: temp=%s, top_k=%s, top_p=%s, max_tokens=%s",
@@ -144,16 +213,12 @@ class GeminiAgent:
 
         # Add system prompt if provided
         if system_prompt:
-            contents.append(
-                types.Content(role="user", parts=[types.Part(text=system_prompt)])
-            )
+            contents.append(types.Content(role="user", parts=[types.Part(text=system_prompt)]))
             contents.append(
                 types.Content(
                     role="model",
                     parts=[
-                        types.Part(
-                            text="Entendido. Seguiré estas instrucciones como Odiseo Bot."
-                        )
+                        types.Part(text="Entendido. Seguiré estas instrucciones como Odiseo Bot.")
                     ],
                 )
             )
@@ -196,9 +261,7 @@ class GeminiAgent:
             logger.error("Error generating response: %s", e, exc_info=True)
             raise
 
-    def add_to_history(
-        self, user_content: types.Content, model_content: types.Content
-    ) -> None:
+    def add_to_history(self, user_content: types.Content, model_content: types.Content) -> None:
         """Manually add content to conversation history.
 
         Args:
@@ -230,9 +293,7 @@ class GeminiAgent:
             "temperature": kwargs.get("temperature", settings.TEMPERATURE),
             "top_k": kwargs.get("top_k", settings.TOP_K),
             "top_p": kwargs.get("top_p", settings.TOP_P),
-            "max_output_tokens": kwargs.get(
-                "max_output_tokens", settings.MAX_OUTPUT_TOKENS
-            ),
+            "max_output_tokens": kwargs.get("max_output_tokens", settings.MAX_OUTPUT_TOKENS),
         }
         self.generation_config = self._build_generation_config(**config_dict)
 
@@ -267,9 +328,7 @@ class GeminiAgent:
 
         return function_declarations
 
-    def _convert_json_schema_to_gemini_schema(
-        self, json_schema: dict[str, Any]
-    ) -> types.Schema:
+    def _convert_json_schema_to_gemini_schema(self, json_schema: dict[str, Any]) -> types.Schema:
         """Convert JSON Schema to Gemini Schema format.
 
         Args:
@@ -324,8 +383,8 @@ class GeminiAgent:
 
             gemini_nested_properties = {}
             for nested_prop_name, nested_prop_def in nested_properties.items():
-                gemini_nested_properties[nested_prop_name] = (
-                    self._convert_property_to_schema(nested_prop_def)
+                gemini_nested_properties[nested_prop_name] = self._convert_property_to_schema(
+                    nested_prop_def
                 )
 
             return types.Schema(
@@ -439,9 +498,7 @@ class GeminiAgent:
                 if ("403" in error_str or "PERMISSION_DENIED" in error_str) and (
                     "CachedContent" in error_str
                 ):
-                    logger.warning(
-                        "⚠️ Cache expired or not found. Fallback to standard mode..."
-                    )
+                    logger.warning("⚠️ Cache expired or not found. Fallback to standard mode...")
                     # Invalidate cache and rebuild config
                     self.cached_content = None
                     self.generation_config = self._build_generation_config(

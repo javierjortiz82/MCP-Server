@@ -1,0 +1,39 @@
+{
+  "authentication": {
+    "credentials_not_found": "Service account credentials not found: {path}",
+    "failed": "Failed to authenticate with Google Calendar: {error}",
+    "credentials_not_initialized": "Credentials not initialized",
+    "refresh_failed": "Credential refresh failed: {error}",
+    "service_not_initialized": "Service not initialized"
+  },
+  "event": {
+    "create": {
+      "starting": "Creating event: {summary} at {start_datetime}",
+      "failed": "Failed to create event: {error}",
+      "failed_after_retry": "Failed to create event after removing attendee: {error}",
+      "success": "Event created successfully: {event_id}"
+    },
+    "update": {
+      "starting": "Updating event: {event_id}",
+      "failed": "Failed to update event {event_id}: {error}",
+      "success": "Event updated successfully: {event_id}"
+    },
+    "delete": {
+      "starting": "Deleting event: {event_id}",
+      "failed": "Failed to delete event {event_id}: {error}",
+      "success": "Event deleted successfully: {event_id}"
+    },
+    "fetch": {
+      "starting": "Fetching event: {event_id}",
+      "failed": "Failed to fetch event {event_id}: {error}"
+    }
+  },
+  "busy": {
+    "query_failed": "Failed to query busy times: {error}",
+    "starting": "Querying busy times: {start_date} to {end_date}"
+  },
+  "attendee": {
+    "add_failed_domain_delegation": "Could not add attendee {email} (likely due to Domain-Wide Delegation requirements): {error}. Adding to description instead.",
+    "permission_denied_retrying": "Got 403 Forbidden when trying to add attendee (likely missing Domain-Wide Delegation). Removing attendee and retrying..."
+  }
+}

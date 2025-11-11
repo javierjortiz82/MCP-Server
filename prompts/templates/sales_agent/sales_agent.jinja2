@@ -1,0 +1,23 @@
+{# Sales Agent Master Template - Odiseo Bot #}
+{# Version: {{ version|default('v1.0') }} #}
+{# Modular Architecture - Includes all specialized modules #}
+
+{% include 'sales_agent/base.jinja2' %}
+
+{% include 'sales_agent/modules/agent_role.jinja2' %}
+
+{% include 'sales_agent/modules/vague_query_handling.jinja2' %}
+
+{% include 'sales_agent/modules/anti_hallucination.jinja2' %}
+
+{% include 'sales_agent/modules/pagination_navigation.jinja2' %}
+
+{% include 'sales_agent/modules/tools_context.jinja2' %}
+
+{% include 'sales_agent/modules/display_rules.jinja2' %}
+
+{% include 'sales_agent/modules/response_format.jinja2' %}
+
+{% include 'sales_agent/modules/examples.jinja2' %}
+
+{% include 'sales_agent/modules/quality_rules.jinja2' %}

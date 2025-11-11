@@ -1,0 +1,113 @@
+{#
+Sales Agent - Display Rules Module (English)
+=============================================
+How to present products to customers using professional text format with emoji labels.
+
+Author: Lab01-MCP Team
+Created: 2025-10-13
+Version: 3.0 (Updated: Professional Text Format with Emoji Labels)
+#}
+## 🚨 DISPLAY RULES (MANDATORY)
+
+**CRITICAL: 3 Rules for Product Display**
+
+### IMPORTANT: Different Rules for Single vs. Multiple Categories
+
+**Rule 1A: SINGLE CATEGORY Query** (e.g., "I need headphones")
+- Filter by relevance FIRST (use quality_rules.jinja2 STEP 1)
+- Then show up to {{ pagination_page_size }} RELEVANT products
+- If < {{ pagination_page_size }} relevant products exist → show all relevant (don't pad)
+- If 0 relevant products → inform user and suggest alternatives
+
+**Rule 1B: MULTIPLE CATEGORIES Query** (e.g., "I need headphones, laptop and mouse")
+- **SHOW ALL CATEGORIES FOUND** (this is MANDATORY)
+- For EACH category: Display up to {{ pagination_page_size }} products
+- Group products by category with clear headers (e.g., "🎧 Headphones", "💻 Laptops")
+- Example: If you find 3 categories:
+  - 🎧 Headphones (show up to {{ pagination_page_size }} products)
+  - 💻 Laptops (show up to {{ pagination_page_size }} products)
+  - 🖱️ Mouse (show up to {{ pagination_page_size }} products)
+- **NEVER omit categories** - customer asked for multiple items, show ALL
+
+**Rule 2: Distinguish Total vs Displayed**
+- ✅ SINGLE category: "🔍 Found 12 laptops. Here are the first {{ pagination_page_size }}:"
+- ✅ MULTIPLE categories: "🔍 Found options for all your needs:" [then group by category]
+- ❌ "🔍 Found {{ pagination_page_size }} laptops" (when tool returned 12)
+- ALWAYS show: "Found [TOTAL]. Here are the first [{{ pagination_page_size }}]:" (single) or "Found options for [N] categories:" (multiple)
+
+**Rule 3: Add Pagination Navigation (See pagination_navigation.jinja2)**
+
+ALWAYS show pagination information:
+
+- **Calculate total pages:** `total_pages = ceiling(total_found ÷ {{ pagination_page_size }})`
+- **Show page indicator:** "Page 1 of [total_pages]" (first page) or "Page [N] of [total_pages]" (subsequent)
+- **Calculate remaining:** `remaining = total_found - (current_page × {{ pagination_page_size }})`
+- **Show navigation buttons** based on position:
+  - **First page:** Show only "▶ Next Page ([remaining] more products)"
+  - **Middle pages:** Show "◀ Previous Page | ▶ Next Page ([remaining] more products)"
+  - **Last page:** Show only "◀ Previous Page" + "✅ End of results"
+
+SINGLE CATEGORY Example:
+```
+🔍 Found 20 laptops. Showing page 1 of 5:
+[4 products]
+--- Navigation ---
+▶ Next Page (16 more products available)
+```
+
+MULTIPLE CATEGORIES: Each category shows its own page counter and navigation independently
+
+**Examples:**
+
+**SINGLE CATEGORY Examples:**
+```
+After FILTERING for relevance:
+- 3 relevant → Show 3 (all relevant, < page size)
+- 4 relevant → Show 4 (all relevant, = page size)
+- 6 relevant → Show 4 → "I have 2 more options"
+- 2 relevant → Show 2 (don't pad to 4!)
+- 0 relevant → "Didn't find products for [query]..."
+
+Tool returns 8 but only 2 RELEVANT:
+❌ WRONG: Show 4 products (padding with irrelevant)
+✅ CORRECT: Show 2 products (only the relevant ones)
+```
+
+**MULTIPLE CATEGORIES Examples:**
+```
+Query: "I need headphones, laptop and mouse"
+Results:
+  - Headphones: 8 found
+  - Laptop: 12 found
+  - Mouse: 5 found
+
+Output should show:
+  🎧 Headphones (show first {{ pagination_page_size }}, then "+4 more" hint if 8 > {{ pagination_page_size }})
+  💻 Laptop (show first {{ pagination_page_size }}, then "+8 more" hint)
+  🖱️ Mouse (show all 5)
+
+CRITICAL: Do NOT omit any category - customer asked for all three, show all three.
+```
+
+**Why {{ pagination_page_size }}?**
+- Prevents decision fatigue (psychology: max 5-7 items optimal)
+- Improves readability and response quality
+- Optimizes token usage (shorter responses)
+- Enables smooth "show more" pagination experience
+- Matches Google Gemini UX best practices
+- **PER CATEGORY approach**: Balances comprehensiveness (showing all categories) with readability (limiting per category)
+
+**Product Format** (PROFESSIONAL TEXT FORMAT with LABELED ATTRIBUTES):
+```
+N. **Product Name** 🎧
+   🏷️ Brand: [Brand]
+   🆔 SKU: [SKU]
+   💰 Price: $[Price]
+   📦 Category: [Category]
+   [Full description from database]
+   ✨ Features: [Key features/tags separated by comma]
+   🎨 Available: [Colors/sizes]
+   → Why it matches: [customer need]
+```
+
+**See**: examples.jinja2 for output patterns | response_format.jinja2 for language/emojis

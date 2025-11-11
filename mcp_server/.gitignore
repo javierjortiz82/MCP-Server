@@ -99,3 +99,9 @@ temp/
 *copy*
 *Copy*
 *.orig
+
+# Google Calendar credentials and secrets
+credentials/
+*.key
+*.pem
+service-account.json

@@ -22,12 +22,15 @@ import asyncio
 import sys
 import uuid
 from pathlib import Path
-from typing import Any
-
-from google.genai import types
+from typing import TYPE_CHECKING, Any
 
 # Import BaseAgent
 from gemini_agent.base_agent import BaseAgent
+from gemini_agent.utils.language_detector import detect_user_language
+from google.genai import types
+
+if TYPE_CHECKING:
+    from core.mcp_connector import MCPConnector
 
 # Import client_mcp utilities (will be migrated to extensions/ in Phase 3)
 # Add client_mcp to path
@@ -36,15 +39,23 @@ if str(client_mcp_path) not in sys.path:
     sys.path.insert(0, str(client_mcp_path))
 
 try:
-    from config.settings import (  # client_mcp settings (has ENABLE_THINKING, etc.)
-        settings,
-    )
+    # Import settings from client_mcp explicitly to avoid sys.path conflicts
+    # (multi_agent/__init__.py manipulates sys.path, potentially loading mcp_server.config instead)
+    from importlib.util import spec_from_file_location, module_from_spec
+
+    client_settings_path = client_mcp_path / "config" / "settings.py"
+    spec = spec_from_file_location("client_mcp_settings", client_settings_path)
+    if spec and spec.loader:
+        client_settings_module = module_from_spec(spec)
+        spec.loader.exec_module(client_settings_module)
+        settings = client_settings_module.settings
+    else:
+        raise ImportError("Could not load client_mcp settings")
+
     from core.conversation_manager import ConversationManager
     from core.debug_formatter import DebugFormatter
     from core.function_call_handler import FunctionCallHandler
-    from core.mcp_connector import MCPConnector
     from core.pagination_manager import PaginationManager
-    from core.prompt_builder import PromptBuilder
     from core.response_processor import ResponseProcessor
     from core.response_validator import ResponseValidator
     from core.result_serializer import ResultSerializer
@@ -52,8 +63,7 @@ try:
     from core.tool_executor import ToolExecutor
 except ImportError as e:
     raise RuntimeError(
-        f"Failed to import client_mcp utilities: {e}. "
-        "Make sure client_mcp/ is accessible."
+        f"Failed to import client_mcp utilities: {e}. Make sure client_mcp/ is accessible."
     )
 
 # Import PromptManager for modular prompts
@@ -159,7 +169,9 @@ class SalesAgent(BaseAgent):
         # Advanced features (orchestration)
         self.conversation_manager = ConversationManager()  # For compatibility
         self.debug_formatter = DebugFormatter()
-        self.function_call_handler = FunctionCallHandler(max_iterations=10)
+        self.function_call_handler = FunctionCallHandler(
+            max_iterations=settings.FUNCTION_CALL_MAX_ITERATIONS
+        )
         self.response_validator: ResponseValidator | None = None
         self.response_processor: ResponseProcessor | None = None
         self.tool_executor: ToolExecutor | None = None
@@ -172,6 +184,10 @@ class SalesAgent(BaseAgent):
         # If mcp_client was injected, orchestrator is responsible for closing it
         self._owns_mcp_client = False  # Will be True only if created internally
 
+        # Pagination: autodiscovered tools that support client-side pagination
+        # Fetched from tool-categories://pageable-tools resource (dynamic discovery)
+        self._pageable_tools: set[str] | None = None
+
         # Context caching (performance optimization)
         self.cached_content: types.CachedContent | None = None
 
@@ -181,9 +197,8 @@ class SalesAgent(BaseAgent):
         else:
             self.rate_limiter = None
 
-        # Prompt management
+        # Prompt management (Jinja2 + PromptManager is mandatory)
         self.prompt_manager_instance: PromptManager | None = None
-        self.use_modular_prompts = PROMPT_MANAGER_AVAILABLE
 
     @property
     def agent_name(self) -> str:
@@ -194,11 +209,11 @@ class SalesAgent(BaseAgent):
         return "sales_agent"
 
     def get_system_prompt(self, **kwargs: Any) -> str:
-        """Get system prompt for SalesAgent using PromptManager.
+        """Get system prompt for SalesAgent using PromptManager (Jinja2).
 
         Implements BaseAgent's abstract method.
 
-        Uses PromptManager (modular + A/B testing) with fallback to PromptBuilder (legacy).
+        Uses PromptManager with Jinja2 templates and A/B testing support.
 
         Args:
             **kwargs: Additional parameters (user_id, mcp_tools, etc.).
@@ -209,35 +224,72 @@ class SalesAgent(BaseAgent):
         Example:
             >>> prompt = bot.get_system_prompt(user_id="user_123")
         """
-        # Try PromptManager first (modular prompts with A/B testing)
-        if self.use_modular_prompts and PROMPT_MANAGER_AVAILABLE:
-            try:
-                if self.prompt_manager_instance is None:
-                    self.logger.info("🎨 Initializing PromptManager (modular prompts)")
-                    self.prompt_manager_instance = PromptManager(use_templates=True)
+        # Initialize PromptManager if not already done
+        if self.prompt_manager_instance is None:
+            self.logger.debug("🎨 Initializing PromptManager (Jinja2 templates)")
+            self.prompt_manager_instance = PromptManager()
 
-                # Get prompt with A/B testing support
-                prompt = self.prompt_manager_instance.get_sales_prompt(
-                    mcp_tools=kwargs.get("mcp_tools", self.mcp_tools),
-                    user_id=kwargs.get("user_id", self.user_id),
-                )
-
-                self.logger.info(
-                    f"✅ Using modular prompt system ({len(prompt)} chars, "
-                    f"user_id={self.user_id[:8]}...)"
-                )
-                return prompt
-
-            except Exception as e:
-                self.logger.warning(
-                    f"⚠️ PromptManager failed: {e}. Falling back to PromptBuilder."
-                )
-
-        # Fallback to legacy PromptBuilder
-        self.logger.info("📝 Using legacy PromptBuilder (monolithic prompt)")
-        return PromptBuilder.build_dynamic_system_prompt(
-            kwargs.get("mcp_tools", self.mcp_tools)
+        # Get prompt with A/B testing support and multilingual
+        prompt = self.prompt_manager_instance.get_sales_prompt(
+            mcp_tools=kwargs.get("mcp_tools", self.mcp_tools),
+            user_id=kwargs.get("user_id", self.user_id),
+            user_lang=kwargs.get("user_lang", "es"),  # Pass language context for template selection
         )
+
+        self.logger.debug(
+            f"✅ Sales prompt loaded from Jinja2 ({len(prompt)} chars, "
+            f"user_id={self.user_id[:8]}...)"
+        )
+        return prompt
+
+    async def _fetch_pageable_tools(self) -> set[str]:
+        """Fetch pageable tools from MCP resource (autodiscovery).
+
+        Queries the MCP server's tool-categories://pageable-tools resource to
+        dynamically discover which tools return pageable result lists. This
+        eliminates the need for hardcoding tool lists (like SEARCH_TOOL_NAMES).
+
+        Returns:
+            Set of tool names that support client-side pagination.
+            Falls back to default set if MCP unavailable or fetch fails.
+
+        Example:
+            >>> tools = await agent._fetch_pageable_tools()
+            >>> # tools = {"fuzzy_search_smart", "search_products"}
+        """
+        try:
+            if not self.mcp_client:
+                self.logger.debug("ℹ️  No MCP client available, using default pageable tools")
+                return {"fuzzy_search_smart", "search_products"}
+
+            self.logger.debug("📥 Fetching pageable tools from MCP resource...")
+            resource_uri = "tool-categories://pageable-tools"
+            resource_content = await self.mcp_client.read_resource(resource_uri)
+
+            # Extract text from TextResourceContents object
+            import json
+
+            content_text = (
+                resource_content.text
+                if hasattr(resource_content, "text")
+                else str(resource_content)
+            )
+            data = json.loads(content_text)
+            tool_names = set(data.get("tools", []))
+
+            if tool_names:
+                self.logger.info(
+                    f"✅ Autodiscovered {len(tool_names)} pageable tools: {sorted(tool_names)}"
+                )
+                return tool_names
+            else:
+                self.logger.warning("⚠️  Pageable tools list is empty, using defaults")
+                return {"fuzzy_search_smart", "search_products"}
+
+        except Exception as e:
+            self.logger.warning(f"⚠️  Failed to fetch pageable tools from MCP ({e}), using defaults")
+            # Fallback to reasonable defaults
+            return {"fuzzy_search_smart", "search_products"}
 
     async def initialize(self) -> None:
         """Initialize SalesAgent with injected MCP dependencies.
@@ -265,11 +317,7 @@ class SalesAgent(BaseAgent):
             self._log_available_tools()
 
             # Initialize ToolExecutor with injected MCP client and tools
-            if (
-                settings.ENABLE_VALIDATION
-                or settings.ENABLE_CACHE
-                or settings.ENABLE_METRICS
-            ):
+            if settings.ENABLE_VALIDATION or settings.ENABLE_CACHE or settings.ENABLE_METRICS:
                 self.tool_executor = ToolExecutor(self.mcp_client)
                 if self.mcp_tools_raw:
                     await self.tool_executor.register_tool_schemas(self.mcp_tools_raw)
@@ -280,14 +328,10 @@ class SalesAgent(BaseAgent):
                         self._configure_fallback_rules()
                         self.logger.info("✅ Fallback rules configured")
         else:
-            self.logger.info(
-                "⚠️ No MCP client injected - running in standalone mode (no tools)"
-            )
+            self.logger.info("⚠️ No MCP client injected - running in standalone mode (no tools)")
 
         # Rebuild system prompt (with injected tools or standalone)
-        system_prompt = self.get_system_prompt(
-            mcp_tools=self.mcp_tools, user_id=self.user_id
-        )
+        system_prompt = self.get_system_prompt(mcp_tools=self.mcp_tools, user_id=self.user_id)
 
         # Create context cache if enabled (performance optimization)
         if settings.ENABLE_CONTEXT_CACHING and self.client:
@@ -313,12 +357,14 @@ class SalesAgent(BaseAgent):
         if self.pagination_manager._db and self.pagination_manager._db.is_enabled:
             self.logger.info("💾 Persistencia de paginación: ACTIVA")
             self.logger.info(
-                f"   📊 Database: {settings.PAGINATION_DB_NAME} "
-                f"(TTL: {settings.PAGINATION_TTL_HOURS}h, "
-                f"Page size: {settings.PAGINATION_PAGE_SIZE})"
+                f"   📊 Contexto TTL: {settings.PAGINATION_TTL_HOURS}h, "
+                f"Tamaño página: {settings.PAGINATION_PAGE_SIZE}"
             )
         else:
             self.logger.info("💾 Persistencia de paginación: Solo memoria")
+
+        # Fetch pageable tools (autodiscovery from MCP resource)
+        self._pageable_tools = await self._fetch_pageable_tools()
 
         self.logger.info("✅ SalesAgent initialized successfully")
 
@@ -343,10 +389,7 @@ class SalesAgent(BaseAgent):
         available_tools = {func_decl.name for func_decl in self.mcp_tools or []}
 
         # Rule 1: search_products → fuzzy_search_smart
-        if (
-            "search_products" in available_tools
-            and "fuzzy_search_smart" in available_tools
-        ):
+        if "search_products" in available_tools and "fuzzy_search_smart" in available_tools:
             self.tool_executor.add_fallback_rule(
                 primary_tool="search_products",
                 fallback_tool="fuzzy_search_smart",
@@ -355,10 +398,7 @@ class SalesAgent(BaseAgent):
             self.logger.debug("Fallback: search_products → fuzzy_search_smart")
 
         # Rule 2: fuzzy_search_smart → search_products (reverse)
-        if (
-            "fuzzy_search_smart" in available_tools
-            and "search_products" in available_tools
-        ):
+        if "fuzzy_search_smart" in available_tools and "search_products" in available_tools:
             self.tool_executor.add_fallback_rule(
                 primary_tool="fuzzy_search_smart",
                 fallback_tool="search_products",
@@ -426,9 +466,7 @@ class SalesAgent(BaseAgent):
         """
         # Base config params
         config_params = {
-            "temperature": self._generation_params.get(
-                "temperature", settings.TEMPERATURE
-            ),
+            "temperature": self._generation_params.get("temperature", settings.TEMPERATURE),
             "top_k": self._generation_params.get("top_k", settings.TOP_K),
             "top_p": self._generation_params.get("top_p", settings.TOP_P),
             "max_output_tokens": self._generation_params.get(
@@ -443,9 +481,7 @@ class SalesAgent(BaseAgent):
             self.logger.debug(f"✅ Using cached content: {self.cached_content.name}")
         else:
             # Standard mode - add system_instruction, tools, tool_config
-            system_prompt = self.get_system_prompt(
-                mcp_tools=self.mcp_tools, user_id=self.user_id
-            )
+            system_prompt = self.get_system_prompt(mcp_tools=self.mcp_tools, user_id=self.user_id)
 
             tools = None
             tool_config = None
@@ -466,7 +502,7 @@ class SalesAgent(BaseAgent):
 
         return types.GenerateContentConfig(**config_params)
 
-    async def send_message(self, user_message: str) -> str:
+    async def send_message(self, user_message: str, **kwargs) -> str:
         """Send message and get response (SalesAgent's main method).
 
         Refactored for better maintainability (was 123 lines → ~35 lines).
@@ -481,17 +517,31 @@ class SalesAgent(BaseAgent):
 
         Args:
             user_message: User's message/query.
+            **kwargs: Additional parameters including language and intent.
 
         Returns:
             Bot's response text.
 
         Example:
             >>> response = await bot.send_message("Busco una laptop gaming")
+            >>> response = await bot.send_message("I want a gaming laptop", language="en")
 
         Raises:
             RuntimeError: If bot not initialized.
         """
         try:
+            # Update agent language if provided in kwargs (allows orchestrator to change language per-query)
+            if "language" in kwargs:
+                new_language = kwargs["language"]
+                if new_language != self.language:
+                    self.logger.info(
+                        f"🌐 Updating agent language: {self.language} → {new_language}"
+                    )
+                    self.language = new_language
+
+            # Store intent for DB persistence (passed from AgentOrchestrator)
+            self.current_intent = kwargs.get("intent", None)
+
             # 1. Validate client is ready
             self._validate_client_initialized()
 
@@ -503,10 +553,22 @@ class SalesAgent(BaseAgent):
             # 3. Prepare context and generate initial response
             response = await self._prepare_message_context(user_message)
 
-            # 4. Run function calling loop
-            final_response = await self._run_function_calling_loop(
-                response, user_message
-            )
+            # 4. Run function calling loop and get tool_calls and token_count
+            final_response, tool_calls, token_count = await self._run_function_calling_loop(response, user_message)
+
+            # 5. Persist to database if memory is enabled
+            if self._memory_enabled and self.memory_manager and self.session_id:
+                self.logger.info(
+                    f"📝 Persisting to DB (session={self.session_id[:8]}, "
+                    f"intent={self.current_intent}, tokens={token_count}, tools={len(tool_calls) if tool_calls else 0})"
+                )
+                self._update_history(
+                    types.Content(role="user", parts=[types.Part(text=user_message)]),
+                    types.Content(role="model", parts=[types.Part(text=final_response)]),
+                    response_time_ms=None,  # SalesAgent doesn't track response time yet
+                    tool_calls=tool_calls,
+                    token_count=token_count
+                )
 
             return final_response
 
@@ -556,10 +618,8 @@ class SalesAgent(BaseAgent):
         # Add user message to history
         self.conversation_manager.add_user_message(user_message)
 
-        # Generate response with rate limiting
-        response = await self._generate_with_rate_limit(
-            self.conversation_manager.get_history()
-        )
+        # Generate response (with retry, cache handling, and rate limiting)
+        response = await self._generate_content(self.conversation_manager.get_history())
 
         # Extract and log thoughts if enabled
         self._extract_and_log_thoughts(response)
@@ -577,7 +637,7 @@ class SalesAgent(BaseAgent):
             if thoughts and (self.debug_mode or settings.INCLUDE_THOUGHTS):
                 self.thinking_manager.log_thoughts(thoughts)
 
-    async def _run_function_calling_loop(self, response: Any, user_message: str) -> str:
+    async def _run_function_calling_loop(self, response: Any, user_message: str) -> tuple[str, list[dict[str, Any]] | None, int | None]:
         """Run function calling loop until text response or max iterations.
 
         Args:
@@ -585,37 +645,44 @@ class SalesAgent(BaseAgent):
             user_message: Original user message for validation
 
         Returns:
-            Final text response
+            Tuple of (final_text, tool_calls, token_count) where:
+            - final_text: The final response text
+            - tool_calls: List of tool calls executed during the loop
+            - token_count: Total token count from final Gemini response
         """
         iteration = 0
         max_iterations = self.function_call_handler.max_iterations
 
+        # Track all tool calls for analytics/debugging
+        tool_calls_log: list[dict[str, Any]] = []
+        self._current_tool_calls = tool_calls_log  # Store for _execute_function_calls access
+
+        # Helper function to extract token count from response
+        def extract_token_count(resp: Any) -> int | None:
+            try:
+                if hasattr(resp, 'usage_metadata') and resp.usage_metadata:
+                    return resp.usage_metadata.total_token_count
+            except (AttributeError, TypeError):
+                pass
+            return None
+
         while iteration < max_iterations:
             iteration += 1
-            self.logger.debug(
-                f"Function calling iteration {iteration}/{max_iterations}"
-            )
+            self.logger.debug(f"Function calling iteration {iteration}/{max_iterations}")
 
             # Process one iteration
-            result = await self._process_single_iteration(
-                response, user_message, iteration
-            )
+            result = await self._process_single_iteration(response, user_message, iteration)
 
             # Check if we got a final response
             if isinstance(result, str):
-                return result
+                return (result, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
             # Otherwise, result is the next response to process
             response = result
 
         # Exhausted iterations
-        self.logger.warning(
-            f"Function calling loop exhausted after {iteration} iterations"
-        )
-        return (
-            "No pude generar una respuesta final. Las herramientas se ejecutaron "
-            "pero no pude procesar el resultado."
-        )
+        self.logger.warning(f"Function calling loop exhausted after {iteration} iterations")
+        return (settings.FALLBACK_ERROR_MESSAGE_ES, tool_calls_log if tool_calls_log else None, extract_token_count(response))
 
     async def _process_single_iteration(
         self, response: Any, user_message: str, iteration: int
@@ -633,15 +700,13 @@ class SalesAgent(BaseAgent):
         # Check if response has candidates
         if not self.function_call_handler.has_candidates(response):
             self.logger.warning("No candidates in response")
-            return self._create_fallback_response(iteration)
+            return await self._create_fallback_response(iteration)
 
         # Get parts from response
         parts = self.function_call_handler.get_parts(response)
         if parts is None:
-            self.logger.warning(
-                "Response parts is None - cannot extract function calls or text"
-            )
-            return self._create_fallback_response(iteration)
+            self.logger.warning("Response parts is None - cannot extract function calls or text")
+            return await self._create_fallback_response(iteration)
 
         # Extract function calls
         function_calls = self.function_call_handler.extract_function_calls(parts)
@@ -653,9 +718,7 @@ class SalesAgent(BaseAgent):
         # Execute functions and continue loop
         return await self._handle_function_execution(function_calls, parts)
 
-    async def _handle_text_response(
-        self, parts: list, user_message: str, iteration: int
-    ) -> str:
+    async def _handle_text_response(self, parts: list, user_message: str, iteration: int) -> str:
         """Handle final text response (no function calls).
 
         Args:
@@ -675,18 +738,16 @@ class SalesAgent(BaseAgent):
                 final_text, user_message
             )
 
-            # Add to history
+            # Add to conversation manager history (in-memory, for Gemini context)
             self.conversation_manager.add_model_message(processed_text)
             self.logger.debug(f"Extracted text: {processed_text[:100]}...")
             return processed_text
 
         # No text found
         self.logger.warning(f"No function calls and no text in iteration {iteration}")
-        return self._create_fallback_response(iteration)
+        return await self._create_fallback_response(iteration)
 
-    async def _handle_function_execution(
-        self, function_calls: list, parts: list
-    ) -> Any:
+    async def _handle_function_execution(self, function_calls: list, parts: list) -> Any:
         """Execute function calls and generate next response.
 
         Args:
@@ -707,110 +768,88 @@ class SalesAgent(BaseAgent):
         # Add function response parts - Gemini expects these as "user" role
         self.conversation_manager.add_function_response(function_response_parts)
 
-        # Generate next response with rate limiting
-        response = await self._generate_with_rate_limit(
-            self.conversation_manager.get_history()
-        )
+        # Generate next response (with retry, cache handling, and rate limiting)
+        response = await self._generate_content(self.conversation_manager.get_history())
 
         # Extract and log thoughts from function calling iteration
         self._extract_and_log_thoughts(response)
 
         return response
 
-    def _create_fallback_response(self, iteration: int) -> str:
-        """Create fallback response when iteration fails.
+    # NOTE: _create_fallback_response and _generate_fallback_dynamic removed
+    # These methods are now inherited from BaseAgent (DRY principle)
+    # BaseAgent provides shared multilingual fallback generation for all agents
+
+    async def _generate_content(self, contents: list[types.Content]) -> Any:
+        """Generate content with SalesAgent-specific logic (cache + rate limiter).
+
+        This method wraps the Gemini API call with:
+        - Cache error handling (CachedContent expiration)
+        - Rate limiter integration (if available)
+        - Retry logic via BaseAgent.response_handler (Google best practices)
 
         Args:
-            iteration: Current iteration number
+            contents: Conversation history
 
         Returns:
-            Fallback error message
-        """
-        return (
-            f"No pude procesar la respuesta en la iteración {iteration}. "
-            "Por favor, intenta reformular tu pregunta."
-        )
-
-    async def _generate_with_rate_limit(self, contents: list[types.Content]) -> Any:
-        """Generate content with rate limiting and retry logic.
-
-        Args:
-            contents: Conversation history.
-
-        Returns:
-            Response from Gemini API.
+            Gemini API response
 
         Raises:
-            RuntimeError: If client not initialized.
-            Exception: If generation fails after retries.
+            RuntimeError: If client not initialized
+            Exception: If generation fails after retries
         """
         if self.client is None:
             raise RuntimeError("Client not initialized")
 
-        max_retries = 3
-        retry_delay = 1.0
-
-        for attempt in range(max_retries):
-            try:
-                if self.rate_limiter:
-                    # Use rate limiter
-                    async with self.rate_limiter.acquire():
-                        return self.client.models.generate_content(
-                            model=self.model_name,
-                            contents=contents,
-                            config=self.generation_config,
-                        )
-                else:
-                    # No rate limiting
+        # Define the actual generation function
+        async def _do_generate() -> Any:
+            if self.rate_limiter:
+                # Use rate limiter
+                async with self.rate_limiter.acquire():
                     return self.client.models.generate_content(
                         model=self.model_name,
                         contents=contents,
                         config=self.generation_config,
                     )
+            else:
+                # No rate limiting
+                return self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=contents,
+                    config=self.generation_config,
+                )
 
-            except Exception as e:
-                error_str = str(e)
+        # Try with cache, fallback to standard mode if cache expired
+        try:
+            if self.response_handler:
+                # Use retry logic from BaseAgent
+                return await self.response_handler.retry_with_backoff(_do_generate)
+            else:
+                # Direct call (legacy mode)
+                return await _do_generate()
 
-                # Check if cache-related 403 error
-                if (
-                    "403" in error_str or "PERMISSION_DENIED" in error_str
-                ) and "CachedContent" in error_str:
-                    self.logger.warning("⚠️ Cache expired. Fallback to standard mode...")
+        except Exception as e:
+            error_str = str(e)
 
-                    # Invalidate cache and rebuild config
-                    self.cached_content = None
-                    self.generation_config = self._build_generation_config_with_cache()
-                    self.logger.info("✅ Config rebuilt in standard mode")
+            # Check if cache-related error (specific to SalesAgent)
+            if "CachedContent" in error_str and "not found" in error_str:
+                self.logger.warning("⚠️ Cache expired. Rebuilding config in standard mode...")
 
-                    # Retry immediately
-                    continue
+                # Invalidate cache and rebuild config
+                self.cached_content = None
+                self.generation_config = self._build_generation_config_with_cache()
+                self.logger.info("✅ Config rebuilt without cache")
 
-                # Check if rate limit error (429)
-                if (
-                    "429" in error_str
-                    or "quota" in error_str.lower()
-                    or "rate limit" in error_str.lower()
-                ):
-                    if attempt < max_retries - 1:
-                        wait_time = retry_delay * (2**attempt)
-                        self.logger.warning(
-                            f"⚠️ Rate limit hit (429). Retrying in {wait_time:.1f}s... "
-                            f"(attempt {attempt + 1}/{max_retries})"
-                        )
-                        await asyncio.sleep(wait_time)
-                        continue
-                    else:
-                        self.logger.error("❌ Rate limit exceeded after all retries")
-                        raise
+                # Retry once with new config
+                if self.response_handler:
+                    return await self.response_handler.retry_with_backoff(_do_generate)
+                else:
+                    return await _do_generate()
 
-                # Other errors - re-raise
-                raise
+            # Other errors - re-raise
+            raise
 
-        raise RuntimeError("Generate content failed after all retries")
-
-    async def _execute_function_calls(
-        self, function_calls: list[Any]
-    ) -> list[types.Part]:
+    async def _execute_function_calls(self, function_calls: list[Any]) -> list[types.Part]:
         """Execute function calls and return structured responses.
 
         Args:
@@ -824,6 +863,13 @@ class SalesAgent(BaseAgent):
         for fc in function_calls:
             function_name = fc.name
             function_args = dict(fc.args)
+
+            # Track tool call for analytics/debugging (if tracking is enabled)
+            if hasattr(self, '_current_tool_calls'):
+                self._current_tool_calls.append({
+                    "tool_name": function_name,
+                    "args": function_args,
+                })
 
             self.logger.info(f"🔧 Executing: {function_name}")
             if self.debug_mode:
@@ -886,7 +932,8 @@ class SalesAgent(BaseAgent):
             raise RuntimeError("No tool executor or MCP client available")
 
         # ✅ PAGINATION: Track search results for client-side pagination
-        if tool_name in ["search_products", "fuzzy_search_smart"]:
+        # Use autodiscovered pageable tools instead of hardcoded SEARCH_TOOL_NAMES
+        if self._pageable_tools and tool_name in self._pageable_tools:
             self._track_search_results(tool_name, args, result)
 
         return result
@@ -916,8 +963,7 @@ class SalesAgent(BaseAgent):
             # Defensive check: ensure products is a list (not None)
             if products is None:
                 self.logger.warning(
-                    f"⚠️ Tool {tool_name} returned None for products - "
-                    "skipping pagination tracking"
+                    f"⚠️ Tool {tool_name} returned None for products - skipping pagination tracking"
                 )
                 return
 
@@ -965,13 +1011,15 @@ class SalesAgent(BaseAgent):
             # User said "más" but we don't have context
             return None
 
+        # Parse language-specific keywords from configuration
+        spanish_keywords = settings.PAGINATION_KEYWORDS_ES.split(",")
+        settings.PAGINATION_KEYWORDS_EN.split(",")
+
         # Check if we have more results to show
         if not self.pagination_manager.has_more_results(category):
             # Determine response language
-            if any(
-                word in user_message.lower()
-                for word in ["más", "siguiente", "muéstrame"]
-            ):
+            is_spanish = any(word.strip() in user_message.lower() for word in spanish_keywords)
+            if is_spanish:
                 return (
                     f"Ya te mostré todos los resultados disponibles para {category}. "
                     "¿Te gustaría buscar algo diferente?"
@@ -988,11 +1036,8 @@ class SalesAgent(BaseAgent):
         if not next_products:
             return None
 
-        # Determine language for response
-        spanish_mode = any(
-            word in user_message.lower()
-            for word in ["más", "siguiente", "muéstrame", "opciones"]
-        )
+        # Determine language for response (configurable keywords)
+        spanish_mode = any(word.strip() in user_message.lower() for word in spanish_keywords)
 
         # Get remaining count and format response
         remaining = self.pagination_manager.get_remaining_count(category)
@@ -1018,9 +1063,7 @@ class SalesAgent(BaseAgent):
         if self.tool_executor and settings.ENABLE_METRICS:
             try:
                 self.tool_executor.export_metrics(settings.METRICS_EXPORT_PATH)
-                self.logger.info(
-                    f"📊 Metrics exported to: {settings.METRICS_EXPORT_PATH}"
-                )
+                self.logger.info(f"📊 Metrics exported to: {settings.METRICS_EXPORT_PATH}")
             except Exception as e:
                 self.logger.warning(f"Error exporting metrics: {e}")
 
@@ -1039,9 +1082,7 @@ class SalesAgent(BaseAgent):
                 await self.mcp_client.__aexit__(None, None, None)
                 self.logger.info("🔌 Disconnected from MCP server")
             except asyncio.CancelledError:
-                self.logger.debug(
-                    "🔌 MCP connection cancelled (expected during shutdown)"
-                )
+                self.logger.debug("🔌 MCP connection cancelled (expected during shutdown)")
             except Exception as e:
                 self.logger.exception(f"Error closing MCP connection: {e}")
         elif self.mcp_client and not self._owns_mcp_client:

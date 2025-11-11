@@ -1,0 +1,81 @@
+{#
+General Agent - Policies Module
+================================
+Payment methods, shipping, returns, and warranty policies.
+
+This module contains all policy-related information that customers need.
+
+Variables:
+  - policies (dict): Policies from policies.yaml
+
+Author: Lab01-MCP Team
+Created: 2025-10-11
+Version: 1.0
+#}
+MÉTODOS DE PAGO:
+{% if policies.payment_methods %}
+{% for method in policies.payment_methods.accepted %}
+✅ {{ method }}
+{% endfor %}
+{% if policies.payment_methods.not_accepted %}
+{% for method in policies.payment_methods.not_accepted %}
+❌ {{ method }}
+{% endfor %}
+{% endif %}
+{% else %}
+✅ Tarjetas de crédito (Visa, MasterCard, American Express)
+✅ Tarjetas de débito
+✅ PayPal
+✅ Transferencias bancarias
+✅ Pago contra entrega (según zona)
+❌ No aceptamos cheques
+{% endif %}
+
+ENVÍOS Y ENTREGA:
+{% if policies.shipping %}
+- Envío estándar: {{ policies.shipping.standard.time }} ({{ policies.shipping.standard.cost }})
+- Envío express: {{ policies.shipping.express.time }} (${{ policies.shipping.express.cost }})
+- Envío prioritario: {{ policies.shipping.priority.time }} (${{ policies.shipping.priority.cost }})
+- Cobertura: {{ policies.shipping.coverage }}
+- Seguimiento: {{ policies.shipping.tracking }}
+- Seguro incluido en todos los envíos
+{% else %}
+- Envío estándar: 5-7 días hábiles (GRATIS en compras >$100)
+- Envío express: 2-3 días hábiles ($15)
+- Envío prioritario: 1-2 días hábiles ($25)
+- Cobertura: Todo el país
+- Seguimiento: Número de tracking por email
+- Seguro incluido en todos los envíos
+{% endif %}
+
+POLÍTICAS DE DEVOLUCIÓN:
+{% if policies.returns %}
+- Plazo: {{ policies.returns.period }}
+- Condición: {{ policies.returns.condition }}
+- Reembolso: {{ policies.returns.refund }}
+- Cambios: {{ policies.returns.exchanges }}
+- Proceso: {{ policies.returns.process }}
+- Nota: {{ policies.returns.note }}
+{% else %}
+- Plazo: 30 días desde la compra
+- Condición: Producto sin usar, empaque original
+- Reembolso: 100% en compras defectuosas
+- Cambios: Sin costo adicional
+- Proceso: Contactar soporte con número de orden
+- Nota: Productos en oferta/liquidación tienen política especial
+{% endif %}
+
+GARANTÍA:
+{% if policies.warranty %}
+- Garantía del fabricante: {{ policies.warranty.manufacturer }}
+- Garantía extendida: {{ policies.warranty.extended }}
+- Cobertura: {{ policies.warranty.coverage }}
+- NO cubre: {{ policies.warranty.not_covered }}
+- Proceso: {{ policies.warranty.process }}
+{% else %}
+- Garantía del fabricante: Según producto (típicamente 1-3 años)
+- Garantía extendida: Disponible para compra
+- Cobertura: Defectos de fabricación
+- NO cubre: Daño por mal uso, accidentes, desgaste normal
+- Proceso: Contactar con número de orden y descripción del problema
+{% endif %}

@@ -52,7 +52,7 @@ class DebugFormatter:
             "user_query": metric.user_query,
         }
         metric_json = json.dumps(metric_data, sort_keys=True)
-        return hashlib.md5(metric_json.encode()).hexdigest()
+        return hashlib.md5(metric_json.encode(), usedforsecurity=False).hexdigest()
 
     def format_debug_info(self, metric: ToolMetric) -> str:
         """Format debug information about tool execution.
@@ -96,9 +96,7 @@ class DebugFormatter:
 • Tiempo de ejecución: {metric.execution_time_ms:.2f}ms
 • Estado: {status}"""
 
-    def format_fallback_debug_info(
-        self, primary: ToolMetric, fallback: ToolMetric
-    ) -> str:
+    def format_fallback_debug_info(self, primary: ToolMetric, fallback: ToolMetric) -> str:
         """Format combined debug info for fallback scenario.
 
         Args:
@@ -120,9 +118,7 @@ class DebugFormatter:
         total_time_ms = primary.execution_time_ms + fallback.execution_time_ms
 
         # Format tool chain
-        tool_chain = (
-            f"`{primary.tool_name}` ➜ `{fallback.tool_name}` (fallback automático)"
-        )
+        tool_chain = f"`{primary.tool_name}` ➜ `{fallback.tool_name}` (fallback automático)"
 
         # Format results
         results_msg = f"0 → {fallback.result_size} (fallback exitoso)"

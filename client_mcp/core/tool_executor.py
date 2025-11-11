@@ -8,10 +8,34 @@ This module provides a high-level executor that orchestrates all improvements:
 """
 
 import uuid
+from pathlib import Path
 from typing import Any
 
+# Explicit import to avoid sys.path conflicts across different modules
 try:
-    from ..config.settings import settings
+    from importlib.util import spec_from_file_location, module_from_spec
+
+    settings_path = Path(__file__).parent.parent / "config" / "settings.py"
+    spec = spec_from_file_location("client_mcp_settings_executor", settings_path)
+    if spec and spec.loader:
+        _settings_module = module_from_spec(spec)
+        spec.loader.exec_module(_settings_module)
+        settings = _settings_module.settings
+    else:
+        raise ImportError("Failed to load settings module")
+except (ImportError, AttributeError):
+    # Fallback: try standard import
+    from config.settings import settings
+
+# Observability imports (OPCIÓN 8)
+try:
+    from email_service.observability.metrics import get_metrics_collector
+    from email_service.observability.structured_logger import get_structured_logger
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
+try:
     from ..observability.tracker import ToolTracker, get_global_tracker
     from ..strategies.fallback import FallbackStrategy
     from ..strategies.retry import RetryConfig, RetryStrategy
@@ -20,7 +44,6 @@ try:
     from .tool_validator import ToolValidator
 except ImportError:
     # Fallback for test environment
-    from config.settings import settings
     from core.mcp_connector import MCPConnector
     from core.tool_cache import ToolCache, get_global_cache
     from core.tool_validator import ToolValidator
@@ -71,6 +94,14 @@ class ToolExecutor:
             retry_strategy: Optional retry strategy (uses config if None)
             fallback_strategy: Optional fallback strategy (uses config if None)
         """
+        # Initialize observability (OPCIÓN 8)
+        if OBSERVABILITY_AVAILABLE:
+            self.structured_logger = get_structured_logger("tool_executor")
+            self.metrics = get_metrics_collector()
+        else:
+            self.structured_logger = None
+            self.metrics = None
+
         self.mcp = mcp_connector
         self.validator = validator or ToolValidator()
         self.cache = cache or get_global_cache()
@@ -138,87 +169,133 @@ class ToolExecutor:
 
         # Log tool execution for duplicate call detection
         logger.debug(
-            f"🔧 [CALL-{call_id}] Tool: {tool_name} | "
-            f"Query: {effective_query or 'N/A'} | "
-            f"Params: {parameters}"
+            f"🔧 [CALL-{call_id}] Tool: {tool_name} | Query: {effective_query or 'N/A'} | Params: {parameters}"
         )
 
-        # Validate parameters if enabled
-        validated_params = (
-            self._validate_parameters(tool_name, parameters) if validate else parameters
-        )
-
-        # Execute with tracking (use effective_query for context)
-        with self.tracker.track_with_result(
-            tool_name, validated_params, effective_query
-        ) as track_ctx:
-            # Call MCP tool with retry if enabled
-            if self.retry_strategy:
-                result = await self.retry_strategy.execute_with_retry(
-                    lambda: self.mcp.call_tool(tool_name, validated_params)
+        # Track tool execution with metrics (OPCIÓN 8)
+        try:
+            if self.metrics:
+                latency_ctx = self.metrics.record_latency_async(
+                    "tool_execution_latency", tags={"tool": tool_name}
                 )
             else:
-                result = await self.mcp.call_tool(tool_name, validated_params)
+                latency_ctx = None
 
-            # Update tracking context with result size
-            track_ctx["result_size"] = self._calculate_result_size(result)
+            if latency_ctx:
+                await latency_ctx.__aenter__()
 
-            # AUTOMATIC FALLBACK FOR EMPTY RESULTS: Check BEFORE exception-based fallback
-            # This improves found rate without breaking existing behavior
-            # Check for empty results in both list and dict formats
-            is_empty = False
+            # Track execution attempt
+            if self.metrics:
+                self.metrics.increment_counter(f"tool_execution_attempt_{tool_name}", 1)
 
-            if isinstance(result, list) and len(result) == 0:
-                is_empty = True
-            elif isinstance(result, dict) and (
-                (
-                    "items" in result
-                    and isinstance(result["items"], list)
-                    and len(result["items"]) == 0
-                )
-                or ("count" in result and result["count"] == 0)
-            ):
-                # Handle MCP protocol format: {"items": [...], "count": N}
-                is_empty = True
+            # Validate parameters if enabled
+            try:
+                validated_params = self._validate_parameters(tool_name, parameters) if validate else parameters
+                if self.metrics:
+                    self.metrics.increment_counter(f"tool_validation_success_{tool_name}", 1)
+            except Exception as e:
+                if self.metrics:
+                    self.metrics.increment_counter(f"tool_validation_failure_{tool_name}", 1)
+                if self.structured_logger:
+                    self.structured_logger.exception("Tool parameter validation failed", tool=tool_name)
+                raise
 
-            if is_empty and _use_fallback:
-                fallback_tool = None
-                fallback_params = None
+            # Execute with tracking (use effective_query for context)
+            with self.tracker.track_with_result(tool_name, validated_params, effective_query) as track_ctx:
+                # Call MCP tool with retry if enabled
+                try:
+                    if self.retry_strategy:
+                        result = await self.retry_strategy.execute_with_retry(
+                            lambda: self.mcp.call_tool(tool_name, validated_params)
+                        )
+                    else:
+                        result = await self.mcp.call_tool(tool_name, validated_params)
 
-                # fuzzy_search_smart → search_products (conceptual search)
-                if tool_name == "fuzzy_search_smart":
-                    fallback_tool = "search_products"
-                    fallback_params = {
-                        "query": validated_params.get("query", ""),
-                        "k": validated_params.get("limit", 5),
-                    }
-                # search_products → fuzzy_search_smart (broader fuzzy)
-                elif tool_name == "search_products":
-                    fallback_tool = "fuzzy_search_smart"
-                    fallback_params = {
-                        "query": validated_params.get("query", ""),
-                        "limit": validated_params.get("k", 10),
-                    }
+                    if self.metrics:
+                        self.metrics.increment_counter(f"tool_execution_success_{tool_name}", 1)
+                except Exception as e:
+                    if self.metrics:
+                        self.metrics.increment_counter(f"tool_execution_failure_{tool_name}", 1)
+                        self.metrics.increment_counter(f"tool_error_{type(e).__name__}", 1)
+                    if self.structured_logger:
+                        self.structured_logger.exception("Tool execution failed", tool=tool_name)
+                    raise
 
-                # Execute fallback if configured
-                if fallback_tool and fallback_params:
-                    logger.info(
-                        f"🔄 Fallback: {tool_name} (0 results) → {fallback_tool}"
+                # Update tracking context with result size
+                result_size = self._calculate_result_size(result)
+                track_ctx["result_size"] = result_size
+
+                if self.metrics:
+                    self.metrics.set_gauge(f"tool_result_size_{tool_name}", result_size)
+
+                # AUTOMATIC FALLBACK FOR EMPTY RESULTS: Check BEFORE exception-based fallback
+                # This improves found rate without breaking existing behavior
+                # Check for empty results in both list and dict formats
+                is_empty = False
+
+                if isinstance(result, list) and len(result) == 0:
+                    is_empty = True
+                elif isinstance(result, dict) and (
+                    ("items" in result and isinstance(result["items"], list) and len(result["items"]) == 0)
+                    or ("count" in result and result["count"] == 0)
+                ):
+                    # Handle MCP protocol format: {"items": [...], "count": N}
+                    is_empty = True
+
+                if is_empty and _use_fallback:
+                    fallback_tool = None
+                    fallback_params = None
+
+                    # fuzzy_search_smart → search_products (conceptual search)
+                    if tool_name == "fuzzy_search_smart":
+                        fallback_tool = "search_products"
+                        fallback_params = {
+                            "query": validated_params.get("query", ""),
+                            "k": validated_params.get("limit", 5),
+                        }
+                    # search_products → fuzzy_search_smart (broader fuzzy)
+                    elif tool_name == "search_products":
+                        fallback_tool = "fuzzy_search_smart"
+                        fallback_params = {
+                            "query": validated_params.get("query", ""),
+                            "limit": validated_params.get("k", 10),
+                        }
+
+                    # Execute fallback if configured
+                    if fallback_tool and fallback_params:
+                        if self.metrics:
+                            self.metrics.increment_counter(f"tool_fallback_{tool_name}_to_{fallback_tool}", 1)
+                        if self.structured_logger:
+                            self.structured_logger.info(
+                                "Tool fallback executed",
+                                primary_tool=tool_name,
+                                fallback_tool=fallback_tool,
+                            )
+
+                        logger.info(f"🔄 Fallback: {tool_name} (0 results) → {fallback_tool}")
+                        # Recursive call with _use_fallback=False to prevent infinite loops
+                        result = await self.execute_tool(
+                            fallback_tool,
+                            fallback_params,
+                            user_query=effective_query,
+                            validate=validate,
+                            _use_fallback=False,
+                        )
+
+                if self.structured_logger:
+                    self.structured_logger.info(
+                        "Tool execution completed",
+                        tool=tool_name,
+                        result_size=result_size,
                     )
-                    # Recursive call with _use_fallback=False to prevent infinite loops
-                    result = await self.execute_tool(
-                        fallback_tool,
-                        fallback_params,
-                        user_query=effective_query,
-                        validate=validate,
-                        _use_fallback=False,
-                    )
 
-            return result
+                return result
 
-    def _validate_parameters(
-        self, tool_name: str, parameters: dict[str, Any]
-    ) -> dict[str, Any]:
+        finally:
+            if latency_ctx:
+                await latency_ctx.__aexit__(None, None, None)
+
+    def _validate_parameters(self, tool_name: str, parameters: dict[str, Any]) -> dict[str, Any]:
         """Validate tool parameters using cached schema.
 
         Args:
@@ -240,9 +317,7 @@ class ToolExecutor:
                 # Register schema in validator
                 self.validator.register_tool_schema(tool_name, cached_tool.input_schema)
             else:
-                raise ValueError(
-                    f"Tool '{tool_name}' not found in cache. Ensure tools are discovered first."
-                )
+                raise ValueError(f"Tool '{tool_name}' not found in cache. Ensure tools are discovered first.")
 
         # Validate parameters
         return self.validator.validate_parameters(tool_name, parameters)
@@ -271,9 +346,7 @@ class ToolExecutor:
             return 1
         return 1
 
-    async def register_tool_schemas(
-        self, tools_definitions: list[dict[str, Any]]
-    ) -> None:
+    async def register_tool_schemas(self, tools_definitions: list[dict[str, Any]]) -> None:
         """Register tool schemas for validation from discovered tools.
 
         Args:
@@ -390,9 +463,7 @@ class ToolExecutor:
             RuntimeError: If fallback strategy is not enabled
         """
         if not self.fallback_strategy:
-            raise RuntimeError(
-                "Fallback strategy not enabled. Set ENABLE_FALLBACK=true"
-            )
+            raise RuntimeError("Fallback strategy not enabled. Set ENABLE_FALLBACK=true")
 
         self.fallback_strategy.add_rule(
             primary_tool=primary_tool,

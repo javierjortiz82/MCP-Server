@@ -12,7 +12,7 @@ Migration from dataclasses to Pydantic v2 for:
 
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator, ValidationInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -64,11 +64,6 @@ class Settings(BaseSettings):
     # ============================================================================
     # Data Configuration
     # ============================================================================
-    PRODUCTS_JSON_PATH: str = Field(
-        default="./data/products.json",
-        description="Path to products JSON file",
-    )
-
     BATCH_SIZE: int = Field(
         default=8,
         gt=0,
@@ -125,8 +120,8 @@ class Settings(BaseSettings):
     )
 
     GOOGLE_CALENDAR_TIMEZONE: str = Field(
-        default="America/New_York",
-        description="Timezone for Google Calendar events",
+        default="America/Costa_Rica",
+        description="Timezone for Google Calendar events and availability checks (default: America/Costa_Rica)",
     )
 
     # ============================================================================
@@ -151,10 +146,11 @@ class Settings(BaseSettings):
         description="Maximum days in advance for booking",
     )
 
-    BOOKING_MIN_ADVANCE_HOURS: int = Field(
-        default=2,
+    BOOKING_MIN_ADVANCE_MINUTES: int = Field(
+        default=60,
         ge=0,
-        description="Minimum hours in advance required for booking",
+        le=1440,  # Max 24 hours = 1440 minutes
+        description="Minimum minutes in advance required for booking (default: 60 = 1 hour)",
     )
 
     BOOKING_MAX_DAILY_APPOINTMENTS: int = Field(
@@ -229,6 +225,99 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # Booking Input Parser Configuration (Confidence Thresholds)
+    # ============================================================================
+    BOOKING_CHOICE_CONFIDENCE_THRESHOLD: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        description="Confidence threshold for booking choice classification (reschedule/cancel)",
+    )
+
+    BOOKING_PARTIAL_MATCH_CONFIDENCE: float = Field(
+        default=0.95,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score for partial word matches in booking input",
+    )
+
+    BOOKING_MIN_KEYWORD_LENGTH: int = Field(
+        default=3,
+        gt=0,
+        description="Minimum string length for substring matching in booking keywords",
+    )
+
+    BOOKING_FUZZY_MATCH_THRESHOLD: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        description="SequenceMatcher threshold for fuzzy matching in booking input",
+    )
+
+    BOOKING_CONFIRMATION_THRESHOLD: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        description="Confidence threshold for yes/no confirmation in booking context",
+    )
+
+    BOOKING_CLARIFICATION_THRESHOLD: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="Confidence threshold below which to ask for clarification",
+    )
+
+    BOOKING_EMAIL_QUEUE_PRIORITY: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Email queue priority for booking notifications (1=lowest, 10=highest)",
+    )
+
+    # ============================================================================
+    # Memory Context Configuration (Priority Thresholds & Display Limits)
+    # ============================================================================
+    MEMORY_PRIORITY_HIGH_THRESHOLD: int = Field(
+        default=7,
+        ge=0,
+        le=10,
+        description="Priority score threshold for high-priority memory blocks (0-10 scale)",
+    )
+
+    MEMORY_PRIORITY_MEDIUM_MIN: int = Field(
+        default=5,
+        ge=0,
+        le=10,
+        description="Minimum priority score for medium-priority memory blocks",
+    )
+
+    MEMORY_PRIORITY_MEDIUM_MAX: int = Field(
+        default=7,
+        ge=0,
+        le=10,
+        description="Maximum priority score for medium-priority memory blocks",
+    )
+
+    MEMORY_HIGH_PRIORITY_LIMIT: int = Field(
+        default=3,
+        gt=0,
+        description="Number of high-priority memory blocks to include in agent context",
+    )
+
+    MEMORY_MEDIUM_PRIORITY_LIMIT: int = Field(
+        default=2,
+        gt=0,
+        description="Number of medium-priority memory blocks to include in agent context",
+    )
+
+    MEMORY_USER_BLOCKS_LIMIT: int = Field(
+        default=5,
+        gt=0,
+        description="Number of user-level memory blocks to include in agent context",
+    )
+
+    # ============================================================================
     # Field Validators
     # ============================================================================
     @field_validator("LOG_LEVEL")
@@ -258,6 +347,58 @@ class Settings(BaseSettings):
             raise ValueError("GOOGLE_API_KEY cannot be empty")
         return v.strip()
 
+    @model_validator(mode="after")
+    def validate_configuration_consistency(self) -> "Settings":
+        """Validate that configuration values are consistent and compatible.
+
+        This method ensures cross-field configuration consistency to prevent
+        runtime errors from conflicting or invalid setting combinations.
+
+        Returns:
+            Settings: The validated settings instance
+
+        Raises:
+            ValueError: If configuration conflicts are detected
+        """
+        # Booking configuration: Duration must be >= Interval
+        if self.BOOKING_DEFAULT_DURATION_MINUTES < self.BOOKING_SLOT_INTERVAL_MINUTES:
+            raise ValueError(
+                f"BOOKING_DEFAULT_DURATION_MINUTES ({self.BOOKING_DEFAULT_DURATION_MINUTES} min) "
+                f"must be >= BOOKING_SLOT_INTERVAL_MINUTES ({self.BOOKING_SLOT_INTERVAL_MINUTES} min). "
+                f"Otherwise, slot generation produces overlapping slots."
+            )
+
+        # Memory priority thresholds: MIN < MAX <= HIGH_THRESHOLD
+        if self.MEMORY_PRIORITY_MEDIUM_MIN >= self.MEMORY_PRIORITY_MEDIUM_MAX:
+            raise ValueError(
+                f"MEMORY_PRIORITY_MEDIUM_MIN ({self.MEMORY_PRIORITY_MEDIUM_MIN}) "
+                f"must be < MEMORY_PRIORITY_MEDIUM_MAX ({self.MEMORY_PRIORITY_MEDIUM_MAX})"
+            )
+
+        if self.MEMORY_PRIORITY_MEDIUM_MAX > self.MEMORY_PRIORITY_HIGH_THRESHOLD:
+            raise ValueError(
+                f"MEMORY_PRIORITY_MEDIUM_MAX ({self.MEMORY_PRIORITY_MEDIUM_MAX}) "
+                f"must be <= MEMORY_PRIORITY_HIGH_THRESHOLD ({self.MEMORY_PRIORITY_HIGH_THRESHOLD})"
+            )
+
+        # Session lifecycle: Hard delete must come after soft archive
+        if self.SESSION_HARD_DELETE_DAYS <= self.SESSION_SOFT_ARCHIVE_DAYS:
+            raise ValueError(
+                f"SESSION_HARD_DELETE_DAYS ({self.SESSION_HARD_DELETE_DAYS} days) "
+                f"must be > SESSION_SOFT_ARCHIVE_DAYS ({self.SESSION_SOFT_ARCHIVE_DAYS} days). "
+                f"Sessions should be archived before they are deleted."
+            )
+
+        # Session preservation: Email-preserved sessions should last longer than anonymous
+        if self.SESSION_PRESERVE_WITH_EMAIL_DAYS <= self.SESSION_ANONYMOUS_DELETE_DAYS:
+            raise ValueError(
+                f"SESSION_PRESERVE_WITH_EMAIL_DAYS ({self.SESSION_PRESERVE_WITH_EMAIL_DAYS} days) "
+                f"should be > SESSION_ANONYMOUS_DELETE_DAYS ({self.SESSION_ANONYMOUS_DELETE_DAYS} days). "
+                f"Email sessions have more business value and should be retained longer."
+            )
+
+        return self
+
     # ============================================================================
     # Computed Properties
     # ============================================================================
@@ -272,13 +413,25 @@ class Settings(BaseSettings):
         return Path(__file__).parent.parent / self.LOG_DIR
 
     @property
-    def products_path(self) -> Path:
-        """Get absolute path to products JSON file."""
-        products_path = Path(self.PRODUCTS_JSON_PATH)
-        if not products_path.is_absolute():
+    def google_calendar_credentials_path(self) -> Path:
+        """Get absolute path to Google Calendar service account credentials.
+
+        Resolves relative paths to project root, handles absolute paths as-is.
+        This ensures the credentials file can be found regardless of MCP server
+        working directory.
+
+        Returns:
+            Absolute Path to credentials file
+        """
+        creds_path = Path(self.GOOGLE_CALENDAR_CREDENTIALS_PATH)
+        if not creds_path.is_absolute():
             # Resolve relative to project root
-            return Path(__file__).parent.parent / products_path
-        return products_path
+            # Path(__file__) = /home/javort/Lab01-MCP/mcp_server/config/settings.py
+            # .parent = /home/javort/Lab01-MCP/mcp_server/config
+            # .parent.parent = /home/javort/Lab01-MCP/mcp_server
+            # .parent.parent.parent = /home/javort/Lab01-MCP (project root)
+            return Path(__file__).parent.parent.parent / creds_path
+        return creds_path
 
     # ============================================================================
     # Helper Methods
@@ -354,7 +507,7 @@ class Settings(BaseSettings):
             "default_duration_minutes": self.BOOKING_DEFAULT_DURATION_MINUTES,
             "slot_interval_minutes": self.BOOKING_SLOT_INTERVAL_MINUTES,
             "advance_booking_days": self.BOOKING_ADVANCE_BOOKING_DAYS,
-            "min_advance_hours": self.BOOKING_MIN_ADVANCE_HOURS,
+            "min_advance_minutes": self.BOOKING_MIN_ADVANCE_MINUTES,
             "max_daily_appointments": self.BOOKING_MAX_DAILY_APPOINTMENTS,
         }
 

@@ -1,22 +1,27 @@
+# Infrastructure variables can be loaded from root .env
+# Run: docker-compose -f DockerConfig/docker-compose.yml --env-file .env up
+# Or place a .env in DockerConfig/ with only infrastructure vars (POSTGRES_*, PGADMIN_*)
+
 services:
   postgres:
-    image: pgvector/pgvector:pg15
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
     container_name: mcp-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: mcpdb
-      POSTGRES_USER: mcp_user
-      POSTGRES_PASSWORD: mcp_password
+      POSTGRES_DB: ${POSTGRES_DB:-mcpdb}
+      POSTGRES_USER: ${POSTGRES_USER:-mcp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mcp_password}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "5434:5432"
+      - "${POSTGRES_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init:/docker-entrypoint-initdb.d
     networks:
       - mcp-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mcp_user -d mcpdb"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mcp_user} -d ${POSTGRES_DB:-mcpdb}"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -27,11 +32,11 @@ services:
     container_name: mcp-pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
       PGADMIN_LISTEN_PORT: 80
     ports:
-      - "8090:80"
+      - "${PGADMIN_PORT:-8090}:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
       - ./pgadmin/servers.json:/pgadmin4/servers.json
@@ -42,10 +47,128 @@ services:
       postgres:
         condition: service_healthy
 
+  mcp-server:
+    build:
+      context: ../mcp_server
+      dockerfile: ../DockerConfig/Dockerfile.mcp
+    container_name: mcp-server
+    restart: unless-stopped
+    # Load service-specific configuration from mcp_server/.env
+    env_file:
+      - ../mcp_server/.env
+    environment:
+      # Docker-specific overrides
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mcp_user}:${POSTGRES_PASSWORD:-mcp_password}@postgres:5432/${POSTGRES_DB:-mcpdb}
+      LOG_DIR: logs
+      # CRITICAL: Override credentials path for Docker environment
+      # Reason: settings.py resolves relative paths using Path(__file__).parent.parent.parent
+      #         which resolves to / (filesystem root) in Docker instead of /app
+      #         Local: resolves to project root correctly
+      #         Docker: must use absolute path /app/credentials/service-account.json
+      GOOGLE_CALENDAR_CREDENTIALS_PATH: /app/credentials/service-account.json
+    ports:
+      - "8009:8009"
+    volumes:
+      - mcp_logs:/app/logs
+      - ../email_service:/app/email_service:ro
+      # Google Calendar credentials (read-only for security)
+      # Development: bind mount from host directory
+      # Production: consider using Docker secrets (see docs/NOTAS_CLAUDE.md)
+      - ../credentials:/app/credentials:ro
+    networks:
+      - mcp-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  email-worker:
+    build:
+      context: ../email_service
+      dockerfile: Dockerfile
+    container_name: mcp-email-worker
+    restart: unless-stopped
+    # Load service-specific configuration from email_service/.env
+    env_file:
+      - ../email_service/.env
+    environment:
+      # Override only Docker-specific variables (internal hostnames)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mcp_user}:${POSTGRES_PASSWORD:-mcp_password}@postgres:5432/${POSTGRES_DB:-mcpdb}
+      # Disable file logging in Docker (handle logs via container logging)
+      LOG_TO_FILE: "false"
+    volumes:
+      - email_logs:/app/logs
+    networks:
+      - mcp-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from email_service.config import EmailConfig; EmailConfig(); print('healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  demo-agent:
+    build:
+      context: ../demo_agent
+      dockerfile: Dockerfile
+    container_name: demo-agent
+    restart: unless-stopped
+    # Load service-specific configuration from demo_agent/.env
+    env_file:
+      - ../demo_agent/.env
+    environment:
+      # Override only Docker-specific variables (internal hostnames)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mcp_user}:${POSTGRES_PASSWORD:-mcp_password}@postgres:5432/${POSTGRES_DB:-mcpdb}
+      # Disable file logging in Docker (handle logs via container logging)
+      LOG_TO_FILE: "false"
+      # Override agent logging directory to writable location
+      LOG_DIR: /app/demo_agent/logs
+    ports:
+      - "8082:8082"
+    volumes:
+      - demo_logs:/app/demo_agent/logs
+      - agent_logs:/app/agent/logs
+      - client_mcp_logs:/app/client_mcp/logs
+      - ../agent:/app/agent:ro
+      - ../client_mcp:/app/client_mcp
+      - ../mcp_server:/app/mcp_server:ro
+      - ../prompts:/app/prompts:ro
+    networks:
+      - mcp-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      email-worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
 volumes:
   postgres_data:
     driver: local
   pgadmin_data:
+    driver: local
+  email_logs:
+    driver: local
+  mcp_logs:
+    driver: local
+  demo_logs:
+    driver: local
+  agent_logs:
+    driver: local
+  client_mcp_logs:
     driver: local
 
 networks:

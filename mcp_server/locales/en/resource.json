@@ -1,0 +1,35 @@
+{
+  "product": {
+    "sku": {
+      "header": "Product Information",
+      "name": "Name: {name}",
+      "sku": "SKU: {sku}",
+      "description": "Description: {description}",
+      "category": "Category: {category}",
+      "brand": "Brand: {brand}",
+      "price": "Price: ${price}",
+      "not_found": "Product with SKU '{sku}' not found."
+    }
+  },
+  "database": {
+    "stats": {
+      "header": "Database Statistics",
+      "total_products": "Total Products: {total_products}",
+      "categories": "Categories: {categories}",
+      "brands": "Brands: {brands}",
+      "avg_price": "Average Price: ${avg_price}",
+      "schema": "Schema: {schema}",
+      "unable_to_retrieve": "Unable to retrieve database statistics."
+    }
+  },
+  "tools": {
+    "products": {
+      "header": "Available Product Search Tools",
+      "error": "Error retrieving product tool names: {error}"
+    },
+    "bookings": {
+      "header": "Available Booking Management Tools",
+      "error": "Error retrieving booking tool names: {error}"
+    }
+  }
+}

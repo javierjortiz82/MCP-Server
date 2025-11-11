@@ -70,7 +70,7 @@ class ClientHealthMonitor:
         """Set the bot instance for monitoring.
 
         Args:
-            bot: OdiseoBot instance
+            bot: Agent orchestrator instance (SalesAgent in single-agent mode, AgentOrchestrator in multi-agent)
         """
         self.bot_instance = bot
 
@@ -174,11 +174,7 @@ class ClientHealthMonitor:
 
             # Check MCP tools availability
             if hasattr(self.bot_instance, "mcp_tools"):
-                tool_count = (
-                    len(self.bot_instance.mcp_tools)
-                    if self.bot_instance.mcp_tools
-                    else 0
-                )
+                tool_count = len(self.bot_instance.mcp_tools) if self.bot_instance.mcp_tools else 0
                 if tool_count > 0:
                     status = HealthStatus.HEALTHY
                     message = f"Connected with {tool_count} tools available"
@@ -377,12 +373,8 @@ class ClientHealthMonitor:
             "summary": {
                 "total_checks": len(results),
                 "healthy": sum(1 for c in results if c.status == HealthStatus.HEALTHY),
-                "degraded": sum(
-                    1 for c in results if c.status == HealthStatus.DEGRADED
-                ),
-                "unhealthy": sum(
-                    1 for c in results if c.status == HealthStatus.UNHEALTHY
-                ),
+                "degraded": sum(1 for c in results if c.status == HealthStatus.DEGRADED),
+                "unhealthy": sum(1 for c in results if c.status == HealthStatus.UNHEALTHY),
                 "unknown": sum(1 for c in results if c.status == HealthStatus.UNKNOWN),
             },
         }
@@ -443,6 +435,6 @@ def setup_health_monitoring(bot_instance) -> None:
     """Set up health monitoring for a bot instance.
 
     Args:
-        bot_instance: OdiseoBot instance
+        bot_instance: Agent orchestrator or SalesAgent instance
     """
     health_monitor.set_bot_instance(bot_instance)

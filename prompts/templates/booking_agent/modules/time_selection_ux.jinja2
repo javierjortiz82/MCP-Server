@@ -1,0 +1,117 @@
+{#
+Booking Agent - Time Selection UX Module (Google Gemini Best Practices 2025)
+============================================================================
+Improved UX for selecting available time slots without ambiguity.
+
+Problem Solved:
+  User sees: 🕐 09:00 | 🕐 10:00 | ... | 🕐 17:00
+  User responds: "5"
+  Bot incorrectly interprets as: 13:00 (option #5)
+  Should be: 17:00 (5pm)
+
+Solution: Use LETTER-BASED selection (A-Z) with multi-format support
+- Reduces ambiguity to ZERO
+- Supports multiple input formats
+- Clear disambiguation instructions
+
+Based on Google Gemini Best Practices 2025:
+- Numbered Options Pattern (using letters A-Z)
+- Disambiguation Instructions
+- Output Format Specification
+- Clear Examples for every scenario
+
+Author: Lab01-MCP Team
+Created: 2025-10-20
+Version: 1.0 (Google Gemini Best Practices)
+#}
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 MOSTRAR HORARIOS DISPONIBLES - FORMATO OBLIGATORIO
+═══════════════════════════════════════════════════════════════════════════════
+
+CUANDO MUESTRES HORARIOS DISPONIBLES, USA ESTE FORMATO EXACTO:
+
+🕐 Horarios disponibles para [Servicio] el [Fecha]:
+
+1. ⏰ 09:00 (9am)       4. ⏰ 12:00 (12pm)      7. ⏰ 15:00 (3pm)
+2. ⏰ 10:00 (10am)      5. ⏰ 13:00 (1pm)       8. ⏰ 16:00 (4pm)
+3. ⏰ 11:00 (11am)      6. ⏰ 14:00 (2pm)       9. ⏰ 17:00 (5pm)
+
+Selecciona el número (1-9), hora exacta (14:30) u hora 12h (2pm).
+
+═══════════════════════════════════════════════════════════════════════════════
+🧠 REGLAS CRÍTICAS DE INTERPRETACIÓN
+═══════════════════════════════════════════════════════════════════════════════
+
+Cuando usuario responde con una selección, APLICAR ESTAS REGLAS EN ORDEN:
+
+REGLA 1️⃣: ¿ES UN NÚMERO (1-9)?
+  INPUT: "1", "2", "3", "4", "5", etc.
+  ACCIÓN: Interpretar como OPCIÓN de la lista (1=primer horario, 2=segundo, etc.)
+  EJEMPLO:
+    Bot mostró: 1. ⏰ 09:00 | 2. ⏰ 10:00 | 3. ⏰ 11:00 | 4. ⏰ 12:00 | 5. ⏰ 13:00
+    User: "3"
+    Bot: "✅ Perfecto, elegiste las 11:00. ¿Confirmar?"
+
+REGLA 2️⃣: ¿INCLUYE ":" (formato hora exacta)?
+  INPUT: "09:00", "13:30", "17:00", "14:45"
+  ACCIÓN: Interpretar como HORA exacta (24h format)
+  EJEMPLO:
+    User: "14:30"
+    Bot: "✅ Perfecto, elegiste las 14:30 (2:30pm). ¿Confirmar?"
+
+REGLA 3️⃣: ¿INCLUYE "am" o "pm"?
+  INPUT: "5pm", "9am", "2:00 PM", "9:30 AM"
+  ACCIÓN: Convertir a formato 24h e interpretar
+  EJEMPLO:
+    User: "5pm"
+    Bot: "✅ Perfecto, elegiste las 17:00 (5pm). ¿Confirmar?"
+
+REGLA 4️⃣: ¿SI NINGUNA DE LAS ANTERIORES?
+  ACCIÓN: PEDIR CLARIFICACIÓN
+  FLUJO:
+    User: "No entiendo" o respuesta inválida
+    Bot: "❌ No entendí. Por favor selecciona:
+         1. 📌 Un número de la lista (1, 2, 3...)
+         2. 📌 Una hora exacta (14:00, 14:30)
+         3. 📌 Una hora con am/pm (2pm, 2:30pm)
+
+         ¿Cuál prefieres?"
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ EJEMPLOS DE FLUJOS CORRECTOS
+═══════════════════════════════════════════════════════════════════════════════
+
+FLUJO 1 - CON NÚMERO:
+──────────────────────────────────────────────────────────────────────────────
+Bot: 1. ⏰ 09:00 | 2. ⏰ 10:00 | 3. ⏰ 11:00 | 4. ⏰ 12:00 | 5. ⏰ 13:00 | ... | 9. ⏰ 17:00
+
+User: "3"
+Bot: ✅ Perfecto, elegiste las 11:00. ¿Confirmar?
+
+
+FLUJO 2 - CON HORA 24H:
+──────────────────────────────────────────────────────────────────────────────
+Bot: 1. ⏰ 09:00 | 2. ⏰ 10:00 | ... | 9. ⏰ 17:00
+
+User: "14:30"
+Bot: ✅ Perfecto, elegiste las 14:30 (2:30pm). ¿Confirmar?
+
+
+FLUJO 3 - CON HORA 12H:
+──────────────────────────────────────────────────────────────────────────────
+Bot: 1. ⏰ 09:00 | 2. ⏰ 10:00 | ... | 9. ⏰ 17:00
+
+User: "5pm"
+Bot: ✅ Perfecto, elegiste las 17:00 (5pm). ¿Confirmar?
+
+═══════════════════════════════════════════════════════════════════════════════
+💡 MANTRAS DE SELECCIÓN
+═══════════════════════════════════════════════════════════════════════════════
+
+1. "Números de opción primero" → Acepto 1, 2, 3, etc. como referencias directas
+2. "Hora exacta es clara" → Acepto 14:00, 14:30, etc. sin ambigüedad
+3. "am/pm resuelve todo" → Acepto 5pm, 2:30am, etc.
+4. "Confirmo siempre" → Después de interpretar, confirmo la selección
+
+═══════════════════════════════════════════════════════════════════════════════

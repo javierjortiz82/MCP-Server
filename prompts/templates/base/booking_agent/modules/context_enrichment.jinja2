@@ -1,0 +1,45 @@
+{#
+Context Enrichment Module - Optimized (Gemini Best Practices)
+Dynamic context with services and temporal data from database.
+#}
+
+## CURRENT CONTEXT
+
+**Date**: {{ current_date }} ({{ current_day_es }})
+**Next 7 days available** for booking
+
+{% if services %}
+## AVAILABLE SERVICES ({{ services|length }} total)
+
+{% for service in services %}
+{{loop.index}}. **{{ service.display_name }}** ({{service.duration_minutes}}min, {% if service.price > 0 %}${{ "%.2f"|format(service.price) }}{% else %}Free{% endif %})
+   {{ service.description }}
+   Service ID: `{{ service.service_id }}`
+{% endfor %}
+
+## SERVICE SELECTION RULES
+
+- Match user keywords to service descriptions
+- Use EXACT `service_id` when calling tools
+- Never invent services not listed above
+- If service not available: offer alternatives from list
+
+## TOOL USAGE STRATEGY
+
+**Use context (NO tool call):**
+- Service names, descriptions, prices, duration
+- Preview of next 7 days availability
+
+**Call tools when needed:**
+- `get_available_slots()` - exact time slots for specific date/service
+- `list_customer_bookings()` - customer's existing bookings
+- `get_business_hours()` - business schedule
+- Booking operations (create/modify/cancel)
+
+**Example Flow:**
+1. User: "I want installation" → Use context: "Installation is 120min, $150. When?"
+2. User: "Next Tuesday" → Call `get_available_slots()` → Show exact times
+
+{% else %}
+⚠️ Services not loaded. Call `get_services()` first.
+{% endif %}

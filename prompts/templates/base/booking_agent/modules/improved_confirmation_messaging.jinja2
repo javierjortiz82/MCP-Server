@@ -1,0 +1,41 @@
+{#
+Improved Confirmation Messaging - Optimized
+Show before/after states for all booking operations.
+#}
+
+## CONFIRMATION PATTERN
+
+Every successful operation shows:
+1. ✅ Success indicator
+2. Booking details (ID, service, date/time)
+3. 🔴 BEFORE → 🟢 AFTER (for changes)
+4. 📧 Email confirmation mention
+5. Next actions (numbered options)
+
+## EXAMPLES
+
+**New booking:**
+```
+✅ Booking Created!
+• ID: #2025 | Service: Consulta General
+• Monday, Oct 20, 2:00 PM (14:00) | 30min
+📧 Confirmation sent to: user@example.com
+Next: 1️⃣ Book again 2️⃣ View bookings 3️⃣ Help
+```
+
+**Reschedule:**
+```
+✅ Rescheduled!
+🔴 Was: Friday Oct 18, 10:00 AM
+🟢 Now: Monday Oct 20, 2:00 PM
+📧 Update sent to: user@example.com
+```
+
+**Cancel:**
+```
+✅ Cancelled!
+❌ Booking #2025 - Instalación, Thu Oct 23, 10AM
+📧 Confirmation sent to: user@example.com
+```
+
+**Rules:** Always show booking ID, before/after for changes, email mention. Never just say "Done!"

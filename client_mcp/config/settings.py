@@ -69,6 +69,19 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # Database Configuration
+    # ============================================================================
+    DATABASE_URL: str = Field(
+        default="postgresql://mcp_user:mcp_password@localhost:5434/mcpdb",
+        description="PostgreSQL connection URL (shared across all modules: client_mcp, mcp_server, email_service)",
+    )
+
+    SCHEMA_NAME: str = Field(
+        default="test",  # ✅ FIXED: Must match mcp_server schema
+        description="PostgreSQL schema name (shared across all modules)",
+    )
+
+    # ============================================================================
     # MCP Server Configuration
     # ============================================================================
     MCP_HOST: str = Field(
@@ -81,6 +94,13 @@ class Settings(BaseSettings):
         gt=0,
         lt=65536,
         description="MCP server port",
+    )
+
+    MCP_HEALTH_CHECK_TIMEOUT: float = Field(
+        default=5.0,
+        gt=0,
+        le=60,
+        description="Health check timeout in seconds",
     )
 
     @property
@@ -108,6 +128,28 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = Field(
         default="INFO",
         description="Log level (DEBUG, INFO, WARNING, ERROR)",
+    )
+
+    LOG_TO_FILE: bool = Field(
+        default=True,
+        description="Enable file logging",
+    )
+
+    LOG_DIR: str = Field(
+        default="logs",
+        description="Directory for log files",
+    )
+
+    LOG_MAX_SIZE_MB: int = Field(
+        default=10,
+        gt=0,
+        description="Maximum log file size in megabytes",
+    )
+
+    LOG_BACKUP_COUNT: int = Field(
+        default=5,
+        gt=0,
+        description="Number of backup log files to keep",
     )
 
     @field_validator("LOG_LEVEL")
@@ -212,6 +254,19 @@ class Settings(BaseSettings):
     )
 
     # ============================================================================
+    # Error Pattern Configuration
+    # ============================================================================
+    CACHE_ERROR_PATTERNS: str = Field(
+        default="CacheError,RESOURCE_EXHAUSTED,cache",
+        description="Cache error patterns to detect (comma-separated)",
+    )
+
+    RATE_LIMIT_ERROR_PATTERNS: str = Field(
+        default="429,RATE_LIMIT_EXCEEDED,quota",
+        description="Rate limit error patterns to detect (comma-separated)",
+    )
+
+    # ============================================================================
     # Fallback Configuration
     # ============================================================================
     ENABLE_FALLBACK: bool = Field(
@@ -294,6 +349,16 @@ class Settings(BaseSettings):
         description="Number of products to show per page (default: 4)",
     )
 
+    PAGINATION_KEYWORDS_ES: str = Field(
+        default="más,siguiente,muéstrame,opciones",
+        description="Spanish keywords for pagination requests (comma-separated)",
+    )
+
+    PAGINATION_KEYWORDS_EN: str = Field(
+        default="more,next,show,additional,options",
+        description="English keywords for pagination requests (comma-separated)",
+    )
+
     # ============================================================================
     # Multi-Agent System Configuration
     # ============================================================================
@@ -317,31 +382,18 @@ class Settings(BaseSettings):
         description="Enable PostgreSQL persistence for pagination contexts",
     )
 
-    PAGINATION_DB_HOST: str = Field(
-        default="localhost",
-        description="PostgreSQL host for pagination persistence",
+    PAGINATION_DB_POOL_MIN: int = Field(
+        default=1,
+        ge=1,
+        le=10,
+        description="Minimum database connections in pool (pagination-specific)",
     )
 
-    PAGINATION_DB_PORT: int = Field(
-        default=5434,
-        gt=0,
-        lt=65536,
-        description="PostgreSQL port for pagination persistence",
-    )
-
-    PAGINATION_DB_NAME: str = Field(
-        default="mcpdb",
-        description="PostgreSQL database name for pagination persistence",
-    )
-
-    PAGINATION_DB_USER: str = Field(
-        default="mcp_user",
-        description="PostgreSQL user for pagination persistence",
-    )
-
-    PAGINATION_DB_PASSWORD: str | None = Field(
-        default=None,
-        description="PostgreSQL password for pagination persistence",
+    PAGINATION_DB_POOL_MAX: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum database connections in pool (pagination-specific)",
     )
 
     PAGINATION_TTL_HOURS: int = Field(
@@ -349,6 +401,29 @@ class Settings(BaseSettings):
         ge=1,
         le=168,  # Max 7 days
         description="Pagination context TTL in hours (default: 24 = 1 day)",
+    )
+
+    # ============================================================================
+    # SalesAgent Function Calling Configuration
+    # ============================================================================
+    FUNCTION_CALL_MAX_ITERATIONS: int = Field(
+        default=10,
+        gt=0,
+        le=50,
+        description="Maximum iterations for function calling loop in SalesAgent",
+    )
+
+    # ============================================================================
+    # SalesAgent Error Handling & Fallback Messages
+    # ============================================================================
+    FALLBACK_ERROR_MESSAGE_ES: str = Field(
+        default="No pude generar una respuesta final. Las herramientas se ejecutaron pero no pude procesar el resultado.",
+        description="Spanish fallback error message when function calling exhausts iterations",
+    )
+
+    FALLBACK_ERROR_MESSAGE_EN: str = Field(
+        default="I couldn't generate a final response. Tools were executed but I couldn't process the result.",
+        description="English fallback error message",
     )
 
     # ============================================================================
@@ -369,9 +444,7 @@ class Settings(BaseSettings):
 
         if not self.GOOGLE_API_KEY:
             # Use getpass for masked input (prevents terminal history leakage)
-            self.GOOGLE_API_KEY = getpass.getpass(
-                "🔑 Introduce tu GOOGLE_API_KEY: "
-            ).strip()
+            self.GOOGLE_API_KEY = getpass.getpass("🔑 Introduce tu GOOGLE_API_KEY: ").strip()
 
             if not self.GOOGLE_API_KEY:
                 raise ValueError("❌ API key es requerida para continuar")
@@ -393,32 +466,6 @@ class Settings(BaseSettings):
             return True
         except ValueError:
             return False
-
-    @staticmethod
-    def get_prompts_dir() -> Path:
-        """Get the prompts directory path.
-
-        Returns:
-            Path: Path to prompts directory
-        """
-        # prompts/ is in assets/ directory
-        config_dir = Path(__file__).parent  # config/
-        project_root = config_dir.parent  # client_mcp/
-        return project_root / "assets" / "prompts"
-
-    def get_system_prompt(self) -> str:
-        """Get the main system prompt for Odiseo Bot.
-
-        Returns:
-            str: System prompt content
-
-        Raises:
-            FileNotFoundError: If prompt file doesn't exist
-        """
-        prompt_path = self.get_prompts_dir() / "system_prompt.txt"
-        if not prompt_path.exists():
-            raise FileNotFoundError(f"System prompt not found at: {prompt_path}")
-        return prompt_path.read_text(encoding="utf-8")
 
     def get_retry_config(self) -> dict[str, float | int | bool]:
         """Get retry configuration as dictionary.

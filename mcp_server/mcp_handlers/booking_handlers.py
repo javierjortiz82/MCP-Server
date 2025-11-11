@@ -11,9 +11,33 @@ This module provides MCP tool decorators for booking/reservation functionality:
 - Retrieve booking details
 - List customer booking history
 
+═══════════════════════════════════════════════════════════════════════════════
+🔒 SCOPE ENFORCEMENT (Gemini 2.5 Best Practice)
+═══════════════════════════════════════════════════════════════════════════════
+
+CRITICAL: All tools in this module are BOOKING-ONLY.
+
+✅ ALLOWED uses:
+   - Creating reservations
+   - Checking availability
+   - Modifying/canceling bookings
+   - Service/schedule information
+   - Booking history queries
+
+❌ FORBIDDEN uses (redirect to appropriate agent/team):
+   - Pricing/cost questions → sales team
+   - Technical troubleshooting → support team
+   - Company information → general info
+   - Billing/payments → accounting team
+
+Each tool returns ONLY verified data from database.
+NO HALLUCINATIONS. NO INVENTED DATA.
+
+═══════════════════════════════════════════════════════════════════════════════
+
 Author: Lab01-MCP Team
 Created: 2025-10-11
-Version: 1.0.0
+Version: 1.1.0 (Gemini 2.5 Scope Enforcement)
 """
 
 # NOTE: Do NOT add "from __future__ import annotations" here!
@@ -26,6 +50,8 @@ from mcp.server.fastmcp import Context
 
 from tools import bookings as booking_tool
 from utils.logger import setup_logging
+from utils.language_context import get_current_language
+from utils.mcp_i18n import mcp_info, mcp_debug, mcp_progress
 
 # Setup logger for booking handlers
 logger = setup_logging("mcp_booking_handlers")
@@ -74,6 +100,22 @@ def register_booking_tools():
 
     Creates MCP tool decorators for all booking-related functionality.
     Each tool is an async wrapper around pure business logic functions.
+
+    Implements Gemini 2.5 Scope Boundaries:
+    - All tools in this module are BOOKING-ONLY (no sales, support, general queries)
+    - All tools enforce language context from agents
+    - All tools use MCP Context for logging/progress reporting
+    - All tools return structured responses (never hallucinated data)
+
+    Available Tools (8 total):
+    ✅ create_booking: New reservations
+    ✅ cancel_booking: Cancellations
+    ✅ reschedule_booking: Date/time changes
+    ✅ get_available_slots: Availability checking
+    ✅ get_booking_by_id: Booking details
+    ✅ list_customer_bookings: Customer's reservations
+    ✅ get_services: Service catalog
+    ✅ get_business_hours: Operating hours
     """
 
     @mcp.tool()  # type: ignore[union-attr]
@@ -85,10 +127,13 @@ def register_booking_tools():
         service_type: str,
         booking_date: str,
         booking_time: str,
+        notes: str,
         duration_minutes: int = 60,
-        notes: str = "",
     ) -> dict[str, Any]:
         """Create a new booking/reservation appointment.
+
+        Scope: BOOKING ONLY - This tool is for creating reservations.
+        Never use for sales questions, pricing inquiries, or technical support.
 
         ** WHEN TO USE THIS TOOL **:
         ✅ Customer wants to schedule an appointment or reservation
@@ -106,7 +151,8 @@ def register_booking_tools():
         ❌ Customer is just checking availability (use get_available_slots)
         ❌ Customer wants to modify existing booking (use reschedule_booking)
         ❌ Customer wants to cancel booking (use cancel_booking)
-        ❌ Missing required information (name, email, phone, service, date, time)
+        ❌ Missing required information (name, email, phone, service, date, time, notes)
+        ❌ Customer asks: "¿Cuánto cuesta?" or "¿Hay descuento?" → NOT booking scope
 
         ** WHAT IT DOES **:
         1. Validates customer information and service type
@@ -132,9 +178,12 @@ def register_booking_tools():
                          training_session, installation, custom.
             booking_date: Appointment date in YYYY-MM-DD format (e.g., "2025-10-15").
             booking_time: Appointment time in HH:MM format 24-hour (e.g., "15:00" for 3pm).
+            notes: REQUIRED. Notes, reason, or purpose of the appointment.
+                  This field is mandatory to understand the customer's needs.
+                  Examples: "Primera consulta", "Problema con el producto X",
+                  "Quiero conocer las funcionalidades".
             duration_minutes: Appointment duration in minutes (default: 60).
                              Typical values: 30, 60, 90, 120.
-            notes: Optional notes or special requests from customer (default: "").
 
         Returns:
             Booking confirmation dict with:
@@ -169,10 +218,14 @@ def register_booking_tools():
             >>> print(result["booking_id"])  # 123
         """
         try:
-            await ctx.info(
-                f"Creating booking for {customer_name} on {booking_date} at {booking_time}"
+            await mcp_info(
+                ctx,
+                "booking.create.info_start",
+                customer_name=customer_name,
+                booking_date=booking_date,
+                booking_time=booking_time,
             )
-            await ctx.report_progress(0, 3, "Validating booking information")
+            await mcp_progress(ctx, 0, 3, "booking.create.progress_validate")
 
             logger.info(
                 f"create_booking called: customer={customer_name}, "
@@ -180,7 +233,7 @@ def register_booking_tools():
             )
 
             # Call business logic
-            await ctx.report_progress(1, 3, "Creating booking in database")
+            await mcp_progress(ctx, 1, 3, "booking.create.progress_create")
             result = booking_tool.create_booking(
                 customer_name=customer_name,
                 customer_email=customer_email,
@@ -192,30 +245,41 @@ def register_booking_tools():
                 notes=notes,
             )
 
-            await ctx.report_progress(2, 3, "Booking created successfully")
+            await mcp_progress(ctx, 2, 3, "booking.create.progress_success")
 
             if result.get("google_calendar_event_id"):
-                await ctx.info(
-                    f"✅ Booking created: ID={result['booking_id']}, "
-                    f"Google Calendar event created"
+                await mcp_info(
+                    ctx,
+                    "booking.create.info_with_calendar",
+                    booking_id=result['booking_id'],
                 )
             else:
-                await ctx.info(
-                    f"✅ Booking created: ID={result['booking_id']} (calendar disabled)"
+                await mcp_info(
+                    ctx,
+                    "booking.create.info_without_calendar",
+                    booking_id=result['booking_id'],
                 )
 
-            await ctx.report_progress(3, 3, "Booking confirmation ready")
+            await mcp_progress(ctx, 3, 3, "booking.create.progress_ready")
             logger.info(f"Booking created successfully: ID={result.get('booking_id')}")
 
             return result
 
         except ValueError as e:
-            await ctx.debug(f"Validation error creating booking: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.create.error_validation",
+                error=str(e),
+            )
             logger.error(f"Validation error in create_booking: {str(e)}")
             raise
 
         except Exception as e:
-            await ctx.debug(f"Error creating booking: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.create.error_general",
+                error=str(e),
+            )
             logger.exception(f"Error in create_booking: {str(e)}")
             raise
 
@@ -226,6 +290,9 @@ def register_booking_tools():
         cancellation_reason: str = "",
     ) -> dict[str, Any]:
         """Cancel an existing booking/reservation.
+
+        Scope: BOOKING ONLY - Use only for canceling confirmed reservations.
+        If customer needs help with something else, redirect appropriately.
 
         ** WHEN TO USE THIS TOOL **:
         ✅ Customer wants to cancel their appointment
@@ -242,6 +309,7 @@ def register_booking_tools():
         ❌ Customer wants to change date/time (use reschedule_booking instead)
         ❌ Booking ID is unknown (use list_customer_bookings first)
         ❌ Customer is just asking about cancellation policy
+        ❌ Customer asks: "¿Hay penalidad por cancelación?" → NOT a cancellation action
 
         ** WHAT IT DOES **:
         1. Marks booking as cancelled in database (soft delete)
@@ -280,33 +348,42 @@ def register_booking_tools():
             >>> print(result["status"])  # "cancelled"
         """
         try:
-            await ctx.info(f"Cancelling booking ID: {booking_id}")
-            await ctx.report_progress(0, 2, "Validating booking")
+            await mcp_info(ctx, "booking.cancel.info_start", booking_id=booking_id)
+            await mcp_progress(ctx, 0, 2, "booking.cancel.progress_validate")
 
             logger.info(
                 f"cancel_booking called: booking_id={booking_id}, reason={cancellation_reason}"
             )
 
             # Call business logic
-            await ctx.report_progress(1, 2, "Processing cancellation")
+            await mcp_progress(ctx, 1, 2, "booking.cancel.progress_process")
             result = booking_tool.cancel_booking(
                 booking_id=booking_id,
                 cancellation_reason=cancellation_reason,
             )
 
-            await ctx.info(f"✅ Booking {booking_id} cancelled successfully")
-            await ctx.report_progress(2, 2, "Cancellation completed")
+            await mcp_info(ctx, "booking.cancel.info_success", booking_id=booking_id)
+            await mcp_progress(ctx, 2, 2, "booking.cancel.progress_complete")
             logger.info(f"Booking cancelled successfully: ID={booking_id}")
 
             return result
 
         except ValueError as e:
-            await ctx.debug(f"Validation error cancelling booking: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.cancel.error_validation",
+                error=str(e),
+            )
             logger.error(f"Validation error in cancel_booking: {str(e)}")
             raise
 
         except Exception as e:
-            await ctx.debug(f"Error cancelling booking {booking_id}: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.cancel.error_general",
+                booking_id=booking_id,
+                error=str(e),
+            )
             logger.exception(f"Error in cancel_booking: {str(e)}")
             raise
 
@@ -335,12 +412,14 @@ def register_booking_tools():
         ❌ Customer is checking availability first (use get_available_slots)
         ❌ New time slot is not available
         ❌ Booking ID is unknown (use list_customer_bookings first)
+        ❌ Booking is already cancelled (cannot reschedule cancelled appointments)
 
         ** WHAT IT DOES **:
-        1. Validates new time slot availability
-        2. Updates booking record in database with new date/time
-        3. Updates Google Calendar event if it exists
-        4. Returns reschedule confirmation
+        1. Validates booking exists and is not cancelled/completed
+        2. Validates new time slot availability
+        3. Updates booking record in database with new date/time
+        4. Updates Google Calendar event if it exists
+        5. Returns reschedule confirmation
 
         ** PERFORMANCE **: ~150-300ms (depending on calendar integration)
 
@@ -375,39 +454,84 @@ def register_booking_tools():
             >>> print(result["new_datetime"])  # "2025-10-20T16:00:00-05:00"
         """
         try:
-            await ctx.info(
-                f"Rescheduling booking ID: {booking_id} to {new_date} at {new_time}"
+            await mcp_info(
+                ctx,
+                "booking.reschedule.info_start",
+                booking_id=booking_id,
+                new_date=new_date,
+                new_time=new_time,
             )
-            await ctx.report_progress(0, 3, "Validating booking")
+            await mcp_progress(ctx, 0, 4, "booking.reschedule.progress_validate_status")
 
             logger.info(
                 f"reschedule_booking called: booking_id={booking_id}, new_date={new_date}, new_time={new_time}"
             )
 
+            # First, fetch booking to check status (defensive validation)
+            await mcp_progress(ctx, 1, 4, "booking.reschedule.progress_fetch")
+            booking = booking_tool.get_booking_by_id(booking_id)
+
+            if not booking:
+                await mcp_debug(
+                    ctx,
+                    "booking.reschedule.error_not_found",
+                    booking_id=booking_id,
+                )
+                logger.error(f"Booking {booking_id} not found")
+                raise ValueError(f"Booking {booking_id} not found")
+
+            # Check if booking is in a valid state for rescheduling
+            current_status = booking.get("status")
+            if current_status in ("cancelled", "completed", "no_show"):
+                error_msg = f"Cannot reschedule {current_status} booking (ID: {booking_id})"
+                await mcp_debug(ctx, "booking.reschedule.error_not_found", booking_id=booking_id)
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            await mcp_info(
+                ctx,
+                "booking.reschedule.info_status_validated",
+                status=current_status,
+                customer_name=booking.get('customer_name', 'Unknown'),
+            )
+
             # Call business logic
-            await ctx.report_progress(1, 3, "Checking new slot availability")
+            await mcp_progress(ctx, 2, 4, "booking.reschedule.progress_check_availability")
             result = booking_tool.reschedule_booking(
                 booking_id=booking_id,
                 new_date=new_date,
                 new_time=new_time,
             )
 
-            await ctx.report_progress(2, 3, "Updating booking and calendar")
-            await ctx.info(
-                f"✅ Booking {booking_id} rescheduled to {new_date} at {new_time}"
+            await mcp_progress(ctx, 3, 4, "booking.reschedule.progress_update")
+            await mcp_info(
+                ctx,
+                "booking.reschedule.info_success",
+                booking_id=booking_id,
+                new_date=new_date,
+                new_time=new_time,
             )
-            await ctx.report_progress(3, 3, "Reschedule completed")
+            await mcp_progress(ctx, 4, 4, "booking.reschedule.progress_complete")
             logger.info(f"Booking rescheduled successfully: ID={booking_id}")
 
             return result
 
         except ValueError as e:
-            await ctx.debug(f"Validation error rescheduling booking: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.reschedule.error_validation",
+                error=str(e),
+            )
             logger.error(f"Validation error in reschedule_booking: {str(e)}")
             raise
 
         except Exception as e:
-            await ctx.debug(f"Error rescheduling booking {booking_id}: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.reschedule.error_general",
+                booking_id=booking_id,
+                error=str(e),
+            )
             logger.exception(f"Error in reschedule_booking: {str(e)}")
             raise
 
@@ -495,21 +619,29 @@ def register_booking_tools():
             # 14:00 - 15:00
         """
         try:
-            await ctx.info(f"Checking available slots for {service_type} on {date}")
-            await ctx.report_progress(0, 2, "Querying business hours and bookings")
+            await mcp_info(
+                ctx,
+                "booking.availability.info_start",
+                service_type=service_type,
+                date=date,
+            )
+            await mcp_progress(ctx, 0, 2, "booking.availability.progress_query")
 
+            # Get current language from context (set by AgentOrchestrator)
+            user_lang = get_current_language()
             logger.info(
-                f"get_available_slots called: service={service_type}, date={date}, duration={duration_minutes}"
+                f"get_available_slots called: service={service_type}, date={date}, duration={duration_minutes}, lang={user_lang}"
             )
 
-            # Call business logic
+            # Call business logic with language parameter
             result = booking_tool.get_available_slots(
                 service_type=service_type,
                 date=date,
                 duration_minutes=duration_minutes,
+                user_lang=user_lang,
             )
 
-            await ctx.report_progress(1, 2, "Calculating available time slots")
+            await mcp_progress(ctx, 1, 2, "booking.availability.progress_calculate")
 
             # Filter available slots with spacing logic (UX improvement)
             # This prevents showing overlapping slots (e.g., 09:00, 09:30 for 120-min service)
@@ -550,8 +682,19 @@ def register_booking_tools():
             result["count"] = len(spaced_slots)
 
             slot_count = len(spaced_slots)
-            await ctx.info(f"✅ Found {slot_count} available slots on {date}")
-            await ctx.report_progress(2, 2, f"Found {slot_count} available slots")
+            await mcp_info(
+                ctx,
+                "booking.availability.info_success",
+                slot_count=slot_count,
+                date=date,
+            )
+            await mcp_progress(
+                ctx,
+                2,
+                2,
+                "booking.availability.progress_slots",
+                slot_count=slot_count,
+            )
             logger.info(
                 f"Available slots: {slot_count} spaced slots on {date} "
                 f"(from {len(available_slots)} available, {len(all_slots)} total)"
@@ -560,12 +703,21 @@ def register_booking_tools():
             return result
 
         except ValueError as e:
-            await ctx.debug(f"Validation error checking availability: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.availability.error_validation",
+                error=str(e),
+            )
             logger.error(f"Validation error in get_available_slots: {str(e)}")
             raise
 
         except Exception as e:
-            await ctx.debug(f"Error getting available slots for {date}: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.availability.error_general",
+                date=date,
+                error=str(e),
+            )
             logger.exception(f"Error in get_available_slots: {str(e)}")
             raise
 
@@ -631,26 +783,42 @@ def register_booking_tools():
             # María García - 2025-10-15 at 14:00
         """
         try:
-            await ctx.info(f"Fetching booking details for ID: {booking_id}")
+            await mcp_info(
+                ctx,
+                "booking.get_by_id.info_start",
+                booking_id=booking_id,
+            )
             logger.debug(f"get_booking_by_id called with booking_id={booking_id}")
 
             # Call business logic
             result = booking_tool.get_booking_by_id(booking_id=booking_id)
 
             if result:
-                await ctx.info(
-                    f"✅ Booking found: {result.get('customer_name', 'Unknown')} - "
-                    f"{result.get('booking_date')} at {result.get('booking_time')}"
+                await mcp_info(
+                    ctx,
+                    "booking.get_by_id.info_found",
+                    customer_name=result.get('customer_name', 'Unknown'),
+                    booking_date=result.get('booking_date'),
+                    booking_time=result.get('booking_time'),
                 )
                 logger.info(f"Booking found: ID={booking_id}")
             else:
-                await ctx.info(f"No booking found with ID: {booking_id}")
+                await mcp_info(
+                    ctx,
+                    "booking.get_by_id.info_not_found",
+                    booking_id=booking_id,
+                )
                 logger.warning(f"No booking found for ID: {booking_id}")
 
             return result
 
         except Exception as e:
-            await ctx.debug(f"Error fetching booking {booking_id}: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.get_by_id.error_general",
+                booking_id=booking_id,
+                error=str(e),
+            )
             logger.exception(f"Error in get_booking_by_id: {str(e)}")
             raise
 
@@ -706,13 +874,21 @@ def register_booking_tools():
                         "status": str,
                         "notes": str,
                         "google_calendar_link": str | None,
-                        "created_at": str (ISO 8601)
+                        "created_at": str (ISO 8601),
+                        "is_past": bool (true if booking date/time has already passed)
                     },
                     ...
                 ],
                 "count": int,
-                "active_count": int (confirmed bookings only)
+                "active_count": int (non-cancelled bookings),
+                "future_count": int (bookings not yet passed)
             }
+
+            CRITICAL FOR AGENT LOGIC:
+            - Use "is_past" flag to decide whether to show reschedule/cancel options
+            - If is_past=true: Show booking as reference only, NO action buttons
+            - If is_past=false: Show cancel/reschedule options
+            - Use "future_count" to decide what message to show ("próximas citas" vs "citas pasadas")
 
         Example:
             >>> result = await list_customer_bookings(
@@ -729,7 +905,11 @@ def register_booking_tools():
             # ID: 125 - 2025-10-25
         """
         try:
-            await ctx.info(f"Listing bookings for customer: {customer_email}")
+            await mcp_info(
+                ctx,
+                "booking.list_bookings.info_start",
+                customer_email=customer_email,
+            )
             logger.debug(
                 f"list_customer_bookings called with email={customer_email}, include_cancelled={include_cancelled}"
             )
@@ -743,9 +923,12 @@ def register_booking_tools():
             booking_count = result.get("count", 0)
             active_count = result.get("active_count", 0)
 
-            await ctx.info(
-                f"✅ Found {booking_count} total bookings ({active_count} active) "
-                f"for {customer_email}"
+            await mcp_info(
+                ctx,
+                "booking.list_bookings.info_found",
+                booking_count=booking_count,
+                active_count=active_count,
+                customer_email=customer_email,
             )
             logger.info(
                 f"Bookings listed: {booking_count} total, {active_count} active for {customer_email}"
@@ -754,7 +937,12 @@ def register_booking_tools():
             return result
 
         except Exception as e:
-            await ctx.debug(f"Error listing bookings for {customer_email}: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.list_bookings.error_general",
+                customer_email=customer_email,
+                error=str(e),
+            )
             logger.exception(f"Error in list_customer_bookings: {str(e)}")
             raise
 
@@ -826,20 +1014,28 @@ def register_booking_tools():
             # Demo de Producto: 45min - $0.00
         """
         try:
-            await ctx.info("Fetching available services from database")
+            await mcp_info(ctx, "booking.get_services.info_start")
             logger.info(f"get_services called with active_only={active_only}")
 
             # Call business logic
             result = booking_tool.get_services(active_only=active_only)
 
             service_count = result.get("total", 0)
-            await ctx.info(f"✅ Loaded {service_count} services from database")
+            await mcp_info(
+                ctx,
+                "booking.get_services.info_success",
+                service_count=service_count,
+            )
             logger.info(f"Services loaded: {service_count} services")
 
             return result
 
         except Exception as e:
-            await ctx.debug(f"Error fetching services: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.get_services.error_general",
+                error=str(e),
+            )
             logger.exception(f"Error in get_services: {str(e)}")
             raise
 
@@ -899,19 +1095,27 @@ def register_booking_tools():
             # ...
         """
         try:
-            await ctx.info("Fetching business hours from database")
+            await mcp_info(ctx, "booking.get_hours.info_start")
             logger.info("get_business_hours called")
 
             # Call business logic
             result = booking_tool.get_business_hours()
 
             days_count = result.get("days_count", 0)
-            await ctx.info(f"✅ Loaded business hours for {days_count} days")
+            await mcp_info(
+                ctx,
+                "booking.get_hours.info_success",
+                days_count=days_count,
+            )
             logger.info(f"Business hours loaded: {days_count} days")
 
             return result
 
         except Exception as e:
-            await ctx.debug(f"Error fetching business hours: {e}")
+            await mcp_debug(
+                ctx,
+                "booking.get_hours.error_general",
+                error=str(e),
+            )
             logger.exception(f"Error in get_business_hours: {str(e)}")
             raise

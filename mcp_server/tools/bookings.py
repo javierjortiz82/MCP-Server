@@ -21,23 +21,63 @@ Version: 1.0.0
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from config.settings import settings
-from utils.db import fetchall, fetchone
+from config.booking_constants import (
+    BookingStatus,
+    EmailNotificationType,
+    ServiceType,
+)
+from utils.db import fetchall, fetchone, get_conn
 from utils.logger import setup_logging
+from utils.i18n import t, get_days_of_week, format_date_localized
+
+# Conditional import of Email Queue Manager
+try:
+    import sys
+    from pathlib import Path
+
+    # Add email_service to path
+    # Note: In Docker container, code is at /app/tools/bookings.py, so need .parent.parent
+    # In local dev, code is at mcp_server/tools/bookings.py, so would need .parent.parent.parent
+    # Solution: Check both possible paths
+    email_service_path = Path(__file__).parent.parent / "email_service"
+    if not email_service_path.exists():
+        # Fallback for local development structure
+        email_service_path = Path(__file__).parent.parent.parent / "email_service"
+    if email_service_path.exists():
+        sys.path.insert(0, str(email_service_path.parent))
+        # Use new refactored structure (email_service 2.0)
+        from email_service.database import EmailQueueManager
+        from email_service.models import EmailType
+
+        EMAIL_QUEUE_AVAILABLE = True
+        logger_init = logging.getLogger("bookings_init")
+        logger_init.info("✅ Email queue integration enabled (refactored structure)")
+    else:
+        EMAIL_QUEUE_AVAILABLE = False
+        EmailQueueManager = None  # type: ignore[misc,assignment]
+        EmailType = None  # type: ignore[misc,assignment]
+except ImportError:
+    EMAIL_QUEUE_AVAILABLE = False
+    EmailQueueManager = None  # type: ignore[misc,assignment]
+    EmailType = None  # type: ignore[misc,assignment]
 
 # Conditional import of Google Calendar client
 if settings.GOOGLE_CALENDAR_ENABLED:
     try:
-        from mcp_server.utils.google_calendar import (
+        from utils.google_calendar import (  # Use relative import
             GoogleCalendarClient,
             GoogleCalendarError,
         )
-    except ImportError:
+        logging.info("✅ Google Calendar client imported successfully")
+    except Exception as e:  # Catch all exceptions, not just ImportError
         logging.warning(
-            "Google Calendar client not available - calendar integration disabled"
+            f"Google Calendar client not available - {type(e).__name__}: {e}"
         )
         GoogleCalendarClient = None  # type: ignore[misc,assignment]
         GoogleCalendarError = Exception  # type: ignore[misc,assignment]
@@ -54,6 +94,50 @@ logger = setup_logging("bookings_tools")
 # ============================================================================
 
 
+def _validate_email(email: str) -> tuple[bool, str]:
+    """Validate email address format.
+
+    Uses RFC 5322 simplified regex pattern for email validation.
+    This catches common typos like double domain extensions (.comm, .ccom).
+
+    Args:
+        email: Email address to validate.
+
+    Returns:
+        Tuple of (is_valid: bool, error_message: str).
+        If valid: (True, "")
+        If invalid: (False, "descriptive error message")
+
+    Example:
+        >>> is_valid, msg = _validate_email("user@example.com")
+        >>> print(is_valid)
+        True
+
+        >>> is_valid, msg = _validate_email("user@example.comm")  # Typo!
+        >>> print(is_valid, msg)
+        False Invalid email format: suspected TLD typo (.comm instead of .com)
+    """
+    email = email.strip()
+
+    # Basic RFC 5322 pattern (simplified for practical use)
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+
+    if not re.match(pattern, email):
+        return False, f"Invalid email format: {email}"
+
+    # Check for common typos (double letters in TLD)
+    if re.search(r'\.c+o+m+m+$', email, re.IGNORECASE):
+        return False, f"Suspected TLD typo in email: {email} (.comm instead of .com?)"
+
+    if re.search(r'\.c+o+o+m+$', email, re.IGNORECASE):
+        return False, f"Suspected TLD typo in email: {email} (.coom instead of .com?)"
+
+    if re.search(r'\.c+o+m+m+$', email, re.IGNORECASE):
+        return False, f"Suspected TLD typo in email: {email} (double m's in TLD)"
+
+    return True, ""
+
+
 def _get_calendar_client() -> Any | None:
     """Get Google Calendar client instance if enabled.
 
@@ -65,7 +149,7 @@ def _get_calendar_client() -> Any | None:
 
     try:
         return GoogleCalendarClient(
-            credentials_path=settings.GOOGLE_CALENDAR_CREDENTIALS_PATH,
+            credentials_path=str(settings.google_calendar_credentials_path),
             calendar_id=settings.GOOGLE_CALENDAR_ID,
             timezone=settings.GOOGLE_CALENDAR_TIMEZONE,
         )
@@ -75,65 +159,272 @@ def _get_calendar_client() -> Any | None:
 
 
 def _format_datetime_iso(booking_date: str, booking_time: str) -> str:
-    """Format booking date and time to ISO 8601 string.
+    """Format booking date and time to ISO 8601 string with proper timezone.
+
+    Uses zoneinfo for DST-aware timezone handling.
 
     Args:
         booking_date: Date in YYYY-MM-DD format.
         booking_time: Time in HH:MM format.
 
     Returns:
-        ISO 8601 datetime string with timezone.
+        ISO 8601 datetime string with timezone (DST-aware).
 
     Example:
         >>> _format_datetime_iso("2025-10-12", "15:00")
-        "2025-10-12T15:00:00-05:00"
+        "2025-10-12T15:00:00-05:00"  # or -04:00 if DST
     """
-    # Combine date and time
+    # Parse date and time string
     dt_str = f"{booking_date}T{booking_time}:00"
+    dt_naive = datetime.fromisoformat(dt_str)  # Validates format
 
-    # Validate datetime format
-    _ = datetime.fromisoformat(dt_str)  # Validates format, raises ValueError if invalid
+    # Get timezone from settings
+    tz = ZoneInfo(settings.GOOGLE_CALENDAR_TIMEZONE)
 
-    # Add timezone offset (simplified - should use timezone library in production)
-    # For now, assume timezone from settings (e.g., America/New_York = UTC-5 or UTC-4)
-    # In production, use pytz or zoneinfo for proper timezone handling
-    return f"{dt_str}{_get_timezone_offset()}"
+    # Localize naive datetime to configured timezone
+    # This automatically handles DST transitions
+    dt_aware = dt_naive.replace(tzinfo=tz)
+
+    # Return ISO 8601 string (automatically includes correct offset)
+    return dt_aware.isoformat()
 
 
-def _get_timezone_offset() -> str:
-    """Get timezone offset string for current timezone.
+def _create_booking_atomic(
+    customer_name: str,
+    customer_email: str,
+    customer_phone: str,
+    service_type: str,
+    booking_date: str,
+    booking_time: str,
+    duration_minutes: int,
+    notes: str,
+    calendar_event_id: str | None = None,
+    calendar_link: str | None = None,
+) -> dict[str, Any]:
+    """Create a booking with atomic transaction and row-level locking to prevent race conditions.
+
+    Uses PostgreSQL row-level locking (SELECT ... FOR UPDATE) to ensure
+    that if two requests check availability simultaneously, only one can create the booking.
+
+    Args:
+        customer_name: Customer name
+        customer_email: Customer email
+        customer_phone: Customer phone
+        service_type: Service type
+        booking_date: Booking date (YYYY-MM-DD)
+        booking_time: Booking time (HH:MM)
+        duration_minutes: Duration in minutes
+        notes: Booking notes
+        calendar_event_id: Optional Google Calendar event ID
+        calendar_link: Optional Google Calendar link
 
     Returns:
-        Timezone offset string (e.g., "-05:00", "+01:00").
+        Dict with booking details (id, status, created_at)
+
+    Raises:
+        RuntimeError: If booking creation fails or slot becomes unavailable
 
     Note:
-        This is a simplified implementation. In production,
-        use proper timezone library (pytz, zoneinfo).
+        This function uses database-level transactions with row-level locking
+        to prevent the TOCTOU (Time-of-Check-Time-of-Use) vulnerability.
     """
-    # Simplified mapping - should use pytz/zoneinfo in production
-    timezone_offsets = {
-        # North America
-        "America/New_York": "-05:00",  # EST (UTC-5 winter, UTC-4 summer)
-        "America/Chicago": "-06:00",  # CST (UTC-6 winter, UTC-5 summer)
-        "America/Denver": "-07:00",  # MST (UTC-7 winter, UTC-6 summer)
-        "America/Los_Angeles": "-08:00",  # PST (UTC-8 winter, UTC-7 summer)
+    from datetime import time as time_type
 
-        # Central America (no DST - always UTC-6)
-        "America/Costa_Rica": "-06:00",  # CST (UTC-6 year-round)
-        "America/Guatemala": "-06:00",  # CST (UTC-6 year-round)
-        "America/El_Salvador": "-06:00",  # CST (UTC-6 year-round)
-        "America/Tegucigalpa": "-06:00",  # Honduras CST (UTC-6 year-round)
-        "America/Managua": "-06:00",  # Nicaragua CST (UTC-6 year-round)
-        "America/Panama": "-05:00",  # EST (UTC-5 year-round)
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            # BEGIN TRANSACTION (implicit)
+            logger.debug(f"Starting atomic booking transaction for {booking_date} {booking_time}")
 
-        # Europe
-        "Europe/Madrid": "+01:00",  # CET (UTC+1 winter, UTC+2 summer)
-        "Europe/London": "+00:00",  # GMT (UTC+0 winter, UTC+1 summer)
+            # Parse date and time for comparison
+            booking_dt = datetime.fromisoformat(f"{booking_date}T{booking_time}:00")
+            end_time_dt = booking_dt + timedelta(minutes=duration_minutes)
 
-        # Other
-        "UTC": "+00:00",
-    }
-    return timezone_offsets.get(settings.GOOGLE_CALENDAR_TIMEZONE, "-06:00")  # Default Costa Rica
+            # LOCK: Select all overlapping appointments for this date with FOR UPDATE
+            # This prevents other transactions from modifying these rows
+            lock_query = f"""
+                SELECT id
+                FROM {settings.SCHEMA_NAME}.appointments
+                WHERE booking_date = %s
+                  AND status IN ('confirmed', 'rescheduled')
+                  AND booking_time < %s
+                  AND booking_time + (duration_minutes || ' minutes')::INTERVAL > %s
+                FOR UPDATE
+            """
+
+            cur.execute(
+                lock_query,
+                (booking_date, end_time_dt.time(), booking_dt.time()),
+            )
+
+            locked_rows = cur.fetchall()
+            logger.debug(
+                f"Locked {len(locked_rows)} overlapping appointments for atomic check"
+            )
+
+            # RECHECK: Verify slot is still available after locking
+            # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
+            availability_check_query = f"""
+                SELECT {settings.SCHEMA_NAME}.is_slot_available(%s::date, %s::time, %s, %s) as available
+            """
+
+            cur.execute(
+                availability_check_query,
+                (booking_date, booking_time, duration_minutes, service_type),
+            )
+
+            availability_result = cur.fetchone()
+            is_available = availability_result[0] if availability_result else False
+
+            if not is_available:
+                logger.warning(
+                    f"Slot {booking_date} {booking_time} became unavailable after locking "
+                    f"(was checked by another transaction)"
+                )
+                error_msg = t(
+                    "booking.messages.slot_not_available_race",
+                    lang="en",
+                    booking_date=booking_date,
+                    booking_time=booking_time
+                )
+                raise RuntimeError(error_msg)
+
+            # INSERT: Create the booking atomically within the transaction
+            insert_query = f"""
+                INSERT INTO {settings.SCHEMA_NAME}.appointments
+                (customer_name, customer_email, customer_phone, service_type,
+                 booking_date, booking_time, duration_minutes, notes,
+                 google_calendar_event_id, google_calendar_link, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, status, created_at
+            """
+
+            cur.execute(
+                insert_query,
+                (
+                    customer_name,
+                    customer_email,
+                    customer_phone,
+                    service_type,
+                    booking_date,
+                    booking_time,
+                    duration_minutes,
+                    notes,
+                    calendar_event_id,
+                    calendar_link,
+                    BookingStatus.CONFIRMED.value,
+                ),
+            )
+
+            result = cur.fetchone()
+
+            if not result:
+                error_msg = t("booking.messages.create_booking_failed_no_result", lang="en")
+                raise RuntimeError(error_msg)
+
+            # COMMIT: Transaction commits atomically here
+            conn.commit()
+
+            logger.info(
+                f"✅ Booking created atomically: ID={result[0]} "
+                f"(transaction lock prevented race conditions)"
+            )
+
+            return {
+                "id": result[0],
+                "status": result[1],
+                "created_at": str(result[2]),
+            }
+
+    except Exception as exc:
+        logger.exception(f"Atomic booking creation failed: {exc}")
+        # Connection is automatically rolled back on exception
+        error_msg = t("booking.messages.create_booking_failed_atomic", lang="en", error=str(exc))
+        raise RuntimeError(error_msg) from exc
+
+
+def _enqueue_email(
+    email_type: str,
+    booking_data: dict[str, Any],
+    calendar_link: str | None = None,
+    old_date: str | None = None,
+    old_time: str | None = None,
+) -> None:
+    """Enqueue email notification for booking event.
+
+    Args:
+        email_type: Type of email (booking_created, booking_cancelled, etc.)
+        booking_data: Booking details dict.
+        calendar_link: Google Calendar event link (optional).
+        old_date: Old date for rescheduled bookings (optional).
+        old_time: Old time for rescheduled bookings (optional).
+
+    Note:
+        This is a FIRE-AND-FORGET operation. NEVER raises exceptions.
+        Failures are logged but don't block booking operations.
+        ✅ Email failures will NOT cause booking operations to fail.
+    """
+    # Guard clauses: exit early if email not available
+    if not EMAIL_QUEUE_AVAILABLE or not EmailQueueManager:
+        logger.debug("Email queue not available - skipping email notification")
+        return
+
+    # Validate required fields
+    if not booking_data or "customer_email" not in booking_data:
+        logger.warning(f"❌ Cannot enqueue {email_type} email: missing customer_email in booking_data")
+        return
+
+    try:
+        queue_manager = EmailQueueManager()
+
+        # Build template context based on email type
+        context = {
+            "customer_name": booking_data.get("customer_name", t("booking.defaults.customer_name", lang="en")),
+            "booking_id": booking_data.get("booking_id") or booking_data.get("id"),
+            "service_type": booking_data.get("service_type", t("booking.defaults.service_type", lang="en")),
+            "booking_date": str(booking_data.get("booking_date", "")),  # Ensure string
+            "booking_time": str(booking_data.get("booking_time", "")),  # Ensure string
+            "duration_minutes": booking_data.get("duration_minutes", 60),
+            "google_calendar_link": calendar_link,
+        }
+
+        # Add specific fields for different email types
+        if email_type == "booking_cancelled":
+            context["cancellation_reason"] = booking_data.get("cancellation_reason")
+        elif email_type == "booking_rescheduled":
+            context["old_date"] = old_date
+            context["old_time"] = old_time
+            context["new_date"] = str(booking_data.get("booking_date", ""))  # Ensure string
+            context["new_time"] = str(booking_data.get("booking_time", ""))  # Ensure string
+            # Ensure duration_minutes is included for template rendering
+            if "duration_minutes" not in context:
+                context["duration_minutes"] = booking_data.get("duration_minutes", 60)
+
+        # Enqueue email (rendered by worker using templates)
+        logger.debug(f"📧 Enqueueing {email_type} email with context keys: {list(context.keys())}")
+        email_subject = t(
+            "booking.defaults.confirmation_subject",
+            lang="en",
+            service_type=booking_data.get("service_type", t("booking.defaults.service_type", lang="en"))
+        )
+        email_id = queue_manager.enqueue_email(
+            email_type=EmailType(email_type),
+            recipient_email=booking_data["customer_email"],
+            recipient_name=booking_data.get("customer_name"),
+            subject=email_subject,
+            body_html="",  # Will be rendered by worker from template
+            template_context=context,
+            booking_id=booking_data.get("booking_id") or booking_data.get("id"),
+            priority=5,
+        )
+
+        logger.info(f"📧 Email queued: type={email_type}, email_id={email_id}, recipient={booking_data['customer_email']}")
+
+    except Exception as exc:
+        logger.error(f"❌ Email notification failed: {exc}", exc_info=True)
+        logger.debug(f"Failed email details - type: {email_type}, recipient: {booking_data.get('customer_email')}")
+        # ✅ GUARANTEED: Never raises exceptions
+        # Email is optional and should not block booking operations
+        # Booking operation completed successfully regardless of email status
 
 
 # ============================================================================
@@ -148,8 +439,8 @@ def create_booking(
     service_type: str,
     booking_date: str,  # YYYY-MM-DD
     booking_time: str,  # HH:MM
+    notes: str,
     duration_minutes: int = 60,
-    notes: str = "",
 ) -> dict[str, Any]:
     """Create a new booking/reservation.
 
@@ -162,8 +453,8 @@ def create_booking(
         service_type: Type of service being booked.
         booking_date: Booking date in YYYY-MM-DD format.
         booking_time: Booking time in HH:MM format (24-hour).
+        notes: REQUIRED. Reason or purpose of the appointment.
         duration_minutes: Appointment duration (default: 60).
-        notes: Additional notes/comments (optional).
 
     Returns:
         Dict with booking details:
@@ -198,23 +489,44 @@ def create_booking(
         f"Creating booking for {customer_email} on {booking_date} at {booking_time}"
     )
 
+    # Validate email format FIRST (prevent typos from reaching database)
+    is_valid_email, email_error = _validate_email(customer_email)
+    if not is_valid_email:
+        logger.warning(f"❌ Email validation failed: {email_error}")
+        raise ValueError(email_error)
+
+    # Validate notes are provided (mandatory field)
+    if not notes or not notes.strip():
+        logger.warning(
+            f"❌ Notes validation failed: Notes/motivo is required for booking"
+        )
+        raise ValueError(
+            "Notes are required. Please provide the reason or purpose of the appointment."
+        )
+
     # Validate availability using database function
+    # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
     try:
         availability_check = fetchone(
-            f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s) as available",
-            (booking_date, booking_time, duration_minutes),
+            f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s::date, %s::time, %s, %s) as available",
+            (booking_date, booking_time, duration_minutes, service_type),
         )
 
         if not availability_check or not availability_check["available"]:
-            raise ValueError(
-                f"Time slot {booking_date} at {booking_time} is not available"
+            error_msg = t(
+                "booking.messages.slot_not_available_general",
+                lang="en",
+                booking_date=booking_date,
+                booking_time=booking_time
             )
+            raise ValueError(error_msg)
 
         logger.debug("Availability check passed")
 
     except Exception as exc:
         logger.exception(f"Availability check failed: {exc}")
-        raise ValueError(f"Could not verify availability: {exc}") from exc
+        error_msg = t("booking.messages.verify_availability_failed", lang="en", error=str(exc))
+        raise ValueError(error_msg) from exc
 
     # Create Google Calendar event if enabled
     calendar_event_id = None
@@ -250,49 +562,36 @@ def create_booking(
             logger.warning(f"Failed to create Google Calendar event: {exc}")
             # Continue anyway - calendar is optional
 
-    # Insert into database
+    # Insert into database (atomically with row-level locking to prevent race conditions)
     try:
-        insert_sql = f"""
-        INSERT INTO {settings.SCHEMA_NAME}.appointments
-        (customer_name, customer_email, customer_phone, service_type,
-         booking_date, booking_time, duration_minutes, notes,
-         google_calendar_event_id, google_calendar_link, status)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'confirmed')
-        RETURNING id, status, created_at
-        """
-
-        result = fetchone(
-            insert_sql,
-            (
-                customer_name,
-                customer_email,
-                customer_phone,
-                service_type,
-                booking_date,
-                booking_time,
-                duration_minutes,
-                notes,
-                calendar_event_id,
-                calendar_link,
-            ),
-            commit=True,  # INSERT requires commit
+        # Use atomic transaction with row-level locking
+        # This prevents the TOCTOU vulnerability where two concurrent requests
+        # could both check availability and then both create conflicting bookings
+        db_result = _create_booking_atomic(
+            customer_name=customer_name,
+            customer_email=customer_email,
+            customer_phone=customer_phone,
+            service_type=service_type,
+            booking_date=booking_date,
+            booking_time=booking_time,
+            duration_minutes=duration_minutes,
+            notes=notes,
+            calendar_event_id=calendar_event_id,
+            calendar_link=calendar_link,
         )
 
-        if not result:
-            raise RuntimeError("Failed to create booking - no result returned")
+        booking_id = db_result["id"]
+        logger.info(f"✅ Booking created successfully with atomic transaction: ID={booking_id}")
 
-        booking_id = result["id"]
-        logger.info(f"✅ Booking created successfully: ID={booking_id}")
-
-        return {
+        booking_response = {
             "booking_id": booking_id,
-            "status": result["status"],
+            "status": db_result["status"],
             "google_calendar_event_id": calendar_event_id,
             "google_calendar_link": calendar_link,
             "booking_date": booking_date,
             "booking_time": booking_time,
             "duration_minutes": duration_minutes,
-            "created_at": str(result["created_at"]),
+            "created_at": db_result["created_at"],
         }
 
     except Exception as exc:
@@ -308,7 +607,27 @@ def create_booking(
             except Exception as cleanup_exc:
                 logger.warning(f"Failed to rollback calendar event: {cleanup_exc}")
 
-        raise RuntimeError(f"Failed to create booking: {exc}") from exc
+        error_msg = t("booking.messages.create_booking_failed_general", lang="en", error=str(exc))
+        raise RuntimeError(error_msg) from exc
+
+    # ✅ ENQUEUE EMAIL AFTER DATABASE COMMIT (outside try/except)
+    # This ensures that email failures don't cause database rollback
+    # Email is fire-and-forget: failures are logged but don't block response
+    _enqueue_email(
+        email_type=EmailNotificationType.BOOKING_CREATED.value,
+        booking_data={
+            "booking_id": booking_id,
+            "customer_name": customer_name,
+            "customer_email": customer_email,
+            "service_type": service_type,
+            "booking_date": booking_date,
+            "booking_time": booking_time,
+            "duration_minutes": duration_minutes,
+        },
+        calendar_link=calendar_link,
+    )
+
+    return booking_response
 
 
 def cancel_booking(
@@ -350,10 +669,12 @@ def cancel_booking(
         )
 
         if not booking:
-            raise ValueError(f"Booking {booking_id} not found")
+            error_msg = t("booking.messages.booking_not_found", lang="en", booking_id=booking_id)
+            raise ValueError(error_msg)
 
-        if booking["status"] == "cancelled":
-            raise ValueError(f"Booking {booking_id} is already cancelled")
+        if booking["status"] == BookingStatus.CANCELLED.value:
+            error_msg = t("booking.messages.booking_already_cancelled", lang="en", booking_id=booking_id)
+            raise ValueError(error_msg)
 
         logger.debug(
             f"Found booking: {booking['customer_name']} on {booking['booking_date']}"
@@ -363,7 +684,8 @@ def cancel_booking(
         raise
     except Exception as exc:
         logger.exception(f"Failed to fetch booking: {exc}")
-        raise RuntimeError(f"Could not fetch booking {booking_id}: {exc}") from exc
+        error_msg = t("booking.messages.fetch_booking_failed", lang="en", booking_id=booking_id, error=str(exc))
+        raise RuntimeError(error_msg) from exc
 
     # Delete Google Calendar event if exists
     calendar_deleted = False
@@ -384,21 +706,26 @@ def cancel_booking(
     try:
         update_sql = f"""
         UPDATE {settings.SCHEMA_NAME}.appointments
-        SET status = 'cancelled',
+        SET status = %s,
             cancellation_reason = %s,
             cancelled_at = CURRENT_TIMESTAMP
         WHERE id = %s
         RETURNING cancelled_at
         """
 
-        result = fetchone(update_sql, (cancellation_reason, booking_id), commit=True)  # UPDATE requires commit
+        result = fetchone(
+            update_sql,
+            (BookingStatus.CANCELLED.value, cancellation_reason, booking_id),
+            commit=True,
+        )  # UPDATE requires commit
 
         if not result:
-            raise RuntimeError("Failed to cancel booking - no result returned")
+            error_msg = t("booking.messages.cancel_booking_failed_no_result", lang="en")
+            raise RuntimeError(error_msg)
 
         logger.info(f"✅ Booking cancelled successfully: ID={booking_id}")
 
-        return {
+        cancellation_response = {
             "booking_id": booking_id,
             "status": "cancelled",
             "cancelled_at": str(result["cancelled_at"]),
@@ -407,7 +734,26 @@ def cancel_booking(
 
     except Exception as exc:
         logger.exception(f"Failed to cancel booking in database: {exc}")
-        raise RuntimeError(f"Failed to cancel booking: {exc}") from exc
+        error_msg = t("booking.messages.cancel_booking_failed_general", lang="en", error=str(exc))
+        raise RuntimeError(error_msg) from exc
+
+    # ✅ ENQUEUE EMAIL AFTER DATABASE COMMIT (outside try/except)
+    # This ensures that email failures don't cause database rollback
+    # Email is fire-and-forget: failures are logged but don't block response
+    _enqueue_email(
+        email_type=EmailNotificationType.BOOKING_CANCELLED.value,
+        booking_data={
+            "booking_id": booking_id,
+            "customer_name": booking["customer_name"],
+            "customer_email": booking["customer_email"],
+            "service_type": booking["service_type"],
+            "booking_date": str(booking["booking_date"]),
+            "booking_time": str(booking["booking_time"]),
+            "cancellation_reason": cancellation_reason,
+        },
+    )
+
+    return cancellation_response
 
 
 def reschedule_booking(
@@ -452,10 +798,13 @@ def reschedule_booking(
         )
 
         if not booking:
-            raise ValueError(f"Booking {booking_id} not found")
+            error_msg = t("booking.messages.booking_not_found", lang="en", booking_id=booking_id)
+            raise ValueError(error_msg)
 
-        if booking["status"] in ("cancelled", "completed"):
-            raise ValueError(f"Cannot reschedule {booking['status']} booking")
+        non_reschedulable = {BookingStatus.CANCELLED.value, BookingStatus.COMPLETED.value}
+        if booking["status"] in non_reschedulable:
+            error_msg = t("booking.messages.cannot_reschedule_status", lang="en", status=booking["status"])
+            raise ValueError(error_msg)
 
         logger.debug(f"Found booking: {booking['customer_name']}")
 
@@ -463,17 +812,25 @@ def reschedule_booking(
         raise
     except Exception as exc:
         logger.exception(f"Failed to fetch booking: {exc}")
-        raise RuntimeError(f"Could not fetch booking {booking_id}: {exc}") from exc
+        error_msg = t("booking.messages.fetch_booking_failed", lang="en", booking_id=booking_id, error=str(exc))
+        raise RuntimeError(error_msg) from exc
 
     # Check availability of new slot
+    # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
     try:
         availability_check = fetchone(
-            f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s) as available",
-            (new_date, new_time, booking["duration_minutes"]),
+            f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s::date, %s::time, %s, %s) as available",
+            (new_date, new_time, booking["duration_minutes"], booking["service_type"]),
         )
 
         if not availability_check or not availability_check["available"]:
-            raise ValueError(f"Time slot {new_date} at {new_time} is not available")
+            error_msg = t(
+                "booking.messages.slot_not_available_general",
+                lang="en",
+                booking_date=new_date,
+                booking_time=new_time
+            )
+            raise ValueError(error_msg)
 
         logger.debug("New slot is available")
 
@@ -481,10 +838,13 @@ def reschedule_booking(
         raise
     except Exception as exc:
         logger.exception(f"Availability check failed: {exc}")
-        raise RuntimeError(f"Could not verify availability: {exc}") from exc
+        error_msg = t("booking.messages.verify_availability_failed", lang="en", error=str(exc))
+        raise RuntimeError(error_msg) from exc
 
     # Update Google Calendar event if exists
     calendar_updated = False
+    calendar_link = booking.get("google_calendar_link")  # Keep existing link if available
+
     if booking["google_calendar_event_id"]:
         try:
             calendar_client = _get_calendar_client()
@@ -512,50 +872,265 @@ def reschedule_booking(
             logger.warning(f"Failed to update calendar event: {exc}")
             # Continue anyway - calendar is optional
 
+    # If google_calendar_link is NULL, try to create one or retrieve it from the event
+    if not calendar_link and settings.GOOGLE_CALENDAR_ENABLED:
+        try:
+            calendar_client = _get_calendar_client()
+            if calendar_client:
+                if booking["google_calendar_event_id"]:
+                    # Try to get the link from existing event
+                    event = calendar_client.get_event(booking["google_calendar_event_id"])
+                    if event:
+                        calendar_link = event.html_link
+                        logger.info(
+                            f"Retrieved Google Calendar link for existing event: {booking['google_calendar_event_id']}"
+                        )
+                else:
+                    # Create new Google Calendar event if we don't have one
+                    start_datetime = _format_datetime_iso(new_date, new_time)
+                    end_time = (
+                        datetime.fromisoformat(f"{new_date}T{new_time}:00")
+                        + timedelta(minutes=booking["duration_minutes"])
+                    ).strftime("%H:%M")
+                    end_datetime = _format_datetime_iso(new_date, end_time)
+
+                    event = calendar_client.create_event(
+                        summary=f"{booking['service_type']} - {booking['customer_name']}",
+                        description=f"Service: {booking['service_type']}\nCustomer: {booking['customer_name']}\nNotes: {booking.get('notes', '')}",
+                        start_datetime=start_datetime,
+                        end_datetime=end_datetime,
+                        attendee_email=booking["customer_email"],
+                    )
+
+                    calendar_link = event.html_link
+                    logger.info(
+                        f"Created new Google Calendar event for rescheduled booking: {event.event_id}"
+                    )
+        except Exception as exc:
+            logger.warning(f"Failed to create/retrieve Google Calendar link: {exc}")
+            # Continue anyway - calendar is optional
+
     # Update database
     try:
         update_sql = f"""
         UPDATE {settings.SCHEMA_NAME}.appointments
         SET booking_date = %s,
             booking_time = %s,
-            status = 'rescheduled'
+            status = %s,
+            google_calendar_link = %s
         WHERE id = %s
-        RETURNING booking_date, booking_time, status
+        RETURNING booking_date, booking_time, status, google_calendar_link
         """
 
-        result = fetchone(update_sql, (new_date, new_time, booking_id), commit=True)  # UPDATE requires commit
+        result = fetchone(
+            update_sql,
+            (new_date, new_time, BookingStatus.RESCHEDULED.value, calendar_link, booking_id),
+            commit=True,
+        )  # UPDATE requires commit
 
         if not result:
-            raise RuntimeError("Failed to reschedule booking - no result returned")
+            error_msg = t("booking.messages.reschedule_booking_failed_no_result", lang="en")
+            raise RuntimeError(error_msg)
 
         logger.info(f"✅ Booking rescheduled successfully: ID={booking_id}")
 
-        return {
+        # Get updated calendar link from result if available
+        updated_calendar_link = result.get("google_calendar_link") or calendar_link
+
+        reschedule_response = {
             "booking_id": booking_id,
             "status": result["status"],
             "new_date": str(result["booking_date"]),
             "new_time": str(result["booking_time"]),
             "calendar_event_updated": calendar_updated,
+            "google_calendar_link": updated_calendar_link,
         }
 
     except Exception as exc:
         logger.exception(f"Failed to reschedule booking in database: {exc}")
-        raise RuntimeError(f"Failed to reschedule booking: {exc}") from exc
+        error_msg = t("booking.messages.reschedule_booking_failed_general", lang="en", error=str(exc))
+        raise RuntimeError(error_msg) from exc
+
+    # ✅ ENQUEUE EMAIL AFTER DATABASE COMMIT (outside try/except)
+    # This ensures that email failures don't cause database rollback
+    # Email is fire-and-forget: failures are logged but don't block response
+    _enqueue_email(
+        email_type=EmailNotificationType.BOOKING_RESCHEDULED.value,
+        booking_data={
+            "booking_id": booking_id,
+            "customer_name": booking["customer_name"],
+            "customer_email": booking["customer_email"],
+            "service_type": booking["service_type"],
+            "booking_date": new_date,
+            "booking_time": new_time,
+        },
+        calendar_link=updated_calendar_link,
+        old_date=str(booking["booking_date"]),
+        old_time=str(booking["booking_time"]),
+    )
+
+    return reschedule_response
+
+
+def find_first_available_slots_in_range(
+    service_type: str,
+    start_date: str,  # YYYY-MM-DD
+    end_date: str,  # YYYY-MM-DD (inclusive)
+    duration_minutes: int = 60,
+    user_lang: str = "es",
+) -> dict[str, Any]:
+    """Find the first available date with slots within a date range.
+
+    This helper function searches through multiple days to find the FIRST date
+    that has available time slots. Improves UX by automatically scanning when
+    user says "find availability this week" or "check next 7 days".
+
+    Args:
+        service_type: Type of service to check availability for.
+        start_date: Start date in YYYY-MM-DD format.
+        end_date: End date in YYYY-MM-DD format (inclusive).
+        duration_minutes: Required appointment duration (default: 60).
+        user_lang: Language code for messages ("es" or "en", default: "es").
+
+    Returns:
+        Dict with first available date and slots:
+        {
+            "found": bool,
+            "first_available_date": str | None,
+            "first_available_day_name": str | None,
+            "available_slots": list | None,
+            "days_searched": int,
+            "message": str (localized)
+        }
+
+    Example:
+        >>> result = find_first_available_slots_in_range(
+        ...     "consultation", "2025-10-18", "2025-10-25", 30, user_lang="en"
+        ... )
+        >>> if result["found"]:
+        ...     print(f"Available on {result['first_available_date']}")
+        ...     print(f"Slots: {result['available_slots']}")
+    """
+    logger.info(
+        f"Searching for first available {service_type} slots between {start_date} and {end_date}"
+    )
+
+    try:
+        # Parse dates
+        start_dt = datetime.fromisoformat(start_date)
+        end_dt = datetime.fromisoformat(end_date)
+
+        if start_dt > end_dt:
+            logger.warning(f"Invalid date range: {start_date} > {end_date}")
+            error_msg = t("booking.messages.date_range_invalid", lang="en")
+            raise ValueError(error_msg)
+
+        # Get localized day names for the selected language
+        days_names = get_days_of_week(lang=user_lang)
+
+        # Iterate through each day in range
+        current_dt = start_dt
+        days_searched = 0
+
+        while current_dt <= end_dt:
+            date_str = current_dt.strftime("%Y-%m-%d")
+            day_name = days_names[current_dt.weekday()]
+
+            logger.debug(f"Checking availability for {date_str} ({day_name})")
+
+            try:
+                # Get available slots for this day
+                result = get_available_slots(service_type, date_str, duration_minutes)
+
+                days_searched += 1
+
+                # Check if any slots are available
+                available = [s for s in result["available_slots"] if s["available"]]
+
+                if available:
+                    # Found available slots!
+                    available_times = [s["time"] for s in available]
+
+                    logger.info(
+                        f"✅ Found {len(available)} available slots on {date_str} ({day_name})"
+                    )
+
+                    # Format date as readable string using i18n
+                    date_formatted = format_date_localized(current_dt, lang=user_lang)
+
+                    # Build localized message using i18n
+                    message = t(
+                        "booking.availability.found",
+                        lang=user_lang,
+                        count=len(available),
+                        date=f"{day_name} {date_formatted}"
+                    )
+
+                    return {
+                        "found": True,
+                        "first_available_date": date_str,
+                        "first_available_day_name": day_name,
+                        "first_available_date_formatted": f"{day_name} {date_formatted}",
+                        "available_slots": available_times,
+                        "available_count": len(available),
+                        "days_searched": days_searched,
+                        "duration_minutes": duration_minutes,
+                        "message": message,
+                    }
+
+            except Exception as exc:
+                logger.debug(f"Error checking {date_str}: {exc}")
+                # Continue to next day
+
+            # Move to next day
+            current_dt += timedelta(days=1)
+
+        # No available dates found in range
+        logger.info(f"No availability found between {start_date} and {end_date}")
+
+        # Build localized message for no availability
+        message = t(
+            "booking.availability.no_availability_range",
+            lang=user_lang,
+            service_type=service_type,
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        return {
+            "found": False,
+            "first_available_date": None,
+            "first_available_day_name": None,
+            "available_slots": None,
+            "days_searched": days_searched,
+            "duration_minutes": duration_minutes,
+            "message": message,
+        }
+
+    except Exception as exc:
+        logger.exception(f"Error searching for available slots: {exc}")
+        raise RuntimeError(f"Could not search for available slots: {exc}") from exc
 
 
 def get_available_slots(
     service_type: str,
     date: str,  # YYYY-MM-DD
     duration_minutes: int = 60,
+    user_lang: str = "es",
 ) -> dict[str, Any]:
     """Get available time slots for a specific date and service.
 
+    Filters out past times and slots that don't meet minimum advance requirement.
     Checks business hours, existing bookings, and blocked times.
+
+    Configuration parameters:
+    - BOOKING_MIN_ADVANCE_MINUTES: Minimum minutes in advance to book (default: 60)
 
     Args:
         service_type: Type of service (used for duration lookup).
         date: Date to check in YYYY-MM-DD format.
         duration_minutes: Required appointment duration (default: 60).
+        user_lang: Language code for messages ("es" or "en", default: "es").
 
     Returns:
         Dict with available slots and metadata:
@@ -571,7 +1146,8 @@ def get_available_slots(
             "business_hours": {
                 "open_time": str,
                 "close_time": str
-            }
+            },
+            "min_advance_minutes": int
         }
 
     Example:
@@ -581,15 +1157,23 @@ def get_available_slots(
     """
     logger.info(f"Getting available slots for {service_type} on {date}")
 
+    # Get current datetime for filtering past times (timezone-aware)
+    tz = ZoneInfo(settings.GOOGLE_CALENDAR_TIMEZONE)
+    now = datetime.now(tz)
+    current_date = now.date()
+    current_datetime = now
+    min_advance_minutes = settings.BOOKING_MIN_ADVANCE_MINUTES
+
     # Get day of week (0=Monday, 6=Sunday)
     try:
         dt = datetime.fromisoformat(date)
         day_of_week = dt.weekday()  # Python: 0=Monday, 6=Sunday
-        logger.debug(f"Date {date} is day {day_of_week} of week")
+        logger.debug(f"Date {date} is day {day_of_week} of week (today is {current_date})")
 
     except ValueError as exc:
         logger.exception(f"Invalid date format: {date}")
-        raise ValueError(f"Invalid date format: {date}") from exc
+        error_msg = t("booking.messages.date_format_invalid", lang="en", date=date)
+        raise ValueError(error_msg) from exc
 
     # Get business hours for this day
     try:
@@ -610,6 +1194,7 @@ def get_available_slots(
                 "available_slots": [],
                 "count": 0,
                 "business_hours": None,
+                "min_advance_minutes": min_advance_minutes,
             }
 
         open_time = business_hours["open_time"]
@@ -621,20 +1206,43 @@ def get_available_slots(
         logger.exception(f"Failed to fetch business hours: {exc}")
         raise RuntimeError(f"Could not fetch business hours: {exc}") from exc
 
-    # Generate time slots based on interval
+    # Generate time slots based on interval, filtering out past times
     slots = []
-    current_time = datetime.combine(dt, open_time)
-    end_time = datetime.combine(dt, close_time)
+    # Make datetime objects timezone-aware to match current_datetime
+    current_time = datetime.combine(dt, open_time, tzinfo=tz)
+    end_time = datetime.combine(dt, close_time, tzinfo=tz)
     interval = timedelta(minutes=settings.BOOKING_SLOT_INTERVAL_MINUTES)
+    min_advance_delta = timedelta(minutes=min_advance_minutes)
 
     while current_time < end_time:
         time_str = current_time.strftime("%H:%M")
 
+        # Skip past times (only for today)
+        if dt.date() == current_date and current_time < current_datetime:
+            logger.debug(f"Skipping {time_str} - time has already passed")
+            current_time += interval
+            continue
+
+        # Skip times that don't meet minimum advance requirement (applies to ALL dates)
+        # The booking time must be at least min_advance_minutes in the future
+        min_allowed_booking_time = current_datetime + min_advance_delta
+        if current_time < min_allowed_booking_time:
+            required_time = min_allowed_booking_time
+            logger.debug(
+                f"Skipping {time_str} on {date} - does not meet minimum advance requirement "
+                f"(required by: {required_time.strftime('%Y-%m-%d %H:%M')}, "
+                f"current time: {current_datetime.strftime('%Y-%m-%d %H:%M')}, "
+                f"minimum advance: {min_advance_minutes} minutes)"
+            )
+            current_time += interval
+            continue
+
         # Check if slot is available using database function
+        # ✅ HYBRID SCHEDULING: Pass service_type for service-specific hours lookup
         try:
             availability = fetchone(
-                f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s, %s, %s) as available",
-                (date, time_str, duration_minutes),
+                f"SELECT {settings.SCHEMA_NAME}.is_slot_available(%s::date, %s::time, %s, %s) as available",
+                (date, time_str, duration_minutes, service_type),
             )
 
             is_available = availability["available"] if availability else False
@@ -648,7 +1256,10 @@ def get_available_slots(
         current_time += interval
 
     available_count = sum(1 for s in slots if s["available"])
-    logger.info(f"Generated {len(slots)} time slots for {date} ({available_count} available)")
+    logger.info(
+        f"Generated {len(slots)} time slots for {date} "
+        f"({available_count} available, min_advance: {min_advance_minutes} min)"
+    )
 
     return {
         "date": date,
@@ -659,6 +1270,7 @@ def get_available_slots(
             "open_time": str(open_time),
             "close_time": str(close_time),
         },
+        "min_advance_minutes": min_advance_minutes,
     }
 
 
@@ -736,7 +1348,8 @@ def list_customer_bookings(
             "customer_email": str,
             "bookings": list[dict],
             "count": int,
-            "active_count": int
+            "active_count": int,
+            "future_count": int (bookings not yet passed)
         }
 
     Example:
@@ -749,7 +1362,7 @@ def list_customer_bookings(
 
     try:
         # Build status filter
-        status_filter = "" if include_cancelled else "AND status != 'cancelled'"
+        status_filter = "" if include_cancelled else f"AND status != '{BookingStatus.CANCELLED.value}'"
 
         query = f"""
         SELECT id, customer_name, customer_email, service_type,
@@ -763,22 +1376,54 @@ def list_customer_bookings(
 
         bookings = fetchall(query, (customer_email,))
 
-        # Convert dates to strings
+        # Get current datetime for past/future filtering (timezone-aware)
+        tz = ZoneInfo(settings.GOOGLE_CALENDAR_TIMEZONE)
+        now = datetime.now(tz)
+        current_date = now.date()
+        current_time = now.time()
+
+        # Convert dates to strings and add is_past flag
         for booking in bookings:
             booking["booking_date"] = str(booking["booking_date"])
             booking["booking_time"] = str(booking["booking_time"])
             booking["created_at"] = str(booking["created_at"])
 
-        # Count active bookings
-        active_count = sum(1 for b in bookings if b.get("status") != "cancelled")
+            # Parse booking date and time
+            try:
+                booking_date = datetime.fromisoformat(str(booking["booking_date"])).date()
+                booking_time = datetime.fromisoformat(f"1970-01-01T{booking['booking_time']}").time()
 
-        logger.info(f"Found {len(bookings)} bookings for {customer_email} ({active_count} active)")
+                # Determine if booking is in the past
+                is_past = (
+                    booking_date < current_date or
+                    (booking_date == current_date and booking_time < current_time)
+                )
+                booking["is_past"] = is_past
+
+            except (ValueError, AttributeError) as exc:
+                logger.warning(f"Could not parse booking datetime: {exc}")
+                booking["is_past"] = False  # Default to not past if parsing fails
+
+        # Count active bookings
+        active_count = sum(1 for b in bookings if b.get("status") != BookingStatus.CANCELLED.value)
+
+        # Count future bookings (not yet passed)
+        future_count = sum(
+            1 for b in bookings
+            if not b.get("is_past", False) and b.get("status") != BookingStatus.CANCELLED.value
+        )
+
+        logger.info(
+            f"Found {len(bookings)} bookings for {customer_email} "
+            f"({active_count} active, {future_count} future)"
+        )
 
         return {
             "customer_email": customer_email,
             "bookings": bookings,
             "count": len(bookings),
             "active_count": active_count,
+            "future_count": future_count,
         }
 
     except Exception as exc:

@@ -2,7 +2,15 @@
 MCP Prompt Handlers
 AI assistant prompt templates for MCP protocol.
 Provides structured prompts for different use cases.
+
+Prompts are internationalized using the i18n system and support both
+Spanish (ES) and English (EN) translations loaded from locales/*/prompts.json
 """
+
+from utils.i18n import t, get_language
+from utils.logger import setup_logging
+
+logger = setup_logging("mcp_prompt_handlers")
 
 # Global mcp instance - will be injected from server.py
 mcp = None
@@ -23,53 +31,29 @@ def register_prompts():
         """
         Generate a prompt for AI assistants to help users with product searches.
 
+        Uses i18n system to provide prompts in user's preferred language (ES/EN).
+
         Args:
             query: User's search query
             context: Search context (general, specific, troubleshooting)
 
         Returns:
-            Formatted prompt for AI assistant
+            Formatted prompt for AI assistant in user's preferred language
         """
-        base_prompt = f"""You are a helpful product search assistant with access to advanced search tools.
+        lang = get_language()
 
-User Query: "{query}"
-Context: {context}
+        # Get base prompt template from i18n
+        base_prompt = t("prompts.search_assistant.base", lang=lang, query=query, context=context)
 
-Available MCP Tools:
-- fuzzy_search_smart: Best for handling typos and partial matches (recommended)
-- search_products: Semantic search using AI embeddings
-- fetch_by_sku: Direct lookup by product code
-- fetch_by_id: Direct lookup by ID
-
-Database Schema: products table with fields: name, description, category, brand, price, tags, color, size
-
-Instructions:
-1. Understand the user's search intent
-2. Choose the most appropriate search tool
-3. Handle typos gracefully using fuzzy_search_smart
-4. Provide detailed product information
-5. Suggest alternatives if no exact matches found
-"""
-
+        # Add context-specific prompt extensions
         if context == "troubleshooting":
-            base_prompt += """
-
-TROUBLESHOOTING MODE:
-- Use fuzzy_search_smart with lower thresholds for broader results
-- Suggest alternative search terms
-- Check for common typos in product names
-- Recommend browsing by category or brand
-"""
+            context_suffix = t("prompts.search_assistant.troubleshooting", lang=lang)
+            base_prompt += context_suffix
         elif context == "specific":
-            base_prompt += """
+            context_suffix = t("prompts.search_assistant.specific", lang=lang)
+            base_prompt += context_suffix
 
-SPECIFIC SEARCH MODE:
-- Focus on exact matches first using fetch_by_sku
-- Use technical specifications when available
-- Provide detailed product comparisons
-- Include pricing and availability information
-"""
-
+        logger.debug(f"Generated search_assistant_prompt for {lang} with context={context}")
         return base_prompt
 
     @mcp.prompt()  # type: ignore[union-attr]
@@ -77,38 +61,23 @@ SPECIFIC SEARCH MODE:
         """
         Generate a prompt for comparing multiple products.
 
+        Uses i18n system to provide prompts in user's preferred language (ES/EN).
+
         Args:
             products: List of product identifiers (SKUs or names)
 
         Returns:
-            Formatted prompt for product comparison
+            Formatted prompt for product comparison in user's preferred language
         """
+        lang = get_language()
         products_str = ", ".join(products)
-        return f"""Product Comparison Analysis
 
-Products to Compare: {products_str}
+        # Build comparison prompt from i18n components
+        header = t("prompts.product_comparison.header", lang=lang)
+        products_intro = t("prompts.product_comparison.products_intro", lang=lang, products=products_str)
+        instructions = t("prompts.product_comparison.instructions", lang=lang)
 
-Using MCP tools, please:
+        comparison_prompt = f"{header}\n\n{products_intro}{instructions}"
 
-1. **Data Collection**:
-   - Use fetch_by_sku or search tools to gather complete product information
-   - Collect specifications, pricing, and features for each product
-
-2. **Comparison Framework**:
-   - Feature comparison matrix
-   - Price-to-value analysis
-   - Pros and cons for each product
-   - Target use case recommendations
-
-3. **Decision Support**:
-   - Highlight key differentiators
-   - Identify best product for different user needs
-   - Include availability and purchasing recommendations
-
-4. **Quality Assurance**:
-   - Verify all product information using MCP tools
-   - Provide confidence levels for recommendations
-   - Include alternative suggestions if needed
-
-Focus on helping users make informed purchasing decisions based on their specific needs.
-"""
+        logger.debug(f"Generated product_comparison_prompt for {lang} with {len(products)} products")
+        return comparison_prompt

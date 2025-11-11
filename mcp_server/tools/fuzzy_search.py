@@ -17,9 +17,26 @@ Designed to complement semantic search with exact/approximate text matching.
 from config import settings
 from utils.db import fetchall
 from utils.logger import setup_logging
+from utils.i18n import t
+
+# Observability imports (OPCIÓN 9)
+try:
+    from email_service.observability.metrics import get_metrics_collector
+    from email_service.observability.structured_logger import get_structured_logger
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
 
 # Setup logger for fuzzy search operations
 logger = setup_logging("mcp_tools_fuzzy_search")
+
+# Initialize observability for fuzzy search (OPCIÓN 9)
+if OBSERVABILITY_AVAILABLE:
+    structured_logger = get_structured_logger("fuzzy_search_tool")
+    metrics = get_metrics_collector()
+else:
+    structured_logger = None
+    metrics = None
 
 
 def fuzzy_search(
@@ -55,10 +72,12 @@ def fuzzy_search(
         return []
 
     if not 0.0 <= min_similarity <= 1.0:
-        raise ValueError(f"min_similarity must be between 0.0 and 1.0, got {min_similarity}")
+        error_msg = t("fuzzy_search.errors.min_similarity_invalid", lang="en", min_similarity=min_similarity)
+        raise ValueError(error_msg)
 
     if limit <= 0:
-        raise ValueError(f"limit must be positive, got {limit}")
+        error_msg = t("fuzzy_search.errors.limit_invalid", lang="en", limit=limit)
+        raise ValueError(error_msg)
 
     # Default searchable fields
     if fields is None:
@@ -67,7 +86,13 @@ def fuzzy_search(
     valid_fields = {"name", "description", "brand", "category"}
     invalid_fields = set(fields) - valid_fields
     if invalid_fields:
-        raise ValueError(f"Invalid fields: {invalid_fields}. Valid fields: {valid_fields}")
+        error_msg = t(
+            "fuzzy_search.errors.invalid_fields",
+            lang="en",
+            invalid_fields=", ".join(sorted(invalid_fields)),
+            valid_fields=", ".join(sorted(valid_fields))
+        )
+        raise ValueError(error_msg)
 
     logger.info(
         "Starting fuzzy search: query='%s', fields=%s, min_similarity=%.2f, limit=%d",
@@ -291,9 +316,9 @@ def fuzzy_search_smart(
     query: str,
     fields: list[str] | None = None,
     limit: int = 20,
-    strict_threshold: float = 0.3,
-    word_threshold: float = 0.4,
-    fallback_threshold: float = 0.2,
+    strict_threshold: float = 0.25,
+    word_threshold: float = 0.35,
+    fallback_threshold: float = 0.15,
     name_weight: float = 2.0,
     description_weight: float = 1.0,
     category_weight: float = 1.5,
@@ -309,24 +334,24 @@ def fuzzy_search_smart(
     3. Relaxed similarity search as final fallback (fallback_threshold)
 
     IMPROVED: Now searches in name, description, AND category fields by default.
-    This enables finding products by generic category queries like "qué hay en hogar".
+    This enables finding products by generic category queries like "what's in home category".
 
     NEW (2025-10-03): Weighted scoring system for Tier 2 to prioritize name matches.
-    Fixes issue where description matches outranked name matches (e.g., "sartén eléctrico"
-    prioritizing "Escritorio Ajustable" with "eléctrico" in description over "Sartén" in name).
+    Fixes issue where description matches outranked name matches (e.g., "electric pan"
+    prioritizing "Adjustable Desk" with "electric" in description over "Pan" in name).
 
     NEW (2025-10-03): Tier 2.5 token-based search handles multi-word queries with irrelevant terms.
-    Fixes issue where "sartenes electricos" (0.200 similarity) fails to find "Sartén" but "sartenes"
+    Fixes issue where "electric pans" (0.200 similarity) fails to find "Pan" but "pans"
     alone (0.444 similarity) would succeed. Tokenizes query and searches by best matching individual word.
 
     NEW (2025-10-03): Position-based token weighting in Tier 2.5 prioritizes earlier tokens.
-    Fixes relevance issue where modifier tokens (e.g., "electricos") with high similarity outrank
-    primary tokens (e.g., "sartenes") with medium similarity. Uses formula: weight = 1.0 / (position + 1).
+    Fixes relevance issue where modifier tokens (e.g., "electric") with high similarity outrank
+    primary tokens (e.g., "pans") with medium similarity. Uses formula: weight = 1.0 / (position + 1).
     First token (usually the noun): weight 1.0, second (modifier): 0.5, third: 0.33, etc.
 
     NEW (2025-10-03): Multi-token match boost for intent detection in Tier 2.5.
     Products matching multiple query tokens across different fields get priority boost.
-    Fixes issue where "accesorios gaming" prioritizes generic "Accesorios" over "Gaming" products.
+    Fixes issue where "gaming accessories" prioritizes generic "Accessories" over "Gaming" products.
     Formula: intent_boosted_score = base_score × (1 + 0.3 × token_match_count).
     Example: Product matching 2 tokens gets 1.6x boost, 3 tokens gets 1.9x boost.
 
@@ -337,9 +362,13 @@ def fuzzy_search_smart(
         limit: Maximum number of results to return (default: 20, max recommended: 50)
                Balance between token efficiency (~800 tokens for 20 products) and UX
                (allows 5 pages of 4 products). Follows API pagination best practices 2025.
-        strict_threshold: Initial similarity threshold for standard search (default: 0.3)
-        word_threshold: Threshold for word_similarity search (default: 0.4)
-        fallback_threshold: Final fallback threshold (default: 0.2)
+        strict_threshold: Initial similarity threshold for standard search (default: 0.25)
+                         Lowered from 0.30 to catch more real-world product names like
+                         "Laptop Gaming HP" (0.28) vs exact "laptop" query
+        word_threshold: Threshold for word_similarity search (default: 0.35)
+                       Lowered from 0.40 for better partial/typo tolerance
+        fallback_threshold: Final fallback threshold (default: 0.15)
+                           Lowered from 0.20 to ensure broad coverage as last resort
         name_weight: Weight multiplier for name field matches (default: 2.0 - highest priority)
         description_weight: Weight for description field matches (default: 1.0 - medium)
         category_weight: Weight for category field matches (default: 1.5 - high)

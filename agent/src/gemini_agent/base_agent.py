@@ -40,11 +40,28 @@ from abc import ABC, abstractmethod
 from datetime import UTC
 from typing import Any, TypedDict
 
+from gemini_agent.config import settings
+from gemini_agent.utils.gemini_response_handler import (
+    GeminiResponseHandler,
+    ResponseStatus,
+    RetryConfig,
+)
+from gemini_agent.utils.language_detector import detect_user_language
+from gemini_agent.utils.logger import setup_logging
 from google import genai
 from google.genai import types
 
-from gemini_agent.config import settings
-from gemini_agent.utils.logger import setup_logging
+# Observability imports (OPCIÓN 7)
+try:
+    from email_service.observability.metrics import get_metrics_collector
+    from email_service.observability.structured_logger import get_structured_logger
+    from email_service.observability.context import (
+        create_request_context,
+        clear_request_context,
+    )
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
 
 
 class MetricsDict(TypedDict):
@@ -72,6 +89,8 @@ class BaseAgent(ABC):
     - Common lifecycle methods (initialize, cleanup)
     - MCP tools integration support
     - Logging infrastructure
+    - Response validation and retry logic (Google Best Practices)
+    - Multilingual fallback message generation
 
     **Required Implementations** (must be provided by subclasses):
     - `agent_name` property: Unique identifier for logging
@@ -81,6 +100,8 @@ class BaseAgent(ABC):
     - `_build_generation_config()`: Customize generation parameters
     - `_build_contents()`: Customize conversation structure
     - `generate_response()`: Add specialized logic (e.g., function calling)
+    - `_create_response_handler()`: Customize retry config
+    - `_handle_validation_failure()`: Customize error handling
 
     Attributes:
         api_key: Google API key for Gemini (from settings if not provided)
@@ -90,6 +111,7 @@ class BaseAgent(ABC):
         generation_config: Configuration for response generation
         conversation_history: List of conversation turns (auto-trimmed to 20 items)
         logger: Logger instance with agent-specific name
+        response_handler: Response validator and retry handler (optional)
 
     Example:
         >>> class CustomAgent(BaseAgent):
@@ -106,6 +128,12 @@ class BaseAgent(ABC):
         >>> print(response)
     """
 
+    # 🌍 ELEGANT MULTILINGUAL SUPPORT (shared by all agents)
+    # In-memory cache for generated fallback messages
+    # Maps: language_code → {iteration → message}
+    # Gemini 2.5 generates messages dynamically in ANY language
+    _fallback_cache: dict[str, dict[int, str]] = {}
+
     def __init__(
         self,
         api_key: str | None = None,
@@ -113,6 +141,8 @@ class BaseAgent(ABC):
         mcp_tools: list[types.FunctionDeclaration] | None = None,
         session_id: str | None = None,
         memory_manager: Any | None = None,
+        language: str = "es",
+        enable_response_handler: bool = True,
         **generation_params: Any,
     ) -> None:
         """Initialize base agent with common parameters.
@@ -126,6 +156,10 @@ class BaseAgent(ABC):
                 If provided with memory_manager, enables conversation persistence.
             memory_manager: Optional MemoryManager instance for persistent context.
                 If None, agent operates in stateless mode (RAM-only history).
+            language: Language code for prompts ("es" or "en", default: "es").
+            enable_response_handler: Enable response validation and retry logic (default: True).
+                If False, agent operates without retry/validation (legacy mode).
+                GeneralAgent disables this to reduce overhead.
             **generation_params: Override generation parameters:
                 - temperature: Sampling temperature (0.0-1.0)
                 - top_k: Top K sampling parameter
@@ -141,6 +175,7 @@ class BaseAgent(ABC):
         self.api_key = api_key or settings.GOOGLE_API_KEY
         self.model_name = model_name or settings.MODEL
         self.mcp_tools = mcp_tools or []
+        self.language = language  # Language for prompts (es or en)
 
         # Gemini client components (initialized in initialize())
         self.client: genai.Client | None = None
@@ -170,13 +205,39 @@ class BaseAgent(ABC):
         # Setup logging with agent-specific name
         self.logger = setup_logging(self.agent_name)
 
+        # Initialize observability (OPCIÓN 7)
+        if OBSERVABILITY_AVAILABLE:
+            self.structured_logger = get_structured_logger(f"agent.{self.agent_name}")
+            self.metrics = get_metrics_collector()
+        else:
+            self.structured_logger = None
+            self.metrics = None
+
+        # Initialize response handler for retry + validation (Google Best Practices)
+        # Subclasses can override _create_response_handler() for custom config
+        if enable_response_handler:
+            self.response_handler: GeminiResponseHandler | None = self._create_response_handler()
+        else:
+            self.response_handler = None
+
         self.logger.info(
             f"Initializing {self.agent_name} - "
             f"Model: {self.model_name}, "
             f"Tools: {len(self.mcp_tools)}, "
             f"Memory: {'✅ Enabled' if self._memory_enabled else '❌ Disabled'}, "
-            f"API Key: {'***REDACTED***' if self.api_key else 'None'}"
+            f"Response Handler: {'✅ Enabled' if self.response_handler else '❌ Disabled'}, "
+            f"API Key: {'***REDACTED***' if self.api_key else 'None'}, "
+            f"Observability: {'✅ Enabled' if OBSERVABILITY_AVAILABLE else '❌ Disabled'}"
         )
+
+        if self.structured_logger:
+            self.structured_logger.info(
+                "Agent initialization started",
+                agent_type=self.agent_name,
+                model=self.model_name,
+                tools_count=len(self.mcp_tools),
+                memory_enabled=self._memory_enabled
+            )
 
     @property
     @abstractmethod
@@ -236,6 +297,253 @@ class BaseAgent(ABC):
         """
         pass
 
+    def _create_response_handler(self) -> GeminiResponseHandler:
+        """Create response handler with default retry configuration.
+
+        This method creates a GeminiResponseHandler with Google's recommended
+        retry settings (exponential backoff with jitter). Subclasses can override
+        this method to customize retry behavior.
+
+        Default configuration:
+        - max_retries: 3 attempts
+        - base_delay: 1.0 seconds
+        - max_delay: 60.0 seconds
+        - multiplier: 2.0 (exponential backoff: 1s, 2s, 4s, ...)
+        - jitter: True (random variation to prevent thundering herd)
+
+        Returns:
+            GeminiResponseHandler instance configured for this agent
+
+        Example (custom config in subclass):
+            >>> class SalesAgent(BaseAgent):
+            ...     def _create_response_handler(self) -> GeminiResponseHandler:
+            ...         retry_config = RetryConfig(
+            ...             max_retries=5,  # More retries for sales
+            ...             base_delay=0.5,  # Faster retry
+            ...         )
+            ...         return GeminiResponseHandler(
+            ...             logger=self.logger,
+            ...             retry_config=retry_config,
+            ...         )
+        """
+        retry_config = RetryConfig(
+            max_retries=3,  # 3 retry attempts for transient errors
+            base_delay=1.0,  # Start with 1 second delay
+            max_delay=60.0,  # Cap at 60 seconds
+            multiplier=2.0,  # Exponential backoff (1s, 2s, 4s, ...)
+            jitter=True,  # Add random jitter to prevent thundering herd
+        )
+        return GeminiResponseHandler(
+            logger=self.logger,
+            retry_config=retry_config,
+        )
+
+    async def _handle_validation_failure(
+        self,
+        status: ResponseStatus,
+        diagnostic: str,
+        query: str,
+    ) -> str:
+        """Handle response validation failure (template method - overridable by subclasses).
+
+        This method is called when response validation fails (e.g., safety block,
+        empty response, etc.). Default behavior is to raise an exception, but
+        subclasses can override to provide custom fallback responses.
+
+        Args:
+            status: Response validation status (SAFETY_BLOCKED, EMPTY_RESPONSE, etc.)
+            diagnostic: Diagnostic message explaining the failure
+            query: Original user query (for context in error messages)
+
+        Returns:
+            Fallback response text (if subclass overrides with custom logic)
+
+        Raises:
+            RuntimeError: Default behavior - raises exception with diagnostic info
+
+        Example (custom handling in subclass):
+            >>> class BookingAgent(BaseAgent):
+            ...     async def _handle_validation_failure(self, status, diagnostic, query):
+            ...         if status == ResponseStatus.SAFETY_BLOCKED:
+            ...             return await self._create_fallback_response(iteration=1)
+            ...         return await super()._handle_validation_failure(status, diagnostic, query)
+        """
+        self.logger.error(
+            f"Response validation failed: {status} - {diagnostic}\n"
+            f"Query: '{query[:100]}...'"
+        )
+        raise RuntimeError(f"Gemini API validation failed: {status}")
+
+    async def _create_fallback_response(self, iteration: int) -> str:
+        """Create multilingual fallback response for ANY language (shared by all agents).
+
+        Gemini 2.5 is natively multilingual - it automatically generates
+        messages in ANY language the user speaks. We just cache results
+        to avoid regenerating for the same user.
+
+        Why this is elegant:
+        - ✅ Zero hardcoding
+        - ✅ Supports UNLIMITED languages (Arabic, Mandarin, Swahili, etc.)
+        - ✅ Self-improving (Gemini gets better at languages over time)
+        - ✅ Cache-aware for performance
+        - ✅ Follows the project's dynamic generation pattern
+        - ✅ No manual translation maintenance needed
+
+        Args:
+            iteration: Current iteration number (1, 2, etc.)
+
+        Returns:
+            Language-appropriate fallback message generated by Gemini.
+            Respects self.language attribute (any ISO 639-1 code).
+        """
+        return await self._generate_fallback_dynamic(iteration)
+
+    async def _generate_fallback_dynamic(self, iteration: int) -> str:
+        """Generate multilingual fallback message dynamically via Gemini 2.5.
+
+        🌍 ELEGANT APPROACH: Pure dynamic generation without hardcoding
+
+        Leverages Gemini 2.5's native multilingual capabilities to generate
+        appropriate fallback messages in ANY language the user speaks.
+        Results are cached in-memory to avoid regenerating for the same language.
+
+        Why this is elegant:
+        - Zero hardcoded translation dictionaries
+        - Supports UNLIMITED languages automatically
+        - Deterministic generation (temperature=0.3)
+        - Cache-aware for performance
+        - Self-improving (as Gemini models improve over time)
+
+        Supports ANY ISO 639-1 language code:
+        Arabic (ar), Chinese (zh), French (fr), German (de), Hindi (hi),
+        Italian (it), Japanese (ja), Polish (pl), Portuguese (pt), Russian (ru),
+        Spanish (es), Swahili (sw), Thai (th), Vietnamese (vi), etc.
+
+        Args:
+            iteration: Current iteration number (1, 2, etc.)
+
+        Returns:
+            Professional fallback message in user's language (from cache or newly generated).
+
+        Raises:
+            Exception: If Gemini API call fails after retries.
+        """
+        # Check cache first - avoid regenerating for same language + iteration combo
+        if self.language in self._fallback_cache:
+            cached_msg = self._fallback_cache[self.language].get(iteration)
+            if cached_msg:
+                self.logger.debug(
+                    f"✅ Cached fallback (lang={self.language}, iteration={iteration})"
+                )
+                return cached_msg
+
+        # Define context based on iteration number
+        context_map = {
+            1: (
+                "first attempt at user request - we need more information from user "
+                "to process their request"
+            ),
+            2: (
+                "multiple failed attempts - a technical issue occurred during processing"
+            ),
+        }
+        context = context_map.get(iteration, "error processing user request")
+
+        # Construct elegant prompt that asks Gemini to generate in user's language
+        fallback_prompt = f"""You are a professional customer service assistant.
+Generate a brief, helpful fallback message in {self.language}.
+
+Context: {context}
+
+Requirements:
+- Respond ONLY in {self.language} (no English, no mixed languages)
+- Acknowledge the issue briefly and professionally
+- Ask user to provide more details or rephrase their question
+- Maximum 2 sentences
+- Friendly and helpful tone
+- No emojis, no special formatting
+
+Return ONLY the message itself - nothing else."""
+
+        try:
+            # Validate client is initialized
+            if self.client is None:
+                raise RuntimeError(
+                    "Gemini client not initialized. Call initialize() first."
+                )
+
+            # Generate response in user's language via Gemini 2.5
+            # Use response_handler if available, otherwise direct call
+            if self.response_handler:
+                response = await self.response_handler.retry_with_backoff(
+                    self.client.aio.models.generate_content,
+                    model=self.model_name,
+                    contents=fallback_prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.3,  # Deterministic for consistency
+                        max_output_tokens=150,
+                        system_instruction=(
+                            "You are a multilingual assistant. "
+                            "Generate responses exclusively in the specified language. "
+                            "Do not include explanations or meta-information."
+                        ),
+                    ),
+                )
+
+                # Validate response before extracting text
+                status, diagnostic_msg = self.response_handler.validate_response(response)
+                if status != ResponseStatus.SUCCESS:
+                    self.logger.error(
+                        f"❌ Fallback generation failed validation: {status} - {diagnostic_msg}"
+                    )
+                    raise ValueError(
+                        f"Gemini returned invalid response for language {self.language}: {status}"
+                    )
+            else:
+                # Direct call without retry/validation
+                response = await self.client.aio.models.generate_content(
+                    model=self.model_name,
+                    contents=fallback_prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.3,
+                        max_output_tokens=150,
+                        system_instruction=(
+                            "You are a multilingual assistant. "
+                            "Generate responses exclusively in the specified language. "
+                            "Do not include explanations or meta-information."
+                        ),
+                    ),
+                )
+
+            # Extract message and ensure it's clean
+            if response.text is None:
+                raise ValueError(f"Gemini returned None response for language {self.language}")
+
+            message = response.text.strip()
+
+            # Validate we got content
+            if not message:
+                raise ValueError(f"Gemini returned empty response for language {self.language}")
+
+            # Cache for future requests in same language
+            if self.language not in self._fallback_cache:
+                self._fallback_cache[self.language] = {}
+            self._fallback_cache[self.language][iteration] = message
+
+            self.logger.debug(
+                f"✅ Generated fallback (lang={self.language}, iteration={iteration}, "
+                f"cached for future reuse)"
+            )
+
+            return message
+
+        except Exception as e:
+            # Log the error and re-raise for upstream handling
+            self.logger.error(
+                f"Failed to generate fallback for language '{self.language}': {e}"
+            )
+            raise
+
     async def initialize(self) -> None:
         """Initialize the Gemini client and generation configuration.
 
@@ -256,21 +564,31 @@ class BaseAgent(ABC):
         try:
             self.logger.debug(f"Initializing Gemini client for {self.agent_name}...")
 
+            if self.structured_logger:
+                self.structured_logger.debug("Initializing Gemini client", agent=self.agent_name)
+
             # Initialize Gemini client
             self.client = genai.Client(api_key=self.api_key)
 
             # Build generation configuration
-            self.generation_config = self._build_generation_config(
-                **self._generation_params
-            )
+            self.generation_config = self._build_generation_config(**self._generation_params)
 
             self.logger.info(
                 f"✅ {self.agent_name} initialized successfully "
                 f"({len(self.mcp_tools)} tools available)"
             )
 
+            if self.structured_logger:
+                self.structured_logger.info(
+                    "Agent initialized successfully",
+                    agent=self.agent_name,
+                    tools_available=len(self.mcp_tools)
+                )
+
         except Exception as e:
             self.logger.exception(f"Failed to initialize {self.agent_name}: {e}")
+            if self.structured_logger:
+                self.structured_logger.exception(f"Agent initialization failed", agent=self.agent_name)
             raise RuntimeError(f"{self.agent_name} initialization failed: {e}") from e
 
     @classmethod
@@ -335,9 +653,7 @@ class BaseAgent(ABC):
                 logger.info(f"🔄 Resuming session {session_id[:8]}...")
 
             # Create agent with memory enabled
-            agent = cls(
-                session_id=session_id, memory_manager=memory_manager, **agent_params
-            )
+            agent = cls(session_id=session_id, memory_manager=memory_manager, **agent_params)
 
             # Initialize Gemini client
             await agent.initialize()
@@ -401,17 +717,11 @@ class BaseAgent(ABC):
                         if delta.total_seconds() < 60:
                             last_activity = "just now"
                         elif delta.total_seconds() < 3600:
-                            last_activity = (
-                                f"{int(delta.total_seconds() / 60)} minutes ago"
-                            )
+                            last_activity = f"{int(delta.total_seconds() / 60)} minutes ago"
                         elif delta.total_seconds() < 86400:
-                            last_activity = (
-                                f"{int(delta.total_seconds() / 3600)} hours ago"
-                            )
+                            last_activity = f"{int(delta.total_seconds() / 3600)} hours ago"
                         else:
-                            last_activity = (
-                                f"{int(delta.total_seconds() / 86400)} days ago"
-                            )
+                            last_activity = f"{int(delta.total_seconds() / 86400)} days ago"
                 except Exception:
                     pass
 
@@ -421,9 +731,7 @@ class BaseAgent(ABC):
                 logger.info(f"   - Loaded to RAM: {messages_loaded} messages")
                 logger.info(f"   - Session memory blocks: {session_blocks_count}")
                 if load_user_memory and customer_email:
-                    logger.info(
-                        f"   - User memory blocks: {user_blocks_count} (cross-session)"
-                    )
+                    logger.info(f"   - User memory blocks: {user_blocks_count} (cross-session)")
                     logger.info(f"   - Customer: {customer_email}")
                 logger.info("✅ Session resumed successfully")
 
@@ -467,11 +775,7 @@ class BaseAgent(ABC):
         temp = temperature if temperature is not None else settings.TEMPERATURE
         k = top_k if top_k is not None else settings.TOP_K
         p = top_p if top_p is not None else settings.TOP_P
-        tokens = (
-            max_output_tokens
-            if max_output_tokens is not None
-            else settings.MAX_OUTPUT_TOKENS
-        )
+        tokens = max_output_tokens if max_output_tokens is not None else settings.MAX_OUTPUT_TOKENS
 
         self.logger.debug(
             f"Generation config: temp={temp}, top_k={k}, top_p={p}, max_tokens={tokens}"
@@ -494,9 +798,7 @@ class BaseAgent(ABC):
                     mode=types.FunctionCallingConfigMode.AUTO,
                 )
             )
-            self.logger.debug(
-                f"Added {len(self.mcp_tools)} MCP tools to generation config"
-            )
+            self.logger.debug(f"Added {len(self.mcp_tools)} MCP tools to generation config")
 
         # Type ignore: MyPy can't infer kwargs unpacking for GenerateContentConfig
         return types.GenerateContentConfig(**config_params)  # type: ignore[arg-type]
@@ -553,9 +855,7 @@ class BaseAgent(ABC):
 
         return function_declarations
 
-    def _convert_json_schema_to_gemini_schema(
-        self, json_schema: dict[str, Any]
-    ) -> types.Schema:
+    def _convert_json_schema_to_gemini_schema(self, json_schema: dict[str, Any]) -> types.Schema:
         """Convert JSON Schema to Gemini Schema format.
 
         Args:
@@ -579,9 +879,7 @@ class BaseAgent(ABC):
         for prop_name, prop_def in properties.items():
             # Skip 'ctx' parameter - it's auto-injected by MCP framework
             if prop_name == "ctx":
-                self.logger.debug(
-                    "Skipping 'ctx' parameter (MCP Context, auto-injected)"
-                )
+                self.logger.debug("Skipping 'ctx' parameter (MCP Context, auto-injected)")
                 continue
             gemini_properties[prop_name] = self._convert_property_to_schema(prop_def)
 
@@ -633,8 +931,8 @@ class BaseAgent(ABC):
 
             gemini_nested_properties = {}
             for nested_prop_name, nested_prop_def in nested_properties.items():
-                gemini_nested_properties[nested_prop_name] = (
-                    self._convert_property_to_schema(nested_prop_def)
+                gemini_nested_properties[nested_prop_name] = self._convert_property_to_schema(
+                    nested_prop_def
                 )
 
             return types.Schema(
@@ -680,6 +978,7 @@ class BaseAgent(ABC):
         query: str,
         *,
         include_history: bool = True,
+        intent: str | None = None,
         **kwargs: Any,
     ) -> str:
         """Generate response for user query.
@@ -731,40 +1030,150 @@ class BaseAgent(ABC):
 
         start_time = time.time()
 
+        # Create request context for this query (OPCIÓN 7)
+        if self.structured_logger:
+            request_ctx = create_request_context(
+                email_id=None,  # Not applicable for agents
+                recipient=None,
+                operation=f"agent_generate_response.{self.agent_name}",
+                custom_fields={"query_preview": query[:50], "include_history": include_history}
+            )
+
         # Track request
         self._metrics["total_requests"] += 1
+        if self.metrics:
+            self.metrics.increment_counter(f"{self.agent_name}_queries", 1)
 
         # Check if initialized
         if not self.client:
             self._metrics["failed_requests"] += 1
             error_type = "RuntimeError"
-            self._metrics["errors"][error_type] = (
-                self._metrics["errors"].get(error_type, 0) + 1
-            )
+            self._metrics["errors"][error_type] = self._metrics["errors"].get(error_type, 0) + 1
             elapsed_ms = (time.time() - start_time) * 1000
             self._metrics["total_response_time_ms"] += elapsed_ms
 
-            self.logger.error(
-                f"{self.agent_name} not initialized - call initialize() first"
-            )
+            if self.metrics:
+                self.metrics.increment_counter(f"{self.agent_name}_not_initialized", 1)
+            if self.structured_logger:
+                self.structured_logger.error("Agent not initialized", agent=self.agent_name)
+                clear_request_context()
+
+            self.logger.error(f"{self.agent_name} not initialized - call initialize() first")
             raise RuntimeError(f"{self.agent_name} not initialized")
 
         try:
+            # Store intent for use in _update_history()
+            self.current_intent = intent
+
             self.logger.info(f"Generating response for: '{query[:100]}...'")
+
+            # Auto-detect or use provided language for consistent context (prevents language switching)
+            if "language" in kwargs:
+                # Priority 1: Explicit language parameter from caller
+                new_language = kwargs["language"]
+                if new_language != self.language:
+                    self.logger.info(
+                        f"🌐 Updating agent language (explicit): {self.language} → {new_language}"
+                    )
+                    self.language = new_language
+            else:
+                # Priority 2: Auto-detect language from user query (prevents English input → Spanish output)
+                detected_language = detect_user_language(query)
+                if detected_language != self.language:
+                    self.logger.info(
+                        f"🌐 Auto-detected language: {self.language} → {detected_language}"
+                    )
+                    self.language = detected_language
+                kwargs["language"] = detected_language
 
             # Build conversation contents (uses template method pattern)
             contents = self._build_contents(query, include_history, **kwargs)
 
-            self.logger.debug(f"Generating with {len(self.mcp_tools)} tools available")
+            # Build system prompt using language context
+            kwargs["user_lang"] = self.language
+            system_prompt = self.get_system_prompt(**kwargs)
 
-            # Generate response (tools are included in generation_config)
-            response = await self.client.aio.models.generate_content(
-                model=self.model_name,
-                contents=contents,  # type: ignore[arg-type]
-                config=self.generation_config,
+            self.logger.debug(f"Generating with {len(self.mcp_tools)} tools available")
+            self.logger.debug(
+                f"Language: {self.language}, System prompt length: {len(system_prompt)}"
             )
 
+            # Build generation config with system instruction (following Google Gemini best practices)
+            # Create a config copy with the language-specific system instruction
+            config_dict = {
+                "temperature": self.generation_config.temperature,
+                "top_k": self.generation_config.top_k,
+                "top_p": self.generation_config.top_p,
+                "max_output_tokens": self.generation_config.max_output_tokens,
+                "response_mime_type": self.generation_config.response_mime_type,
+                "system_instruction": system_prompt,
+            }
+
+            # Add tools and tool config if available
+            if self.mcp_tools:
+                config_dict["tools"] = [types.Tool(function_declarations=self.mcp_tools)]
+                config_dict["tool_config"] = types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(
+                        mode=types.FunctionCallingConfigMode.AUTO,
+                    )
+                )
+
+            dynamic_config = types.GenerateContentConfig(**config_dict)  # type: ignore[arg-type]
+
+            # Generate response with system_instruction in config
+            # Use response_handler for retry + validation if available (Google Best Practices)
+            if self.response_handler:
+                # With retry logic and exponential backoff
+                if self.metrics:
+                    async with self.metrics.record_latency_async(
+                        f"{self.agent_name}_generate_latency",
+                        tags={"model": self.model_name, "has_tools": len(self.mcp_tools) > 0}
+                    ):
+                        response = await self.response_handler.retry_with_backoff(
+                            self.client.aio.models.generate_content,
+                            model=self.model_name,
+                            contents=contents,  # type: ignore[arg-type]
+                            config=dynamic_config,
+                        )
+                else:
+                    response = await self.response_handler.retry_with_backoff(
+                        self.client.aio.models.generate_content,
+                        model=self.model_name,
+                        contents=contents,  # type: ignore[arg-type]
+                        config=dynamic_config,
+                    )
+
+                # Validate response before processing
+                status, diagnostic = self.response_handler.validate_response(response)
+                if status != ResponseStatus.SUCCESS:
+                    self.logger.warning(
+                        f"⚠️ Response validation failed: {status} - {diagnostic}"
+                    )
+                    # Call template method for custom error handling (overridable by subclasses)
+                    return await self._handle_validation_failure(status, diagnostic, query)
+
+            else:
+                # Legacy mode: No retry, no validation
+                if self.metrics:
+                    async with self.metrics.record_latency_async(
+                        f"{self.agent_name}_generate_latency",
+                        tags={"model": self.model_name, "has_tools": len(self.mcp_tools) > 0}
+                    ):
+                        response = await self.client.aio.models.generate_content(
+                            model=self.model_name,
+                            contents=contents,  # type: ignore[arg-type]
+                            config=dynamic_config,
+                        )
+                else:
+                    response = await self.client.aio.models.generate_content(
+                        model=self.model_name,
+                        contents=contents,  # type: ignore[arg-type]
+                        config=dynamic_config,
+                    )
+
             self.logger.debug("Response generated successfully")
+            if self.structured_logger:
+                self.structured_logger.debug("Response generated", agent=self.agent_name)
 
             # Extract response text with safe indexing
             if not response.candidates or not response.candidates[0].content:
@@ -773,24 +1182,16 @@ class BaseAgent(ABC):
                 self.logger.error(f"  - Response object: {response}")
                 self.logger.error(f"  - Has candidates: {bool(response.candidates)}")
                 if hasattr(response, "prompt_feedback"):
-                    self.logger.error(
-                        f"  - Prompt feedback: {response.prompt_feedback}"
-                    )
+                    self.logger.error(f"  - Prompt feedback: {response.prompt_feedback}")
                 if response.candidates:
                     for idx, candidate in enumerate(response.candidates):
                         self.logger.error(f"  - Candidate {idx}:")
                         if hasattr(candidate, "finish_reason"):
-                            self.logger.error(
-                                f"    - Finish reason: {candidate.finish_reason}"
-                            )
+                            self.logger.error(f"    - Finish reason: {candidate.finish_reason}")
                         if hasattr(candidate, "safety_ratings"):
-                            self.logger.error(
-                                f"    - Safety ratings: {candidate.safety_ratings}"
-                            )
+                            self.logger.error(f"    - Safety ratings: {candidate.safety_ratings}")
                         if hasattr(candidate, "content"):
-                            self.logger.error(
-                                f"    - Has content: {bool(candidate.content)}"
-                            )
+                            self.logger.error(f"    - Has content: {bool(candidate.content)}")
                 raise RuntimeError("No response from Gemini")
 
             # Safe indexing: check if parts exists and has at least one element
@@ -804,19 +1205,44 @@ class BaseAgent(ABC):
                 self.logger.error("Response text is None or empty")
                 raise RuntimeError("Empty response text")
 
+            # Calculate elapsed time BEFORE updating history (for accurate DB storage)
+            elapsed_ms = int((time.time() - start_time) * 1000)
+
+            # Extract tool calls from response (for analytics)
+            tool_calls = self._extract_tool_calls(response.candidates[0].content)
+
             # Update history (uses template method pattern)
             if include_history:
-                self._update_history(contents[-1], response.candidates[0].content)
+                self._update_history(
+                    contents[-1],
+                    response.candidates[0].content,
+                    response_time_ms=elapsed_ms,
+                    tool_calls=tool_calls
+                )
 
             # Track success metrics
-            elapsed_ms = (time.time() - start_time) * 1000
             self._metrics["successful_requests"] += 1
             self._metrics["total_response_time_ms"] += elapsed_ms
             self._metrics["history_sizes"].append(len(self.conversation_history))
 
+            if self.metrics:
+                self.metrics.increment_counter(f"{self.agent_name}_successful_responses", 1)
+                self.metrics.increment_counter(f"{self.agent_name}_response_tokens", len(response_text))
+                self.metrics.set_gauge(f"{self.agent_name}_history_size", len(self.conversation_history))
+
             self.logger.info(
                 f"✅ Response generated ({len(response_text)} chars, {elapsed_ms:.0f}ms)"
             )
+
+            if self.structured_logger:
+                self.structured_logger.info(
+                    "Response generated successfully",
+                    agent=self.agent_name,
+                    response_length=len(response_text),
+                    elapsed_ms=elapsed_ms
+                )
+                clear_request_context()
+
             return response_text
 
         except Exception as e:
@@ -827,11 +1253,23 @@ class BaseAgent(ABC):
 
             # Track error type
             error_type = type(e).__name__
-            self._metrics["errors"][error_type] = (
-                self._metrics["errors"].get(error_type, 0) + 1
-            )
+            self._metrics["errors"][error_type] = self._metrics["errors"].get(error_type, 0) + 1
+
+            if self.metrics:
+                self.metrics.increment_counter(f"{self.agent_name}_failed_responses", 1)
+                self.metrics.increment_counter(f"{self.agent_name}_error_{error_type}", 1)
 
             self.logger.exception(f"Error generating response: {e}")
+
+            if self.structured_logger:
+                self.structured_logger.exception(
+                    "Response generation failed",
+                    agent=self.agent_name,
+                    error_type=error_type,
+                    elapsed_ms=elapsed_ms
+                )
+                clear_request_context()
+
             raise
 
     def _build_contents(
@@ -843,11 +1281,14 @@ class BaseAgent(ABC):
         """Build conversation contents for Gemini API.
 
         This method constructs the conversation context that will be sent to
-        Gemini. It follows this structure:
-        1. System prompt (agent instructions)
-        2. Model acknowledgment (establishes agent role)
-        3. Conversation history (previous turns, if include_history=True)
-        4. Current user query
+        Gemini. IMPORTANT: System prompt is NO LONGER included here. It's passed
+        via system_instruction parameter in generate_content() to follow Google
+        Gemini API best practices for multilingual support.
+
+        This method builds:
+        1. Model acknowledgment (establishes agent role)
+        2. Conversation history (previous turns, if include_history=True)
+        3. Current user query
 
         Subclasses can override this method to customize the conversation
         structure (e.g., different acknowledgment message, additional context).
@@ -861,26 +1302,22 @@ class BaseAgent(ABC):
             List of Content objects representing the conversation.
 
         Note:
-            This is a template method that can be overridden by subclasses
-            to customize conversation structure while maintaining consistency.
+            - System prompt now goes ONLY in system_instruction parameter
+            - This is a template method that can be overridden by subclasses
+            - Supports multilingual responses via system_instruction
         """
         contents = []
 
-        # Add system prompt (agent-specific)
-        system_context = self.get_system_prompt(**kwargs)
-        contents.append(
-            types.Content(role="user", parts=[types.Part(text=system_context)])
-        )
+        # Add model acknowledgment (establishes agent role) - language-aware
+        if self.language == "en":
+            ack_message = f"Understood. I'm {self.agent_name}. How can I help you?"
+        else:
+            ack_message = f"Entendido. Soy {self.agent_name}. ¿En qué puedo ayudarte?"
 
-        # Add model acknowledgment (establishes agent role)
         contents.append(
             types.Content(
                 role="model",
-                parts=[
-                    types.Part(
-                        text=f"Entendido. Soy {self.agent_name}. ¿En qué puedo ayudarte?"
-                    )
-                ],
+                parts=[types.Part(text=ack_message)],
             )
         )
 
@@ -893,10 +1330,60 @@ class BaseAgent(ABC):
 
         return contents
 
+    def _extract_tool_calls(self, model_content: types.Content) -> list[dict[str, Any]] | None:
+        """Extract tool/function calls from Gemini response for database storage.
+
+        Processes the model response to identify and extract function calls
+        that were made during generation. Returns structured metadata for
+        analytics and debugging.
+
+        Args:
+            model_content: Gemini model response content that may contain function calls.
+
+        Returns:
+            List of tool call dictionaries with structure:
+            [
+                {
+                    "tool_name": str,           # Name of the function called
+                    "args": dict,                # Arguments passed to function
+                    "execution_time_ms": int,    # Execution time (if available)
+                }
+            ]
+            Returns None if no function calls were made.
+
+        Example:
+            >>> response = await client.generate_content(...)
+            >>> tool_calls = self._extract_tool_calls(response.candidates[0].content)
+            >>> print(tool_calls)
+            [{"tool_name": "get_products", "args": {"category": "laptops"}, "execution_time_ms": 45}]
+
+        Note:
+            This method only extracts metadata about tool calls. The actual
+            function execution is handled by Gemini's function calling system.
+        """
+        if not model_content or not model_content.parts:
+            return None
+
+        tool_calls = []
+        for part in model_content.parts:
+            # Check if this part is a function call
+            if hasattr(part, 'function_call') and part.function_call:
+                func_call = part.function_call
+                tool_call_info = {
+                    "tool_name": func_call.name,
+                    "args": dict(func_call.args) if func_call.args else {},
+                }
+                tool_calls.append(tool_call_info)
+
+        return tool_calls if tool_calls else None
+
     def _update_history(
         self,
         user_content: types.Content,
         model_content: types.Content,
+        response_time_ms: int | None = None,
+        tool_calls: list[dict[str, Any]] | None = None,
+        token_count: int | None = None,
     ) -> None:
         """Update conversation history with automatic size management.
 
@@ -910,6 +1397,9 @@ class BaseAgent(ABC):
         Args:
             user_content: User message to add to history.
             model_content: Model response to add to history.
+            response_time_ms: Response generation time in milliseconds (for analytics).
+            tool_calls: List of function calls made during response generation.
+            token_count: Total token count from Gemini response (for cost tracking).
 
         Note:
             History trimming is automatic and transparent to the caller.
@@ -921,39 +1411,50 @@ class BaseAgent(ABC):
         self.conversation_history.append(model_content)
 
         # Persist to database (PostgreSQL - long-term) if enabled
+        self.logger.info(
+            f"🔍 DEBUG _update_history: _memory_enabled={self._memory_enabled}, "
+            f"memory_manager={self.memory_manager is not None}, "
+            f"session_id={self.session_id is not None}"
+        )
         if self._memory_enabled and self.memory_manager and self.session_id:
+            self.logger.info("✅ Entering DB persistence block...")
             try:
                 # Extract text from Content objects (ensure non-None strings for Pydantic)
-                user_text = (
-                    user_content.parts[0].text if user_content.parts else ""
-                ) or ""
-                model_text = (
-                    model_content.parts[0].text if model_content.parts else ""
-                ) or ""
+                user_text = (user_content.parts[0].text if user_content.parts else "") or ""
+                model_text = (model_content.parts[0].text if model_content.parts else "") or ""
 
-                # Save user message
+                self.logger.info(
+                    f"🔍 Extracted texts - user: '{user_text[:50]}...' ({len(user_text)} chars), "
+                    f"model: '{model_text[:50]}...' ({len(model_text)} chars)"
+                )
+
+                # Save user message (no agent_name, response_time, or tool_calls for user)
                 self.memory_manager.save_message(
                     session_id=self.session_id,
                     role="user",
                     message_text=user_text,
-                    intent=None,  # Intent classification done by AgentRouter
+                    intent=self.current_intent,  # Use intent passed from AgentRouter
                 )
 
-                # Save model message
+                # Save model message with performance metrics and tool calls
                 self.memory_manager.save_message(
                     session_id=self.session_id,
                     role="model",
                     agent_name=self.agent_name,
                     message_text=model_text,
-                    intent=None,
+                    intent=self.current_intent,  # Use intent passed from AgentRouter
+                    tool_calls=tool_calls,
+                    response_time_ms=response_time_ms,
+                    token_count=token_count,
                 )
 
-                self.logger.debug(
-                    f"Messages persisted to DB (session={self.session_id[:8]})"
+                self.logger.info(
+                    f"✅ Messages persisted to DB (session={self.session_id[:8]}, "
+                    f"response_time={response_time_ms}ms, tokens={token_count}, tools={len(tool_calls) if tool_calls else 0})"
                 )
             except Exception as e:
                 # Non-critical: Log but don't fail if persistence fails
-                self.logger.warning(f"Failed to persist messages to DB: {e}")
+                self.logger.error(f"❌ Failed to persist messages to DB: {e}", exc_info=True)
 
         # Maintain reasonable history size (20 items = 10 conversation turns)
         if len(self.conversation_history) > 20:
@@ -1014,7 +1515,8 @@ class BaseAgent(ABC):
         try:
             # Get recent messages from DB
             messages = self.memory_manager.get_recent_messages(
-                self.session_id, limit=limit * 2  # Each turn has user + model
+                self.session_id,
+                limit=limit * 2,  # Each turn has user + model
             )
 
             # Convert to types.Content and reverse (DB returns DESC order)
@@ -1086,9 +1588,7 @@ class BaseAgent(ABC):
                     f"Memory block saved (id={block_id}, label={block_label}, priority={priority})"
                 )
             else:
-                self.logger.debug(
-                    f"Memory block skipped (priority {priority} < threshold)"
-                )
+                self.logger.debug(f"Memory block skipped (priority {priority} < threshold)")
 
             return block_id
 
@@ -1253,7 +1753,8 @@ class BaseAgent(ABC):
 
             # Get recent messages from DB
             messages = self.memory_manager.get_recent_messages(
-                self.session_id, limit=10  # Last 5 turns
+                self.session_id,
+                limit=10,  # Last 5 turns
             )
 
             if not messages:
@@ -1262,8 +1763,7 @@ class BaseAgent(ABC):
 
             # Convert to format expected by extractor
             formatted_messages = [
-                {"role": msg["role"], "text": msg["message_text"]}
-                for msg in reversed(messages)
+                {"role": msg["role"], "text": msg["message_text"]} for msg in reversed(messages)
             ]
 
             # Extract semantic memory
@@ -1297,7 +1797,8 @@ class BaseAgent(ABC):
                                 }
                             )
                             self.logger.debug(
-                                f"Saved memory block: {memory.block_label} (id={block_id}, p={memory.priority})"
+                                f"Saved memory block: {memory.block_label} "
+                                f"(id={block_id}, p={memory.priority})"
                             )
                     except Exception as e:
                         self.logger.warning(f"Failed to save memory block: {e}")
@@ -1318,9 +1819,7 @@ class BaseAgent(ABC):
                     }
                     for m in result.memories
                 ]
-                self.logger.info(
-                    f"Extracted {len(extracted_blocks)} memory blocks (not saved)"
-                )
+                self.logger.info(f"Extracted {len(extracted_blocks)} memory blocks (not saved)")
 
             return extracted_blocks
 
@@ -1359,15 +1858,11 @@ class BaseAgent(ABC):
             >>> # Agent can now use new tools in responses
         """
         self.mcp_tools = mcp_tools
-        self.logger.info(
-            f"{self.agent_name} tools updated: {len(mcp_tools)} tools available"
-        )
+        self.logger.info(f"{self.agent_name} tools updated: {len(mcp_tools)} tools available")
 
         # Rebuild generation config to include new tools
         if self.client:
-            self.generation_config = self._build_generation_config(
-                **self._generation_params
-            )
+            self.generation_config = self._build_generation_config(**self._generation_params)
             self.logger.debug("Generation config rebuilt with updated tools")
 
     def get_metrics(self) -> dict[str, Any]:

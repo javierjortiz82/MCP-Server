@@ -1,6 +1,4 @@
-"""
-Pytest configuration and shared fixtures for Odiseo Bot tests.
-"""
+"""Pytest configuration and shared fixtures for Odiseo Bot tests."""
 
 import sys
 from pathlib import Path
@@ -33,7 +31,7 @@ def mock_mcp_tools():
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "product_id": {"type": "string", "description": "Product ID"}
+                    "product_id": {"type": "string", "description": "Product ID"},
                 },
                 "required": ["product_id"],
             },

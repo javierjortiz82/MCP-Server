@@ -1,20 +1,17 @@
 # ============================================================================
 # SmartBot MCP Client - Python Dependencies
 # ============================================================================
-# Production dependencies for the MCP client with Google GenAI integration
+# All dependencies (production + development) for the MCP client with Google GenAI integration
 #
 # Installation:
 #   pip install -r requirements.txt
-#
-# Development installation (includes dev tools):
-#   pip install -r requirements.txt -r requirements-dev.txt
 # ============================================================================
 
 # Core MCP SDK
-mcp>=1.2.0                    # Official MCP SDK from Anthropic
+mcp==1.21.0                   # Official MCP SDK from Anthropic (latest stable)
 
 # Google GenAI for LLM
-google-genai>=1.38.0          # Google GenAI SDK for Gemini models
+google-genai>=1.49.0          # Google GenAI SDK for Gemini models
 
 # Async IO and HTTP
 anyio>=4.0.0                  # Async IO support for MCP SDK
@@ -28,10 +25,27 @@ pydantic>=2.11.0              # Data validation and settings management (v2)
 pydantic-settings>=2.11.0     # Settings management from environment variables
 
 # Database
-psycopg2-binary>=2.9.0        # PostgreSQL adapter for pagination persistence
+psycopg2-binary>=2.9.10       # PostgreSQL adapter for pagination persistence
 
 # Environment Variables
 python-dotenv>=1.0.0          # Load environment variables from .env file
 
 # Template Engine
 jinja2>=3.1.0                 # Template engine for PromptManager (modular prompts)
+
+# ============================================================================
+# Development Dependencies
+# ============================================================================
+
+# Code Quality
+ruff>=0.8.0                   # Fast Python linter and formatter
+mypy>=1.13.0                  # Static type checker
+
+# Testing
+pytest>=8.3.0                 # Testing framework
+pytest-asyncio>=0.24.0        # Async test support
+pytest-cov>=4.1.0             # Coverage plugin for pytest
+pytest-mock>=3.14.0           # Mocking support
+
+# Code Coverage
+coverage[toml]>=7.0.0         # Code coverage measurement

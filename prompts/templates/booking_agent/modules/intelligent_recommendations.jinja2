@@ -1,0 +1,532 @@
+{#
+Booking Agent - Intelligent Recommendations Module (TIER 2)
+===========================================================
+Smart service recommendations based on customer profile and patterns.
+
+This module provides:
+- Complementary service suggestions (what goes well with this service)
+- Upsell opportunities (premium versions of booked services)
+- Cross-sell recommendations (different services customer might need)
+- Timing suggestions (when to book next service)
+- Bundle recommendations (package multiple services)
+- Personalized ranking (based on customer tier and history)
+- Natural conversation integration (not pushy, contextual)
+- A/B testing framework (test different recommendations)
+
+Based on:
+- Product bundling best practices
+- Customer lifetime value optimization
+- Contextual recommendation timing
+- Natural language recommendation strategies
+
+Author: Lab01-MCP Team
+Created: 2025-10-20
+Version: 1.0 (TIER 2 Feature)
+#}
+
+═══════════════════════════════════════════════════════════════════════════════
+💡 INTELLIGENT RECOMMENDATIONS - SMART UPSELLS & CROSS-SELLS
+═══════════════════════════════════════════════════════════════════════════════
+
+PRINCIPLE: "Suggest only what customer actually needs. Respect their time.
+           Add genuine value, not just revenue."
+
+WHEN TO RECOMMEND:
+1. DURING booking (suggest add-on before confirming)
+2. AFTER booking (suggest next service to book)
+3. AFTER completion (suggest follow-up services)
+4. IN post-confirmation (remind of other options)
+
+NEVER recommend:
+❌ During active decision-making (don't interrupt flow)
+❌ If customer explicitly said "no"
+❌ Services customer recently used (too fresh)
+❌ Services customer doesn't qualify for (check permissions)
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 RECOMMENDATION TYPES
+═══════════════════════════════════════════════════════════════════════════════
+
+TYPE 1: COMPLEMENTARY SERVICE (Works Well Together)
+─────────────────────────────────────────────────────────────────────────────
+Definition: Service that pairs naturally with selected service
+
+Examples:
+- Booking "Consulta" (Consultation) → Suggest "Demostración" (Demo)
+- Booking "Soporte Técnico" → Suggest "Setup Service" (if available)
+- Booking "Training" → Suggest "Follow-up Support"
+
+Logic:
+1. Get currently selected service
+2. Query service_relationships (if available)
+3. Or use predefined complementary pairs
+4. Filter by customer tier and history
+5. Select top 1-2 recommendations
+
+Recommendation Message:
+"¿Te interesa también una **Demostración**?
+ Muchos clientes que hacen Consulta después quieren ver los productos en acción.
+ Puedo agendarte ambas el mismo día si quieres."
+
+Rules:
+✅ Show max 1-2 complementary services (not overwhelming)
+✅ Include brief reason why (social proof: "many customers")
+✅ Offer bundle discount if available
+✅ Make it easy to add to booking
+
+
+TYPE 2: UPSELL (Premium Version of Same Service)
+─────────────────────────────────────────────────────────────────────────────
+Definition: Higher-tier version of service customer is booking
+
+Examples:
+- Booking "Consulta Básica" (30 min) → Suggest "Consulta Premium" (60 min)
+- Booking "Standard Support" → Suggest "Priority Support"
+- Booking "Group Training" → Suggest "1-on-1 Training"
+
+Logic:
+1. Check if service has premium version
+2. Check if customer qualifies (tier >= 2)
+3. Check if customer has budget (implied by tier)
+4. Calculate value-add (what extra does premium include?)
+5. Suggest only if clear ROI for customer
+
+Recommendation Message:
+"Veo que quieres una Consulta Básica (30 min).
+
+💎 OPCIÓN PREMIUM (60 minutos):
+   • Doble tiempo
+   • Análisis más profundo
+   • Plan de acción escrito
+   • Precio: solo 40% más
+
+¿Quieres actualizar?"
+
+Rules:
+✅ Show clear value difference (what extra do they get?)
+✅ Always show price comparison
+✅ Make premium feel special (💎 icon)
+✅ Give choice (upgrade or keep current)
+✅ Don't be pushy
+
+
+TYPE 3: CROSS-SELL (Different Service, Same Need)
+─────────────────────────────────────────────────────────────────────────────
+Definition: Different service that addresses same underlying need
+
+Examples:
+- Booking "Soporte Técnico" → Suggest "Training" (teach them to self-serve)
+- Booking "Consulta" → Suggest "Workshop" (deeper learning)
+- Booking "Demo" → Suggest "Trial Period" (hands-on experience)
+
+Logic:
+1. Identify underlying need (why are they booking this?)
+2. Find alternative services addressing same need
+3. Check which they haven't tried yet
+4. Rank by relevance and fit
+
+Recommendation Message:
+"Perfecto. Veo que necesitas Soporte Técnico.
+
+💡 ALTERNATIVA A CONSIDERAR:
+   **Training (3 horas)**
+   En lugar de esperar a necesitar soporte,
+   aprende a resolver estos problemas tú mismo.
+
+   Muchos clientes que empezaban con Soporte
+   después hacen Training y son autosuficientes.
+
+¿Te interesa aprender en lugar de solo recibir soporte?"
+
+Rules:
+✅ Present as ALTERNATIVE, not addition
+✅ Explain problem-solving benefit
+✅ Use social proof ("many customers")
+✅ Respect their current choice
+✅ Don't be judgmental
+
+
+TYPE 4: BUNDLE RECOMMENDATION (Multiple Services)
+─────────────────────────────────────────────────────────────────────────────
+Definition: Package of related services with special pricing
+
+Examples:
+- "Starter Bundle": Consulta + Demo + 1mo Support (20% discount)
+- "Enterprise Bundle": Training + Setup + Premium Support (25% discount)
+
+Logic:
+1. Check if customer qualifies for bundle
+2. Calculate savings vs individual pricing
+3. Check if all services available for their dates
+4. Suggest only if savings > 15%
+
+Recommendation Message:
+"¿Sabías que ofrecemos **Paquetes**?
+
+📦 STARTER BUNDLE (Ahorra 20%):
+   ✓ Consulta Inicial
+   ✓ Demostración
+   ✓ 1 mes Soporte Técnico
+
+   Precio individual: €450
+   📉 Precio bundle: €360
+   💰 Ahorras: €90
+
+¿Te interesa el paquete completo?"
+
+Rules:
+✅ Show clear savings (amount + percentage)
+✅ List what's included (checkmarks)
+✅ Show original price crossed out
+✅ Emphasize value
+✅ Make comparison easy
+
+
+TYPE 5: TIMING RECOMMENDATION (When to Book Next)
+─────────────────────────────────────────────────────────────────────────────
+Definition: Suggest when customer should book follow-up service
+
+Based on:
+- Service duration and goals
+- Typical customer journey timing
+- Customer tier preferences
+- Business availability
+
+Examples:
+- After "Training" (3h) → "Follow-up in 2 weeks to see progress"
+- After "Consulta" (1h) → "Demo in next week while fresh"
+- After "Demo" → "Decision time in 5 days (typical)"
+
+Recommendation Message (In Post-Confirmation):
+"📅 PRÓXIMOS PASOS SUGERIDOS:
+
+Después de tu Consulta (22 Oct, 10:00):
+├─ Espera 3-5 días → Tendrás tiempo de pensar
+├─ Luego → Demostración (mejor mientras está fresco)
+└─ Después → Decisión de compra (típicamente 1 semana)
+
+¿Te agendo la Demostración para la semana del 27?"
+
+Rules:
+✅ Base timing on typical customer journey
+✅ Show clear milestones
+✅ Offer to pre-book (if OK'd)
+✅ Don't rush, but keep momentum
+✅ Respect customer decision time
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🧠 RECOMMENDATION ALGORITHM
+═══════════════════════════════════════════════════════════════════════════════
+
+STEP 1: Collect Input
+─────────────────────────────────────────────────────────────────────────────
+Input variables:
+- customer_email (to identify customer)
+- customer_tier (TIER 1/2/3/4)
+- selected_service (what they're booking)
+- booking_date (when they're booking)
+- booking_context (create/reschedule/add-on?)
+
+STEP 2: Retrieve Customer Context
+─────────────────────────────────────────────────────────────────────────────
+Call get_customer_history(email):
+- Previous services booked
+- Spend patterns
+- Preferences
+- Last booking date
+
+STEP 3: Generate Recommendation Candidates
+─────────────────────────────────────────────────────────────────────────────
+For each recommendation type:
+  1. COMPLEMENTARY: Get services that pair with selected_service
+  2. UPSELL: Check if selected_service has premium version
+  3. CROSS-SELL: Get alternative services for same need
+  4. BUNDLE: Check available bundles including selected_service
+  5. TIMING: Calculate next recommended service date
+
+STEP 4: Filter by Customer Eligibility
+─────────────────────────────────────────────────────────────────────────────
+For each candidate, check:
+- Does customer qualify? (tier requirements)
+- Did they book this recently? (too fresh?)
+- Did they explicitly decline? (respect "no")
+- Is it available for their dates?
+- Do they have budget? (inferred from tier)
+
+STEP 5: Rank by Relevance
+─────────────────────────────────────────────────────────────────────────────
+Score each candidate:
+- Relevance score (how well does it fit?)
+- Confidence score (how sure are we they want it?)
+- Value score (how much value does it add?)
+- Final rank = Relevance × Confidence × Value
+
+Sort by final rank, descending
+
+STEP 6: Select Top Recommendations
+─────────────────────────────────────────────────────────────────────────────
+Based on context, pick best:
+- During booking: Show max 1-2 (don't overwhelm)
+- After booking: Show max 3 (they have time to think)
+- TIER 1/2: More conservative (1 recommendation)
+- TIER 3: Can show more (they appreciate efficiency)
+
+STEP 7: Format for Presentation
+─────────────────────────────────────────────────────────────────────────────
+For each recommendation:
+- Clear title (what is being recommended)
+- Brief benefit statement (why they should care)
+- Social proof (what others do)
+- Call to action (how to proceed)
+- Easy to decline (respect their choice)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+⏰ TIMING: WHEN TO SHOW RECOMMENDATIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+TIMING 1: DURING Service Selection (Add-On Moment)
+─────────────────────────────────────────────────────────────────────────────
+When: User is viewing service details before booking
+Show: 1 complementary service
+Goal: Encourage bundle booking (same day/time)
+
+Message Style: "Perfect fit"
+"Estos servicios van muy bien juntos. ¿Quieres agendar ambos?"
+
+TIMING 2: BEFORE Confirmation (Final Decision Point)
+─────────────────────────────────────────────────────────────────────────────
+When: User is in final confirmation screen
+Show: 1-2 recommendations (upsell or complementary)
+Goal: Last chance to increase order value
+
+Message Style: "Last chance"
+"Antes de confirmar, ¿te interesa...?"
+
+TIMING 3: AFTER Booking Confirmed (Momentum)
+─────────────────────────────────────────────────────────────────────────────
+When: User sees success confirmation
+Show: Next logical service in journey
+Goal: Keep momentum for next booking
+
+Message Style: "What's next"
+"Perfecto. Tu reserva está confirmada. ¿Quieres agendar también...?"
+
+TIMING 4: IN Post-Confirmation Email
+─────────────────────────────────────────────────────────────────────────────
+When: Confirmation email is sent
+Show: 2-3 related services + timing guidance
+Goal: Prompt future bookings while recent
+
+Message Style: "Planning ahead"
+"Tu Consulta es el 22 Oct. Aquí sugerimos los próximos pasos..."
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 PERSONALIZATION BY TIER
+═══════════════════════════════════════════════════════════════════════════════
+
+TIER 1 (New Customer):
+├─ Be minimal with recommendations (don't overwhelm)
+├─ Show 1 complementary service only
+├─ Use simple language (no jargon)
+├─ Focus on "first-time friendly" options
+└─ Message: "Muchos clientes que hacen esto también hacen..."
+
+TIER 2 (Recurring Customer):
+├─ Show 1-2 recommendations
+├─ Can suggest upsells (they have budget)
+├─ Use their booking history
+├─ Message: "Basado en tu historial, te recomendamos..."
+└─ Offer small loyalty discount on add-ons
+
+TIER 3 (Power Customer):
+├─ Can show up to 3 recommendations
+├─ Suggest bundles (cost-effective for them)
+├─ Use "we know you need X" tone
+├─ Message: "VIP: Exclusivo para ti, recomendamos..."
+└─ Offer significant bundle savings (25%+)
+
+TIER 4 (At-Risk Customer):
+├─ Be very careful with recommendations (no pressure)
+├─ Show value, not upsell (build trust, not revenue)
+├─ Message: "Si necesitas... podemos ayudarte"
+├─ Focus on solving their stated problem
+└─ No aggressive sales tactics
+
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ RECOMMENDATION DISPLAY FORMAT
+═══════════════════════════════════════════════════════════════════════════════
+
+Format: Clean, not Pushy
+
+```
+
+  💡 RECOMENDACIÓN ESPECIAL PARA TI    
+
+                                        
+  **Demostración de Productos**         
+  Ideal después de una Consulta         
+                                        
+  ✓ Ver productos en acción (30 min)   
+  ✓ Resolver preguntas específicas     
+  ✓ Tomar mejor decisión               
+                                        
+  Precio: €60                           
+  Muchos clientes agendas ambas        
+  el mismo día (bonus: descuento 10%)  
+                                        
+  [✅ Agregar a mi reserva]             
+  [❌ No, gracias]                      
+                                        
+
+```
+
+Key Elements:
+✅ Title: Clear, compelling
+✅ Benefit bullets: What they get
+✅ Price: Be transparent
+✅ Social proof: Others do it too
+✅ Incentive: Bonus or saving
+✅ CTA: Add or decline (both prominent)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🚫 ANTI-PATTERNS (What NOT to do)
+═══════════════════════════════════════════════════════════════════════════════
+
+❌ DON'T recommend services:
+- Customer just booked (let them complete transaction first)
+- Customer explicitly declined (respect "no thanks")
+- Customer can't afford (check tier/history)
+- Customer doesn't need (not their use case)
+- Too similar to what they already book
+- In overwhelming numbers (max 2 during booking)
+
+❌ DON'T use language:
+- "You probably need..." (presumptuous)
+- "Upgrade now!" (too salesy)
+- "Don't miss out!" (FOMO tactics)
+- "Only for limited time" (artificial urgency)
+- "Everyone is doing it" (fake social proof)
+
+❌ DON'T timing:
+- During active booking (interrupts flow)
+- Too frequently (annoying)
+- When customer is frustrated (tone-deaf)
+- Before they've completed first booking (low confidence)
+
+✅ DO recommend when:
+- Service clearly adds value
+- Customer is receptive (right context)
+- Recommendation is relevant (checked history)
+- Timing is natural (after purchase, not during)
+- You have confidence it fits their needs
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📊 A/B TESTING FRAMEWORK
+═══════════════════════════════════════════════════════════════════════════════
+
+Test different recommendation strategies:
+
+Test 1: Recommendation Placement
+├─ Control: No recommendation shown
+├─ Variant A: Shown before confirmation
+├─ Variant B: Shown after confirmation
+└─ Metric: Add-on booking rate
+
+Test 2: Recommendation Type
+├─ Control: Complementary service (safe)
+├─ Variant A: Upsell (premium version)
+├─ Variant B: Bundle (package deal)
+└─ Metric: Average order value
+
+Test 3: Message Style
+├─ Control: "Many customers also book..."
+├─ Variant A: "This would save you €50..."
+├─ Variant B: "Perfect next step is..."
+└─ Metric: Click-through rate
+
+Test 4: Offer Incentive
+├─ Control: No discount
+├─ Variant A: 10% discount for add-on
+├─ Variant B: Free add-on setup
+└─ Metric: Acceptance rate
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 IMPLEMENTATION CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+When implementing intelligent recommendations:
+
+□ DATA COLLECTION:
+  □ Identify customer tier
+  □ Retrieve booking history
+  □ Identify selected service
+  □ Check service compatibility
+
+□ RECOMMENDATION GENERATION:
+  □ Generate complementary candidates
+  □ Generate upsell candidates
+  □ Generate cross-sell candidates
+  □ Generate bundle candidates
+  □ Generate timing recommendations
+
+□ FILTERING:
+  □ Check customer qualification
+  □ Check recency (not too fresh)
+  □ Check customer preferences
+  □ Check availability
+  □ Check budget fit
+
+□ RANKING:
+  □ Score by relevance
+  □ Score by confidence
+  □ Score by value
+  □ Rank final recommendations
+
+□ SELECTION:
+  □ Choose top 1-2 (during booking)
+  □ Choose top 2-3 (after booking)
+  □ Tier-based filtering (TIER 1 = conservative)
+
+□ FORMATTING:
+  □ Clear title
+  □ Benefit bullets
+  □ Price/savings
+  □ Social proof
+  □ Call to action
+  □ Easy to decline
+
+□ TESTING:
+  □ A/B test placement
+  □ A/B test recommendation type
+  □ A/B test message style
+  □ A/B test incentives
+  □ Track metrics (CTR, acceptance rate, AOV)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+💰 BUSINESS METRICS TO TRACK
+═══════════════════════════════════════════════════════════════════════════════
+
+Success Metrics:
+├─ Click-through rate (% who see + click recommendation)
+├─ Acceptance rate (% who add the recommended service)
+├─ Average order value (total value per booking, with vs without)
+├─ Customer lifetime value (repeat purchase rate)
+└─ Customer satisfaction (NPS - don't annoy them)
+
+Target Metrics:
+├─ CTR: 20-30% (show relevant recommendations)
+├─ Acceptance: 5-15% (real value, not forced)
+├─ AOV increase: +10-20% (bookings with add-ons)
+├─ CLV improvement: +5-10% (loyalty boost)
+└─ NPS impact: No negative (keep experience positive)
+
+
+═══════════════════════════════════════════════════════════════════════════════

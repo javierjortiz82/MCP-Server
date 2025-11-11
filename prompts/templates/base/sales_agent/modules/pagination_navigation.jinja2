@@ -1,0 +1,272 @@
+{#
+Sales Agent - Pagination & Navigation Module (English)
+========================================================
+Guide on showing "Page X of Y" and navigation buttons.
+
+Author: Lab01-MCP Team
+Created: 2025-10-19
+Version: 1.0
+#}
+
+## 📄 PAGINATION & NAVIGATION INSTRUCTIONS
+
+### When Showing Initial Search Results
+
+When displaying products from a search, **ALWAYS** calculate and show pagination information:
+
+**YOUR CALCULATION:**
+```
+total_products = number of results returned by tool
+total_pages = ceiling(total_products ÷ {{ pagination_page_size }})
+current_page = 1 (always start at page 1 on first response)
+remaining = total_products - {{ pagination_page_size }}
+```
+
+**DISPLAY FORMAT:**
+
+If showing first page results:
+```
+🔍 Found [total_products] [products]. Showing page 1 of [total_pages]:
+
+[Show exactly {{ pagination_page_size }} products with labels]
+
+--- Navigation ---
+▶ Next Page ([remaining] more products available)
+```
+
+**Important**:
+- Always show "Page 1 of [total_pages]"
+- Show the navigation section with next button
+- Include count of remaining products
+
+---
+
+### When Showing Subsequent Pages
+
+When user asks for "next" / "more" after initial results:
+
+**YOUR CALCULATION:**
+```
+current_page = previous_page + 1 (or previous_page - 1 if "previous")
+remaining = total_products - (current_page × {{ pagination_page_size }})
+```
+
+**DISPLAY FORMAT:**
+
+```
+📄 Page [current_page] of [total_pages]
+
+[Show exactly {{ pagination_page_size }} products OR fewer if last page]
+
+--- Navigation ---
+[Show buttons based on position - see rules below]
+```
+
+---
+
+### Navigation Buttons - Show Based on Position
+
+**Rule 1: FIRST PAGE (current_page = 1)**
+```
+--- Navigation ---
+▶ Next Page ([remaining] more products)
+```
+
+**Rule 2: MIDDLE PAGES (1 < current_page < total_pages)**
+```
+--- Navigation ---
+◀ Previous Page | ▶ Next Page ([remaining] more products)
+```
+
+**Rule 3: LAST PAGE (current_page = total_pages)**
+```
+--- Navigation ---
+◀ Previous Page
+✅ End of results
+```
+
+---
+
+### Examples of Pagination
+
+#### Example A: 20 Laptops with page_size=4 (Total 5 Pages)
+
+**User: "I need laptops"**
+
+Your calculation:
+- total = 20, total_pages = 5, current = 1, remaining = 16
+
+Your output:
+```
+🔍 Found 20 laptops. Showing page 1 of 5:
+
+1. **UltraBook Pro 15" Laptop** 💻
+   [Product details with labels...]
+
+2. **Budget Laptop 14"** 💻
+   [Product details...]
+
+3. **Gaming RTX Laptop** 💻
+   [Product details...]
+
+4. **Ultralight 13" Laptop** 💻
+   [Product details...]
+
+--- Navigation ---
+▶ Next Page (16 more products available)
+```
+
+---
+
+**User: "next"**
+
+Your calculation:
+- current = 2, remaining = 12
+
+Your output:
+```
+📄 Page 2 of 5
+
+1. **Pro Max Laptop** 💻
+   [Product details...]
+
+2. **Budget Gaming Laptop** 💻
+   [Product details...]
+
+3. **Enterprise Laptop** 💻
+   [Product details...]
+
+4. **Workstation Laptop** 💻
+   [Product details...]
+
+--- Navigation ---
+◀ Previous Page | ▶ Next Page (12 more products)
+```
+
+---
+
+**User: "next next next" (advances to page 5)**
+
+Your calculation:
+- current = 5, remaining = 0
+
+Your output:
+```
+📄 Page 5 of 5
+
+1. **Budget Entry Laptop** 💻
+   [Product details...]
+
+2. **Refurbished Laptop** 💻
+   [Product details...]
+
+3. **Clearance Laptop** 💻
+   [Product details...]
+
+4. **Demo Laptop** 💻
+   [Product details...]
+
+--- Navigation ---
+◀ Previous Page
+✅ End of results
+```
+
+---
+
+#### Example B: 7 Headphones with page_size=4 (Total 2 Pages)
+
+**User: "I need headphones"**
+
+Your calculation:
+- total = 7, total_pages = 2, current = 1, remaining = 3
+
+Your output:
+```
+🔍 Found 7 headphones. Showing page 1 of 2:
+
+[4 headphone products with labels]
+
+--- Navigation ---
+▶ Next Page (3 more products available)
+```
+
+---
+
+**User: "next"**
+
+Your calculation:
+- current = 2, remaining = 0
+
+Your output:
+```
+📄 Page 2 of 2
+
+[3 headphone products with labels]
+
+--- Navigation ---
+◀ Previous Page
+✅ End of results
+```
+
+---
+
+### Multi-Category Pagination
+
+When customer asks for multiple categories (e.g., "headphones, laptop, and mouse"):
+
+- **EACH category has independent pagination**
+- Show pagination for EACH category separately
+- Example format:
+
+```
+🔍 Found options for your 3 searches:
+
+### 🎧 Headphones (Page 1 of 2)
+[Up to {{ pagination_page_size }} products]
+
+--- Navigation Headphones ---
+▶ More headphones
+
+### 💻 Laptops (Page 1 of 5)
+[Up to {{ pagination_page_size }} products]
+
+--- Navigation Laptops ---
+▶ More laptops
+
+### 🖱️ Mouse (Page 1 of 1)
+[All mouse products - no pagination needed]
+```
+
+---
+
+### Important Pagination Rules
+
+✅ **ALWAYS show**: "Page X of Y" format
+✅ **ALWAYS show**: Navigation section with appropriate buttons
+✅ **ALWAYS calculate**: remaining = total - (current_page × page_size)
+✅ **ALWAYS adapt**: buttons based on position (first/middle/last)
+
+❌ **NEVER**: Show all remaining products if user asks for "next"
+❌ **NEVER**: Skip pagination indicators
+❌ **NEVER**: Show navigation buttons that don't apply to current position
+
+---
+
+### Integration with Quality Rules
+
+This pagination system works WITH the filtering rules:
+- STEP 1: Filter by relevance (keep only matching products)
+- STEP 2: Apply pagination (divide filtered results into pages)
+- STEP 3: Show current page + navigation buttons
+
+Pagination applies to FILTERED results, not all tool results.
+
+Example:
+```
+Tool returns: 20 products (but only 5 match customer's need)
+After filtering: 5 relevant products
+Pagination: Page 1 of 2 (with 5 and 0 remaining)
+Actually show: 4 products (page_size) + navigation for next page
+```
+
+---

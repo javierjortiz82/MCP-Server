@@ -1,0 +1,45 @@
+# Demo Agent Requirements
+# Python 3.10+ compatible
+
+# Core dependencies
+pydantic>=2.11.0
+pydantic-settings>=2.11.0
+python-dotenv>=1.0.0
+email-validator>=2.2.0  # For email validation in Pydantic
+
+# FastAPI and async web server
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+jinja2>=3.1.0
+
+# Database
+asyncpg>=0.30.0
+psycopg2-binary>=2.9.10
+sqlalchemy>=2.0.36
+pgvector>=0.4.1  # Vector database support for mcp_server
+
+# Google Gemini API
+google-genai>=1.49.0
+
+# MCP (Model Context Protocol) - required by client_mcp
+mcp==1.21.0  # Official MCP SDK from Anthropic (latest stable)
+
+# Security & Authentication
+requests>=2.32.0  # For reCAPTCHA verification
+bcrypt>=4.2.0  # For password hashing
+PyJWT[crypto]>=2.9.0  # For Clerk JWT verification
+httpx>=0.28.0  # For async HTTP requests to Clerk API
+svix>=1.40.0  # For Clerk webhook signature verification
+
+# Logging
+python-json-logger==2.0.7
+
+# Development
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+black>=24.0.0
+ruff>=0.8.0
+mypy>=1.13.0
+
+# Optional: Redis for advanced caching (fallback to PostgreSQL)
+# redis==5.0.1
