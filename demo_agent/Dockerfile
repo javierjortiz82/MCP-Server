@@ -39,8 +39,9 @@ COPY . /app/demo_agent/
 WORKDIR /app
 ENV PYTHONPATH=/app:/app/agent/src:$PYTHONPATH
 
-# Create logs directory and set permissions
-RUN mkdir -p /app/demo_agent/logs && chmod -R 755 /app
+# Create logs directories and set permissions
+RUN mkdir -p /app/demo_agent/logs /app/client_mcp/logs && \
+    chmod -R 755 /app
 
 # Non-root user for security
 RUN useradd -m -u 1000 demouser && \

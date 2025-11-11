@@ -8,7 +8,7 @@
 # ============================================================================
 
 # Core MCP SDK
-mcp>=1.2.0                    # Official MCP SDK from Anthropic
+mcp==1.21.0                   # Official MCP SDK from Anthropic (latest stable)
 
 # Google GenAI for LLM
 google-genai>=1.49.0          # Google GenAI SDK for Gemini models

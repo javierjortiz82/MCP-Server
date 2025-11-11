@@ -81,8 +81,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      # Check MCP server responsiveness and database connectivity
-      test: ["CMD", "curl", "-f", "-s", "-m", "5", "http://localhost:8009/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -110,14 +109,11 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      # Email worker health check - verify config and database connectivity
-      # Since email-worker is a background service (no HTTP endpoint),
-      # we verify configuration initialization and DB access
-      test: ["CMD", "python", "-c", "import asyncio; from email_service.config import EmailConfig; from email_service.db.connection import get_db; EmailConfig(); print('Email service healthy')"]
-      interval: 60s
-      timeout: 15s
+      test: ["CMD", "python", "-c", "from email_service.config import EmailConfig; EmailConfig(); print('healthy')"]
+      interval: 30s
+      timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 10s
 
   demo-agent:
     build:
@@ -140,7 +136,10 @@ services:
     volumes:
       - demo_logs:/app/demo_agent/logs
       - agent_logs:/app/agent/logs
+      - client_mcp_logs:/app/client_mcp/logs
       - ../agent:/app/agent:ro
+      - ../client_mcp:/app/client_mcp
+      - ../mcp_server:/app/mcp_server:ro
       - ../prompts:/app/prompts:ro
     networks:
       - mcp-network
@@ -150,9 +149,7 @@ services:
       email-worker:
         condition: service_healthy
     healthcheck:
-      # Check demo-agent API responsiveness and service initialization
-      # Endpoint: GET /health returns {status: ok, service: demo_agent}
-      test: ["CMD", "curl", "-f", "-s", "-m", "5", "-w", "%{http_code}", "http://localhost:8082/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -170,6 +167,8 @@ volumes:
   demo_logs:
     driver: local
   agent_logs:
+    driver: local
+  client_mcp_logs:
     driver: local
 
 networks:
