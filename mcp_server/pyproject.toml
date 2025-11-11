@@ -5,7 +5,7 @@ requires = ["setuptools", "wheel"]
 name = "mcp-server"
 version = "1.0.0"
 dependencies = [
-    "mcp>=1.2.0",
+    "mcp==1.21.0",  # Official MCP SDK from Anthropic (latest stable)
     "psycopg2-binary>=2.9.10",
     "google-genai>=1.49.0",
     "pgvector>=0.4.1",
