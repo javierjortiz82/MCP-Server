@@ -9,65 +9,42 @@ FIX 3.2: Async database integration
 Author: Lab01-MCP Team
 Created: 2025-10-31
 Version: 1.1.0 (Async)
+Refactored: 2025-11-10 (Modular routes)
 """
 
 from contextlib import asynccontextmanager
 from uuid import uuid4
-import json
 
-from fastapi import FastAPI, HTTPException, Header, Query, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from demo_agent.agent import DemoAgent
 from demo_agent.config.settings import config
-from demo_agent.middleware.security_headers import SecurityHeadersMiddleware
+from demo_agent.db.connection import close_db, init_db
+from demo_agent.logger import logger
+from demo_agent.middleware.api_version import APIVersionMiddleware
 from demo_agent.middleware.rate_limit_headers import RateLimitHeadersMiddleware
 from demo_agent.middleware.request_size_limit import RequestSizeLimitMiddleware
-from demo_agent.middleware.api_version import APIVersionMiddleware
-from demo_agent.db.connection import close_db, get_db, init_db
-from demo_agent.logger import logger
-from demo_agent.utils.sanitizers import (
-    sanitize_html,
-    sanitize_user_input,
-    sanitize_error_message,
-    sanitize_response_data,
+from demo_agent.middleware.security_headers import SecurityHeadersMiddleware
+from demo_agent.observability.context import (
+    clear_request_context,
+    create_request_context,
 )
-from demo_agent.utils.validators import validate_session_id
-from demo_agent.observability.context import create_request_context, clear_request_context
 from demo_agent.observability.correlation import CorrelationID
 from demo_agent.observability.metrics import get_metrics_collector
-from demo_agent.models.requests import DemoRequest
-from demo_agent.models.responses import DemoResponse
-from demo_agent.models.contact import ContactRequest, ContactResponse
-from demo_agent.models.booking import BookingRequest, BookingResponse
-from demo_agent.models.user import (
-    OAuthRegisterRequest,
-    OTPPurpose,
-    RegisterResponse,
-    ResendOTPRequest,
-    ResendOTPResponse,
-    UserRegisterRequest,
-    VerifyOTPRequest,
-    VerifyOTPResponse,
-)
+from demo_agent.security.clerk_middleware import ClerkAuthMiddleware
 from demo_agent.services.email_integration import EmailIntegrationService
 from demo_agent.services.otp_service import OTPService
 from demo_agent.services.user_service import UserService
-from demo_agent.services.clerk_service import get_clerk_service
-from demo_agent.services.client_ip_service import extract_client_ip
-from demo_agent.security.clerk_middleware import ClerkAuthMiddleware, require_auth, get_current_user
-from demo_agent.webhooks.clerk_webhooks import get_clerk_webhook_handler
-from demo_agent import auth_endpoints
 
-# ============================================================================
-# Global State
-# ============================================================================
-
-demo_agent: DemoAgent | None = None
-user_service: UserService | None = None
-otp_service: OTPService | None = None
-email_service: EmailIntegrationService | None = None
+# Import modular routers
+from demo_agent.routes import (
+    auth_router,
+    demo_router,
+    forms_router,
+    health_router,
+    webhooks_router,
+)
 
 
 # ============================================================================
@@ -77,9 +54,17 @@ email_service: EmailIntegrationService | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Handle startup and shutdown events."""
-    global demo_agent, user_service, otp_service, email_service
+    """Handle startup and shutdown events.
 
+    Initializes all services and database connections on startup,
+    and properly closes them on shutdown.
+
+    Args:
+        app: FastAPI application instance.
+
+    Yields:
+        None: Control to the application.
+    """
     # Startup
     logger.info(
         f"🚀 Demo Agent starting on {config.DEMO_AGENT_HOST}:{config.DEMO_AGENT_PORT}"
@@ -96,17 +81,17 @@ async def lifespan(app: FastAPI):
         await init_db()
         logger.info("✅ Database connection pool initialized (asyncpg)")
 
-        # Initialize services
-        demo_agent = DemoAgent()
+        # Initialize services and store in app state
+        app.state.demo_agent = DemoAgent()
         logger.info("✅ Demo Agent initialized")
 
-        user_service = UserService()
+        app.state.user_service = UserService()
         logger.info("✅ User Service initialized")
 
-        otp_service = OTPService()
+        app.state.otp_service = OTPService()
         logger.info("✅ OTP Service initialized")
 
-        email_service = EmailIntegrationService()
+        app.state.email_service = EmailIntegrationService()
         logger.info("✅ Email Integration Service initialized")
 
     except Exception as e:
@@ -127,7 +112,13 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    """Create and configure FastAPI application."""
+    """Create and configure FastAPI application.
+
+    Sets up all middleware, routers, and observability components.
+
+    Returns:
+        FastAPI: Configured FastAPI application instance.
+    """
     app = FastAPI(
         title="Demo Agent API",
         description="FAQ-based demo agent with token-bucket rate limiting",
@@ -136,10 +127,11 @@ def create_app() -> FastAPI:
     )
 
     # ========================================================================
-    # Request Size Limit Middleware (Phase 4 - LOW Priority)
+    # Middleware Configuration (Order matters: first added = last executed)
     # ========================================================================
+
+    # Request Size Limit (Phase 4 - LOW Priority)
     # SECURITY (CWE-400 fix): Prevent DoS via oversized request payloads
-    # Must be added FIRST to reject huge requests before any processing
     app.add_middleware(
         RequestSizeLimitMiddleware,
         max_size=50 * 1024,  # 50 KB default
@@ -147,18 +139,12 @@ def create_app() -> FastAPI:
             "/v1/demo": 10 * 1024,  # 10 KB for user queries
             "/v1/webhooks/clerk": 100 * 1024,  # 100 KB for webhooks
             "/v1/auth/register": 10 * 1024,  # 10 KB for registration
-        }
+        },
     )
     logger.info("Request size limit middleware registered")
 
-    # ========================================================================
     # CORS Middleware (SECURITY HARDENED)
-    # ========================================================================
-    # IMPORTANT: Must be added AFTER size limit so it executes LAST in middleware chain
-    # This ensures CORS headers are added to all responses, including auth errors
-    # Configuration loaded from environment variables (see config/settings.py)
-
-    # SECURITY (CWE-942 fix): Validate CORS origins don't contain wildcards
+    # SECURITY (CWE-942 fix): Validate and restrict CORS configuration
     cors_origins_raw = [origin.strip() for origin in config.CORS_ALLOW_ORIGINS.split(",")]
     cors_origins = []
 
@@ -179,7 +165,9 @@ def create_app() -> FastAPI:
 
         # SECURITY: Validate origin is a valid URL
         if not origin.startswith(("http://", "https://")):
-            logger.error(f"SECURITY ERROR: Invalid origin '{origin}' must start with http:// or https://")
+            logger.error(
+                f"SECURITY ERROR: Invalid origin '{origin}' must start with http:// or https://"
+            )
             raise ValueError(f"Invalid CORS origin '{origin}' - must be a complete URL")
 
         cors_origins.append(origin)
@@ -199,7 +187,9 @@ def create_app() -> FastAPI:
             )
         cors_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
     else:
-        cors_methods = [method.strip().upper() for method in config.CORS_ALLOW_METHODS.split(",")]
+        cors_methods = [
+            method.strip().upper() for method in config.CORS_ALLOW_METHODS.split(",")
+        ]
 
     # SECURITY (CWE-942 fix): Restrict headers if credentials are allowed
     if config.CORS_ALLOW_HEADERS == "*":
@@ -208,13 +198,19 @@ def create_app() -> FastAPI:
                 "SECURITY WARNING: CORS allows all headers (*) with credentials. "
                 "For production, restrict to: Authorization, Content-Type, X-Request-ID"
             )
-        # Allow common headers but not all
         cors_headers = [
-            "Authorization", "Content-Type", "Accept", "Origin",
-            "X-Request-ID", "X-Correlation-ID", "User-Agent"
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "Origin",
+            "X-Request-ID",
+            "X-Correlation-ID",
+            "User-Agent",
         ]
     else:
-        cors_headers = [header.strip() for header in config.CORS_ALLOW_HEADERS.split(",")]
+        cors_headers = [
+            header.strip() for header in config.CORS_ALLOW_HEADERS.split(",")
+        ]
 
     logger.info(
         f"CORS configured: origins={len(cors_origins)}, "
@@ -231,11 +227,8 @@ def create_app() -> FastAPI:
         allow_headers=cors_headers,
     )
 
-    # ========================================================================
     # Security Headers Middleware
-    # ========================================================================
     # SECURITY (CWE-1021 fix): Add OWASP recommended security headers
-    # Protects against: XSS, clickjacking, MIME sniffing, etc.
     app.add_middleware(
         SecurityHeadersMiddleware,
         enable_hsts=True,  # Enforce HTTPS (only applied on HTTPS requests)
@@ -245,35 +238,22 @@ def create_app() -> FastAPI:
     )
     logger.info("Security headers middleware registered")
 
-    # ========================================================================
     # Rate Limit Headers Middleware (Phase 4 - LOW Priority)
-    # ========================================================================
     # SECURITY (CWE-770 defense-in-depth): Add rate limit headers to responses
-    # Helps clients manage usage and avoid quota exhaustion
-    app.add_middleware(
-        RateLimitHeadersMiddleware,
-        max_tokens=config.DEMO_MAX_TOKENS
-    )
+    app.add_middleware(RateLimitHeadersMiddleware, max_tokens=config.DEMO_MAX_TOKENS)
     logger.info("Rate limit headers middleware registered")
 
-    # ========================================================================
     # API Version Headers Middleware (Phase 4 - LOW Priority)
-    # ========================================================================
-    # Adds version information to help clients track compatibility
-    # and manage API deprecations
     app.add_middleware(
         APIVersionMiddleware,
         api_version="1.0.0",
         min_client_version="1.0.0",
-        deprecated_endpoints={}  # No deprecated endpoints yet
+        deprecated_endpoints={},  # No deprecated endpoints yet
     )
     logger.info("API version headers middleware registered")
 
-    # ========================================================================
     # Clerk Authentication Middleware
-    # ========================================================================
     # IMPORTANT: Added AFTER CORSMiddleware so it executes BEFORE CORS
-    # This allows authentication checks before CORS processing
     app.add_middleware(ClerkAuthMiddleware)
 
     logger.info(f"✅ CORS configured: {len(cors_origins)} allowed origins")
@@ -292,12 +272,16 @@ def create_app() -> FastAPI:
         - Request context creation
         - Request latency metrics
         - Automatic context cleanup
+
+        Args:
+            request: FastAPI request object.
+            call_next: Next middleware/handler in chain.
+
+        Returns:
+            Response: HTTP response with observability headers.
         """
         # 1. Extract or generate correlation ID
-        correlation_id = request.headers.get(
-            "X-Correlation-ID",
-            str(uuid4())
-        )
+        correlation_id = request.headers.get("X-Correlation-ID", str(uuid4()))
         CorrelationID.set(correlation_id)
 
         # 2. Create request context
@@ -315,8 +299,7 @@ def create_app() -> FastAPI:
         try:
             # Record operation latency
             async with metrics.record_latency_async(
-                "http_request",
-                tags={"method": request.method, "path": request.url.path}
+                "http_request", tags={"method": request.method, "path": request.url.path}
             ):
                 response = await call_next(request)
 
@@ -336,25 +319,16 @@ def create_app() -> FastAPI:
             CorrelationID.clear()
 
     # ========================================================================
-    # Health Check Endpoint
-    # ========================================================================
-
-    @app.get("/health", tags=["Health"])
-    async def health_check():
-        """Health check endpoint for Docker healthcheck."""
-        return {
-            "status": "ok",
-            "service": "demo_agent",
-            "version": "1.0.0",
-        }
-
-    # ========================================================================
     # Root Information Endpoint
     # ========================================================================
 
     @app.get("/", tags=["Info"])
     async def root():
-        """API information endpoint."""
+        """API information endpoint.
+
+        Returns:
+            dict: Service information and available endpoints.
+        """
         return {
             "service": "Demo Agent API",
             "version": "2.0.0",
@@ -371,1407 +345,16 @@ def create_app() -> FastAPI:
         }
 
     # ========================================================================
-    # Authentication Endpoints
+    # Register Modular Routers
     # ========================================================================
 
-    @app.post(
-        "/v1/auth/register",
-        response_model=RegisterResponse,
-        tags=["Authentication"],
-    )
-    async def register(request_data: UserRegisterRequest, request: Request):
-        """Register new user with email/password.
-
-        Creates user account and sends OTP verification email.
-
-        Request:
-        ```json
-        {
-          "email": "user@example.com",
-          "full_name": "John Doe",
-          "password": "SecurePassword123",
-          "preferred_language": "es",
-          "registration_source": "web"
-        }
-        ```
-
-        Response:
-        ```json
-        {
-          "success": true,
-          "message": "Registration successful! Check your email.",
-          "user": { ... },
-          "requires_verification": true,
-          "verification_sent": true
-        }
-        ```
-        """
-        global user_service, otp_service, email_service
-        if not user_service or not otp_service or not email_service:
-            raise HTTPException(status_code=500, detail="Services not initialized")
-
-        return await auth_endpoints.register_email(
-            request_data=request_data,
-            client_request=request,
-            user_service=user_service,
-            otp_service=otp_service,
-            email_service=email_service,
-        )
-
-    @app.post(
-        "/v1/auth/register/oauth",
-        response_model=RegisterResponse,
-        tags=["Authentication"],
-    )
-    async def register_with_oauth(
-        request_data: OAuthRegisterRequest, request: Request
-    ):
-        """Register new user with OAuth provider (Google, Apple).
-
-        OAuth users are automatically verified (email verified by provider).
-
-        Request:
-        ```json
-        {
-          "email": "user@gmail.com",
-          "full_name": "John Doe",
-          "auth_provider": "google",
-          "oauth_provider_id": "1234567890",
-          "preferred_language": "es",
-          "registration_source": "web"
-        }
-        ```
-
-        Response:
-        ```json
-        {
-          "success": true,
-          "message": "Registration successful! Your account is now active.",
-          "user": { ... },
-          "requires_verification": false,
-          "verification_sent": false
-        }
-        ```
-        """
-        global user_service
-        if not user_service:
-            raise HTTPException(status_code=500, detail="User service not initialized")
-
-        return await auth_endpoints.register_oauth(
-            request_data=request_data,
-            client_request=request,
-            user_service=user_service,
-        )
-
-    @app.post(
-        "/v1/auth/verify-otp",
-        response_model=VerifyOTPResponse,
-        tags=["Authentication"],
-    )
-    async def verify_otp_code(request_data: VerifyOTPRequest):
-        """Verify OTP code and activate user account.
-
-        Request:
-        ```json
-        {
-          "email": "user@example.com",
-          "otp_code": "123456",
-          "purpose": "email_verification"
-        }
-        ```
-
-        Response (Success):
-        ```json
-        {
-          "success": true,
-          "message": "Email verified successfully!",
-          "is_active": true,
-          "user": { ... }
-        }
-        ```
-
-        Response (Invalid):
-        ```json
-        {
-          "success": false,
-          "message": "Invalid code. 2 attempts remaining.",
-          "is_active": false
-        }
-        ```
-        """
-        global user_service, otp_service
-        if not user_service or not otp_service:
-            raise HTTPException(status_code=500, detail="Services not initialized")
-
-        return await auth_endpoints.verify_otp(
-            request_data=request_data,
-            user_service=user_service,
-            otp_service=otp_service,
-        )
-
-    @app.post(
-        "/v1/auth/resend-otp",
-        response_model=ResendOTPResponse,
-        tags=["Authentication"],
-    )
-    async def resend_otp_code(request_data: ResendOTPRequest, request: Request):
-        """Resend OTP verification email.
-
-        Request:
-        ```json
-        {
-          "email": "user@example.com",
-          "purpose": "email_verification"
-        }
-        ```
-
-        Response (Success):
-        ```json
-        {
-          "success": true,
-          "message": "Verification code sent!",
-          "expires_at": "2025-11-01T12:00:00Z"
-        }
-        ```
-
-        Response (Rate Limited):
-        ```json
-        {
-          "success": false,
-          "message": "Please wait 45 seconds before requesting a new code.",
-          "cooldown_seconds": 45
-        }
-        ```
-        """
-        global user_service, otp_service, email_service
-        if not user_service or not otp_service or not email_service:
-            raise HTTPException(status_code=500, detail="Services not initialized")
-
-        return await auth_endpoints.resend_otp(
-            request_data=request_data,
-            client_request=request,
-            user_service=user_service,
-            otp_service=otp_service,
-            email_service=email_service,
-        )
-
-    # ========================================================================
-    # Clerk Webhook Endpoint
-    # ========================================================================
-
-    @app.post("/v1/webhooks/clerk", tags=["Webhooks"])
-    async def clerk_webhook(
-        request: Request,
-        svix_id: str = Header(..., alias="svix-id"),
-        svix_timestamp: str = Header(..., alias="svix-timestamp"),
-        svix_signature: str = Header(..., alias="svix-signature"),
-    ):
-        """Receive webhooks from Clerk Identity Provider.
-
-        Processes user and session events:
-        - user.created: New user registration
-        - user.updated: User profile changes
-        - user.deleted: User account deletion
-        - session.created: New login session
-
-        Headers Required:
-        - svix-id: Webhook message ID
-        - svix-timestamp: Event timestamp
-        - svix-signature: HMAC-SHA256 signature for verification
-
-        Security:
-        - Verifies webhook signature to prevent spoofing
-        - Rejects events older than 5 minutes (replay protection)
-
-        Response (Success):
-        ```json
-        {
-          "success": true,
-          "message": "Event user.created processed successfully",
-          "event_id": "msg_2abc..."
-        }
-        ```
-
-        Response (Error):
-        ```json
-        {
-          "success": false,
-          "error": "Invalid webhook signature"
-        }
-        ```
-        """
-        webhook_handler = get_clerk_webhook_handler()
-        return await webhook_handler.handle_webhook(
-            request=request,
-            svix_id=svix_id,
-            svix_timestamp=svix_timestamp,
-            svix_signature=svix_signature,
-        )
-
-    # ========================================================================
-    # Clerk Authentication Endpoints
-    # ========================================================================
-
-    @app.get("/v1/auth/me", tags=["Authentication"])
-    async def get_current_user_info(request: Request):
-        """Get current authenticated user information.
-
-        Requires: Valid Clerk Bearer token in Authorization header
-
-        Request Headers:
-        ```
-        Authorization: Bearer <clerk_token>
-        ```
-
-        Response (Success):
-        ```json
-        {
-          "success": true,
-          "user": {
-            "clerk_user_id": "user_2abc...",
-            "email": "user@example.com",
-            "full_name": "John Doe",
-            "email_verified": true,
-            "db_user_id": 123,
-            "is_active": true,
-            "clerk_metadata": {
-              "public_metadata": {"company": "Acme"},
-              "private_metadata": {},
-              "profile_image_url": "https://..."
-            },
-            "preferred_language": "es",
-            "created_at": "2025-11-03T10:30:00Z",
-            "last_login_at": "2025-11-03T14:25:00Z"
-          }
-        }
-        ```
-
-        Response (Error - Not Authenticated):
-        ```json
-        {
-          "success": false,
-          "error": "Unauthorized",
-          "message": "Missing Authorization header"
-        }
-        ```
-        """
-        # require_auth will raise 401 if not authenticated
-        user = require_auth(request)
-
-        # Fetch full user details from database if db_user_id exists
-        clerk_service = get_clerk_service()
-        full_user = None
-
-        if user.get("clerk_user_id"):
-            full_user = await clerk_service.get_user_by_clerk_id(user["clerk_user_id"])
-
-        return {
-            "success": True,
-            "user": full_user if full_user else user,
-        }
-
-    @app.post("/v1/auth/check-migration", tags=["Authentication"])
-    async def check_migration_status(request: Request):
-        """Check if a legacy user needs to migrate to Clerk.
-
-        Used by legacy auth endpoints to redirect users to Clerk login.
-
-        Request:
-        ```json
-        {
-          "email": "user@example.com"
-        }
-        ```
-
-        Response (Migration Required):
-        ```json
-        {
-          "success": true,
-          "requires_migration": true,
-          "user_id": 123,
-          "auth_provider": "email",
-          "migration_status": "pending",
-          "message": "Please log in with Clerk to migrate your account"
-        }
-        ```
-
-        Response (No Migration Required):
-        ```json
-        {
-          "success": true,
-          "requires_migration": false,
-          "message": "User already migrated or does not exist"
-        }
-        ```
-        """
-        try:
-            body = await request.json()
-            email = body.get("email")
-
-            if not email:
-                raise HTTPException(status_code=400, detail="Email is required")
-
-            clerk_service = get_clerk_service()
-            requires_migration, user_info = await clerk_service.check_migration_required(email)
-
-            if requires_migration and user_info:
-                return {
-                    "success": True,
-                    "requires_migration": True,
-                    "user_id": user_info["user_id"],
-                    "auth_provider": user_info["auth_provider"],
-                    "migration_status": user_info["migration_status"],
-                    "message": "Please log in with Clerk to migrate your account",
-                }
-            else:
-                return {
-                    "success": True,
-                    "requires_migration": False,
-                    "message": "User already migrated or does not exist",
-                }
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Error checking migration status: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error checking migration status: {str(e)}"
-            )
-
-    # ========================================================================
-    # Demo Query Endpoint
-    # ========================================================================
-
-    @app.post("/v1/demo", response_model=DemoResponse, tags=["Demo"])
-    async def demo_query(request_data: DemoRequest, request: Request):
-        """Process a demo query with token-bucket rate limiting.
-
-        Request:
-        ```json
-        {
-          "user_id": "user_123",
-          "session_id": "sess_abc",
-          "input": "¿Cuánto cuesta un laptop?",
-          "language": "es",
-          "metadata": {
-            "ip": "203.0.113.42",
-            "user_agent": "Mozilla/5.0...",
-            "fingerprint": "hash123"
-          }
-        }
-        ```
-
-        Response (Success):
-        ```json
-        {
-          "success": true,
-          "response": "Los laptops varían entre $500 y $3000...",
-          "tokens_used": 250,
-          "tokens_remaining": 4750,
-          "warning": {
-            "is_warning": false,
-            "message": null,
-            "percentage_used": 5
-          },
-          "session_id": "sess_abc",
-          "created_at": "2025-10-31T12:30:45Z"
-        }
-        ```
-
-        Response (Quota Exceeded - 429):
-        ```json
-        {
-          "success": false,
-          "error": "demo_quota_exceeded",
-          "message": "Demo bloqueada. Límite de 5,000 tokens alcanzado...",
-          "retry_after_seconds": 64800,
-          "blocked_until": "2025-11-01T12:30:45Z"
-        }
-        ```
-        """
-        try:
-            global demo_agent, user_service
-            if not demo_agent or not user_service:
-                logger.error("Services not initialized")
-                raise HTTPException(
-                    status_code=500,
-                    detail="Services not initialized",
-                )
-
-            # STEP 1: Get authenticated user from Clerk middleware
-            # SECURITY: Only Clerk authentication is allowed (CWE-862 fix)
-            authenticated_user = get_current_user(request)
-
-            if not authenticated_user or not authenticated_user.get("db_user_id"):
-                # No Clerk authentication found - reject request
-                logger.error("Authentication required: No valid Clerk session found")
-                return JSONResponse(
-                    status_code=401,
-                    content={
-                        "success": False,
-                        "error": "authentication_required",
-                        "message": "Please log in with Clerk to use this endpoint.",
-                    },
-                )
-
-            # User authenticated via Clerk - use db_user_id from middleware
-            user_id = authenticated_user["db_user_id"]
-            logger.info(f"Clerk-authenticated user: {user_id}")
-
-            # STEP 2: Validate user exists and is active
-            user_query = """
-                SELECT id, email, is_active, is_email_verified, is_suspended, is_deleted
-                FROM :SCHEMA_NAME.demo_users
-                WHERE id = %s
-            """
-            user_result = await user_service.db.execute_one(user_query, (user_id,))
-
-            if not user_result:
-                logger.warning(f"User ID {user_id} not found")
-                return JSONResponse(
-                    status_code=403,
-                    content={
-                        "success": False,
-                        "error": "user_not_found",
-                        "message": "User account not found. Please register first.",
-                    },
-                )
-
-            # Check if user is active and verified
-            if not user_result.get("is_active"):
-                logger.warning(f"User ID {user_id} is not active")
-                return JSONResponse(
-                    status_code=403,
-                    content={
-                        "success": False,
-                        "error": "account_not_active",
-                        "message": (
-                            "Your account is not active. "
-                            "Please verify your email address first."
-                        ),
-                    },
-                )
-
-            if not user_result.get("is_email_verified"):
-                logger.warning(f"User ID {user_id} email not verified")
-                return JSONResponse(
-                    status_code=403,
-                    content={
-                        "success": False,
-                        "error": "email_not_verified",
-                        "message": "Please verify your email address first.",
-                    },
-                )
-
-            if user_result.get("is_suspended"):
-                logger.warning(f"User ID {user_id} is suspended")
-                return JSONResponse(
-                    status_code=403,
-                    content={
-                        "success": False,
-                        "error": "account_suspended",
-                        "message": "Your account has been suspended.",
-                    },
-                )
-
-            if user_result.get("is_deleted"):
-                logger.warning(f"User ID {user_id} is deleted")
-                return JSONResponse(
-                    status_code=403,
-                    content={
-                        "success": False,
-                        "error": "account_deleted",
-                        "message": "Your account has been deleted.",
-                    },
-                )
-
-            # STEP 3: Use user_id as user_key for token tracking
-            user_key = str(user_id)
-            user_email = user_result.get("email")
-
-            # SECURITY (CWE-384 fix): Validate or generate session_id
-            if request_data.session_id:
-                # Validate provided session_id is a valid UUID v4
-                is_valid, error_msg = validate_session_id(request_data.session_id)
-                if not is_valid:
-                    logger.warning(
-                        f"Invalid session_id format from user {user_id}: {error_msg}"
-                    )
-                    # Generate new secure session_id instead of using invalid one
-                    session_id = str(uuid4())
-                else:
-                    session_id = request_data.session_id
-            else:
-                # Generate new secure session_id
-                session_id = str(uuid4())
-
-            logger.info(f"Demo query from active user: {user_email} (ID: {user_id})")
-
-            # SECURITY: Extract client IP using secure service
-            # This validates trusted proxies and prevents IP spoofing
-            client_ip = extract_client_ip(request)
-
-            # Extract other metadata fields safely
-            user_agent = request_data.metadata.user_agent if request_data.metadata else None
-            fingerprint = request_data.metadata.fingerprint if request_data.metadata else None
-            user_timezone = request_data.metadata.timezone if request_data.metadata else None
-
-            logger.debug(
-                f"Request metadata: ip={client_ip}, "
-                f"user_agent={user_agent[:50] if user_agent else None}..., "
-                f"timezone={user_timezone}"
-            )
-
-            # SECURITY (CWE-79 fix): Sanitize user input before processing
-            sanitized_input = sanitize_user_input(request_data.input, max_length=10000)
-
-            if not sanitized_input:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "success": False,
-                        "error": "invalid_input",
-                        "message": "Please provide a valid question.",
-                    },
-                )
-
-            # Process query and measure response time
-            import time
-            start_time = time.time()
-
-            response_text, tokens_used, warning, error_msg = (
-                await demo_agent.process_query(
-                    user_input=sanitized_input,
-                    user_key=user_key,
-                    language=request_data.language or "es",
-                    ip_address=client_ip,
-                    user_agent=user_agent,
-                    client_fingerprint=fingerprint,
-                    user_timezone=user_timezone,
-                )
-            )
-
-            # Calculate response time in milliseconds
-            response_time_ms = int((time.time() - start_time) * 1000)
-
-            # If query was blocked, return error response
-            if error_msg:
-                status_code = 429 if "quota" in error_msg else 403
-
-                # SECURITY (Phase 4): Set rate limit info for error responses
-                # This ensures rate limit headers are added even for blocked requests
-                try:
-                    user_status = await demo_agent.get_user_status(user_key)
-                    request.state.rate_limit_remaining = user_status.get("tokens_remaining", 0)
-                    request.state.rate_limit_used = user_status.get("tokens_used", 0)
-                    request.state.rate_limit_reset = user_status.get("next_reset")
-                except Exception as e:
-                    logger.warning(f"Failed to get rate limit info for error response: {e}")
-
-                return JSONResponse(
-                    status_code=status_code,
-                    content={
-                        "success": False,
-                        "error": (
-                            "demo_quota_exceeded"
-                            if "quota" in error_msg
-                            else "suspicious_behavior_detected"
-                        ),
-                        "message": error_msg,
-                        "retry_after_seconds": 86400 if "quota" in error_msg else 300,
-                    },
-                )
-
-            # SECURITY (CWE-79 fix): Sanitize AI response to prevent XSS
-            # While Gemini shouldn't generate malicious content, defense-in-depth
-            # requires sanitizing all user-facing output
-            sanitized_response = sanitize_html(response_text)
-
-            # Get user status for rate limit headers
-            user_status = await demo_agent.get_user_status(user_key)
-            tokens_remaining_val = user_status.get("tokens_remaining", 0)
-            tokens_used_val = user_status.get("tokens_used", 0)
-            next_reset = user_status.get("next_reset")
-
-            # SECURITY (Phase 4): Set rate limit info in request state
-            # The RateLimitHeadersMiddleware will read these values and add headers
-            request.state.rate_limit_remaining = tokens_remaining_val
-            request.state.rate_limit_used = tokens_used_val
-            request.state.rate_limit_reset = next_reset
-
-            # ================================================================
-            # CONVERSATION HISTORY STORAGE
-            # ================================================================
-            # Store user message and AI response in conversation_messages table
-            # for chat history persistence and reload on page refresh
-            try:
-                # Step 1: Upsert conversation session
-                # Create new session or update last_activity_at if exists
-                session_upsert_query = """
-                    INSERT INTO :SCHEMA_NAME.conversation_sessions
-                        (id, customer_email, session_id, last_activity_at, metadata, created_at, updated_at)
-                    VALUES
-                        (gen_random_uuid(), %s, %s, NOW(), %s, NOW(), NOW())
-                    ON CONFLICT (session_id)
-                    DO UPDATE SET
-                        last_activity_at = NOW(),
-                        updated_at = NOW(),
-                        customer_email = COALESCE(EXCLUDED.customer_email, conversation_sessions.customer_email),
-                        metadata = COALESCE(EXCLUDED.metadata, conversation_sessions.metadata)
-                    RETURNING id
-                """
-                session_metadata = {
-                    "language": request_data.language or "es",
-                    "user_id": user_id,
-                }
-                session_result = await user_service.db.execute_one(
-                    session_upsert_query,
-                    (user_email, session_id, json.dumps(session_metadata))
-                )
-
-                if not session_result:
-                    logger.warning(f"Failed to upsert conversation session: {session_id}")
-                else:
-                    session_uuid = session_result["id"]
-                    logger.debug(f"Session upserted: {session_uuid} for session_id: {session_id}")
-
-                    # Step 2: Insert user message (with user_id for cross-device sync)
-                    user_msg_query = """
-                        INSERT INTO :SCHEMA_NAME.conversation_messages
-                            (session_id, user_id, role, message_text, token_count, created_at)
-                        VALUES
-                            (%s, %s, 'user', %s, 0, NOW())
-                    """
-                    await user_service.db.execute(
-                        user_msg_query,
-                        (session_uuid, user_id, sanitized_input)
-                    )
-                    logger.debug(f"User message stored for user_id: {user_id}, session: {session_id}")
-
-                    # Step 3: Insert AI response (with user_id for cross-device sync and performance metrics)
-                    ai_msg_query = """
-                        INSERT INTO :SCHEMA_NAME.conversation_messages
-                            (session_id, user_id, role, agent_name, message_text, token_count, response_time_ms, created_at)
-                        VALUES
-                            (%s, %s, 'model', %s, %s, %s, %s, NOW())
-                    """
-                    await user_service.db.execute(
-                        ai_msg_query,
-                        (session_uuid, user_id, 'demo', sanitized_response, tokens_used, response_time_ms)
-                    )
-                    logger.debug(
-                        f"AI response stored for user_id: {user_id}, session: {session_id}, "
-                        f"agent: demo, tokens: {tokens_used}, response_time: {response_time_ms}ms"
-                    )
-
-            except Exception as history_error:
-                # IMPORTANT: Do NOT fail the request if history storage fails
-                # This is a non-critical feature - log and continue
-                logger.error(
-                    f"Failed to store conversation history (non-critical): {history_error}",
-                    exc_info=True
-                )
-                # Continue with successful response anyway
-
-            # Return successful response
-            from datetime import datetime, timezone
-
-            return DemoResponse(
-                success=True,
-                response=sanitized_response,
-                tokens_used=tokens_used,
-                tokens_remaining=tokens_remaining_val,
-                warning=warning,
-                session_id=session_id,
-                created_at=datetime.now(timezone.utc).isoformat(),
-            )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            # SECURITY (CWE-209 fix): Sanitize error messages to prevent information disclosure
-            logger.exception(f"Error in demo_query: {e}")
-
-            # Don't expose internal error details to users
-            safe_message = sanitize_error_message(e, include_details=False)
-
-            raise HTTPException(
-                status_code=500,
-                detail=safe_message
-            )
-
-    # ========================================================================
-    # Quota Status Endpoint
-    # ========================================================================
-
-    @app.get("/v1/demo/status", tags=["Demo"])
-    async def demo_status(request: Request):
-        """Get authenticated user's current quota status.
-
-        Requires Clerk authentication. Extracts user_id from JWT token.
-        Returns quota information for the authenticated user across ALL devices.
-
-        Response:
-        ```json
-        {
-          "tokens_used": 1250,
-          "tokens_remaining": 3750,
-          "percentage_used": 25,
-          "requests_count": 5,
-          "is_blocked": false,
-          "blocked_until": null,
-          "last_reset": "2025-10-31T00:00:00Z",
-          "next_reset": "2025-11-01T00:00:00Z",
-          "daily_limit": 5000,
-          "warning": {
-            "is_warning": false,
-            "message": null,
-            "percentage_used": 25
-          }
-        }
-        ```
-
-        Note: When percentage_used >= DEMO_WARNING_THRESHOLD (default 85%),
-        warning.is_warning will be true with a generic English message.
-        Frontend should use is_warning flag to display i18n translations.
-        """
-        try:
-            global demo_agent
-            logger.info("=== demo_status START ===")
-
-            if not demo_agent:
-                logger.error("demo_agent not initialized")
-                raise HTTPException(
-                    status_code=500,
-                    detail="Demo agent not initialized",
-                )
-
-            # AUTHENTICATION: Extract user_id from Clerk JWT (same pattern as /v1/demo)
-            logger.info("demo_status: Calling get_current_user")
-            authenticated_user = get_current_user(request)
-            logger.info(f"demo_status: authenticated_user = {authenticated_user}")
-
-            if not authenticated_user:
-                logger.warning("demo_status: No authenticated user found")
-                return JSONResponse(
-                    status_code=401,
-                    content={
-                        "success": False,
-                        "error": "authentication_required",
-                        "message": "Please log in to view quota status.",
-                    },
-                )
-
-            user_id = authenticated_user.get("db_user_id")
-            logger.info(f"demo_status: Extracted user_id = {user_id}")
-
-            if not user_id:
-                logger.error(f"demo_status: db_user_id not found in authenticated_user: {authenticated_user}")
-                raise HTTPException(status_code=400, detail="User ID not found in authentication token")
-
-            # USER-BASED QUOTA: Use user_id as the key (same across all devices)
-            # This ensures quota is shared across all user's sessions/devices
-            user_key = str(user_id)
-
-            logger.info(f"Quota status requested by user: {user_id}")
-
-            # Get quota status
-            status = await demo_agent.get_user_status(user_key)
-            logger.info(f"demo_status: Returning status = {status}")
-            return status
-
-        except HTTPException:
-            logger.error(f"demo_status: HTTPException raised")
-            raise
-        except Exception as e:
-            logger.exception(f"Error in demo_status: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error")
-
-    # ========================================================================
-    # Chat History Endpoint
-    # ========================================================================
-
-    @app.get("/v1/demo/history", tags=["Demo"])
-    async def get_demo_history(
-        limit: int = Query(100, description="Maximum number of messages to return"),
-        request: Request = None,
-    ):
-        """Retrieve user's complete conversation history (all devices, all sessions).
-
-        Requires Clerk authentication. Returns all messages for the authenticated user.
-        Messages are returned in chronological order (oldest first).
-
-        Query Parameters:
-        - `limit` (optional): Max messages to return (default: 100, max: 500)
-
-        Response (Success):
-        ```json
-        {
-          "success": true,
-          "messages": [
-            {
-              "id": 1,
-              "role": "user",
-              "message_text": "Hello, how can I book an appointment?",
-              "token_count": 0,
-              "created_at": "2025-11-08T10:30:00Z"
-            },
-            {
-              "id": 2,
-              "role": "model",
-              "message_text": "I'd be happy to help you book an appointment...",
-              "token_count": 45,
-              "created_at": "2025-11-08T10:30:02Z"
-            }
-          ],
-          "total_messages": 2,
-          "session_id": "abc-123-def"
-        }
-        ```
-
-        Response (Empty History):
-        ```json
-        {
-          "success": true,
-          "messages": [],
-          "total_messages": 0,
-          "session_id": "abc-123-def"
-        }
-        ```
-
-        Response (Unauthorized - 401):
-        ```json
-        {
-          "success": false,
-          "error": "authentication_required",
-          "message": "Please log in to access chat history"
-        }
-        ```
-
-        Response (Forbidden - 403):
-        ```json
-        {
-          "success": false,
-          "error": "access_denied",
-          "message": "You do not have access to this chat session"
-        }
-        ```
-        """
-        try:
-            global user_service
-            if not user_service:
-                logger.error("User service not initialized")
-                raise HTTPException(
-                    status_code=500,
-                    detail="Services not initialized",
-                )
-
-            # SECURITY: Require Clerk authentication
-            authenticated_user = get_current_user(request)
-
-            if not authenticated_user or not authenticated_user.get("db_user_id"):
-                logger.error("Unauthorized chat history access attempt")
-                return JSONResponse(
-                    status_code=401,
-                    content={
-                        "success": False,
-                        "error": "authentication_required",
-                        "message": "Please log in to access chat history.",
-                    },
-                )
-
-            user_id = authenticated_user["db_user_id"]
-            logger.info(f"Chat history requested by user: {user_id}")
-
-            # SECURITY: Limit max messages to prevent abuse
-            limit = min(max(1, limit), 500)  # Clamp between 1 and 500
-
-            # USER-BASED QUERY: Fetch all user's messages across ALL devices/sessions
-            # This is simpler, faster (no JOIN), and more secure than session-based approach
-            messages_query = """
-                SELECT
-                    cm.id,
-                    cm.role,
-                    cm.message_text,
-                    cm.token_count,
-                    cm.created_at
-                FROM :SCHEMA_NAME.conversation_messages cm
-                WHERE cm.user_id = %s
-                ORDER BY cm.created_at ASC
-                LIMIT %s
-            """
-            messages = await user_service.db.execute_all(
-                messages_query,
-                (user_id, limit)
-            )
-
-            # Convert datetime objects to ISO strings for JSON serialization
-            for msg in messages:
-                if msg.get("created_at"):
-                    msg["created_at"] = msg["created_at"].isoformat()
-
-            logger.info(
-                f"Chat history retrieved: {len(messages)} messages for user {user_id} (cross-device sync)"
-            )
-
-            return {
-                "success": True,
-                "messages": messages,
-                "total_messages": len(messages),
-            }
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.exception(f"Error retrieving chat history: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to retrieve chat history",
-            )
-
-    # ========================================================================
-    # CAPTCHA Verification Endpoint
-    # ========================================================================
-
-    @app.post("/v1/demo/verify-captcha", tags=["Security"])
-    async def verify_captcha(
-        token: str = Query(..., description="reCAPTCHA v3 response token"),
-        user_id: str | None = Query(None, description="Authenticated user ID"),
-        session_id: str | None = Query(None, description="Anonymous session ID"),
-        remote_ip: str | None = Query(None, description="Client IP address"),
-    ):
-        """Verify reCAPTCHA v3 token.
-
-        Query Parameters:
-        - `token` (required): reCAPTCHA response token from client
-        - `user_id` or `session_id`: User identifier
-        - `remote_ip` (optional): Client IP for verification
-
-        Response (Success):
-        ```json
-        {
-          "success": true,
-          "score": 0.9,
-          "risk_level": "low",
-          "recommendation": "allow",
-          "message": "Verification successful"
-        }
-        ```
-
-        Response (Bot Detected):
-        ```json
-        {
-          "success": false,
-          "score": 0.2,
-          "risk_level": "high",
-          "recommendation": "block",
-          "message": "Likely bot - request blocked"
-        }
-        ```
-        """
-        try:
-            global demo_agent
-            if not demo_agent:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Demo agent not initialized",
-                )
-
-            # Verify token with Google
-            verification_result = await demo_agent.captcha_handler.verify_token(
-                token=token,
-                remote_ip=remote_ip,
-            )
-
-            if not verification_result.get("success"):
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "success": False,
-                        "error_codes": verification_result.get("error_codes", []),
-                        "message": "CAPTCHA verification failed",
-                    },
-                )
-
-            # Evaluate score
-            score = verification_result.get("score", 0.0)
-            evaluation = demo_agent.captcha_handler.evaluate_score(score)
-
-            # Log verification result
-            user_key = user_id or session_id or "unknown"
-            logger.info(
-                f"CAPTCHA verified: {user_key} -> "
-                f"score={score:.2f}, risk={evaluation['risk_level']}"
-            )
-
-            return {
-                "success": True,
-                "score": score,
-                "action": verification_result.get("action"),
-                "risk_level": evaluation["risk_level"],
-                "recommendation": evaluation["recommendation"],
-                "message": evaluation["message"],
-            }
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.exception(f"Error in verify_captcha: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error")
-
-    # ========================================================================
-    # Contact Form Endpoint
-    # ========================================================================
-
-    @app.post("/v1/contact", response_model=ContactResponse, tags=["Contact"])
-    async def submit_contact_request(
-        contact: ContactRequest,
-        request: Request,
-    ):
-        """Submit contact form with reCAPTCHA validation.
-
-        Processes contact form submissions from the website with spam protection.
-        All fields are validated and reCAPTCHA score is checked before saving.
-
-        Request Body:
-        ```json
-        {
-          "full_name": "John Doe",
-          "email": "john@example.com",
-          "phone": "+15551234567",
-          "country_code": "US",
-          "company": "Acme Inc",
-          "message": "I want to learn more about your services",
-          "contact_type": "sales",
-          "recaptcha_token": "03AGdBq..."
-        }
-        ```
-
-        Response (Success - 200):
-        ```json
-        {
-          "success": true,
-          "message": "Thank you! We'll contact you soon.",
-          "contact_id": 42,
-          "created_at": "2025-11-09T10:30:00Z"
-        }
-        ```
-
-        Response (reCAPTCHA Failed - 400):
-        ```json
-        {
-          "success": false,
-          "message": "reCAPTCHA verification failed. Please try again."
-        }
-        ```
-
-        Response (Rate Limit - 429):
-        ```json
-        {
-          "success": false,
-          "message": "Too many submissions. Please try again later."
-        }
-        ```
-
-        Security Features:
-        - reCAPTCHA v3 spam detection (score threshold: 0.5)
-        - IP-based rate limiting (5 submissions per hour per IP)
-        - Input sanitization and validation
-        - Suspicious submission detection
-        """
-        try:
-            global demo_agent
-            logger.info("=== submit_contact_request START ===")
-
-            if not demo_agent:
-                logger.error("demo_agent not initialized")
-                raise HTTPException(
-                    status_code=500,
-                    detail="Service not initialized",
-                )
-
-            # Extract client IP for logging and rate limiting
-            remote_ip = extract_client_ip(request)
-            user_agent = request.headers.get("user-agent", "unknown")
-
-            logger.info(f"Contact submission from IP: {remote_ip}")
-
-            # Step 1: Verify reCAPTCHA token
-            try:
-                verification_result = await demo_agent.captcha_handler.verify_token(
-                    token=contact.recaptcha_token,
-                    remote_ip=remote_ip,
-                )
-
-                if not verification_result.get("success"):
-                    logger.warning(
-                        f"reCAPTCHA verification failed for {contact.email}: "
-                        f"{verification_result.get('error_codes')}"
-                    )
-                    return ContactResponse(
-                        success=False,
-                        message="reCAPTCHA verification failed. Please try again.",
-                    )
-
-                # Evaluate score
-                score = verification_result.get("score", 0.0)
-                evaluation = demo_agent.captcha_handler.evaluate_score(score)
-
-                logger.info(
-                    f"reCAPTCHA score for {contact.email}: {score:.2f} "
-                    f"(risk: {evaluation['risk_level']})"
-                )
-
-                # Reject if score is too low
-                if score < config.FINGERPRINT_SCORE_THRESHOLD:
-                    logger.warning(
-                        f"Contact submission blocked: low reCAPTCHA score {score:.2f}"
-                    )
-                    return ContactResponse(
-                        success=False,
-                        message="Your submission appears suspicious. Please try again.",
-                    )
-
-            except Exception as captcha_error:
-                logger.error(f"reCAPTCHA verification error: {captcha_error}")
-                return ContactResponse(
-                    success=False,
-                    message="reCAPTCHA verification failed. Please try again.",
-                )
-
-            # Step 2: Check IP rate limiting (5 submissions per hour)
-            db = get_db()
-            rate_limit_query = """
-                SELECT COUNT(*) as count
-                FROM :SCHEMA_NAME.contact_requests
-                WHERE ip_address = %s
-                  AND created_at > NOW() - INTERVAL '1 hour'
-            """
-            rate_limit_result = await db.execute_one(rate_limit_query, (remote_ip,))
-
-            if rate_limit_result and rate_limit_result.get("count", 0) >= 5:
-                logger.warning(f"Rate limit exceeded for IP: {remote_ip}")
-                return ContactResponse(
-                    success=False,
-                    message="Too many submissions. Please try again in an hour.",
-                )
-
-            # Step 3: Insert contact request into database
-            insert_query = """
-                INSERT INTO :SCHEMA_NAME.contact_requests (
-                    full_name, email, phone, country_code, company,
-                    message, contact_type, ip_address, user_agent,
-                    recaptcha_score, status
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, created_at
-            """
-
-            result = await db.execute_one(
-                insert_query,
-                (
-                    contact.full_name,
-                    contact.email,
-                    contact.phone,
-                    contact.country_code,
-                    contact.company,
-                    contact.message,
-                    contact.contact_type,
-                    remote_ip,
-                    user_agent,
-                    score,
-                    "pending",
-                ),
-            )
-
-            if not result:
-                logger.error("Failed to insert contact request")
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to save contact request",
-                )
-
-            contact_id = result["id"]
-            created_at = result["created_at"].isoformat()
-
-            logger.info(
-                f"Contact request saved: ID={contact_id}, "
-                f"email={contact.email}, type={contact.contact_type}"
-            )
-
-            # Step 4: Send email notification to sales team (optional)
-            # TODO: Implement email notification to sales team
-            # await email_service.send_contact_notification(contact)
-
-            return ContactResponse(
-                success=True,
-                message="Thank you! We'll contact you soon.",
-                contact_id=contact_id,
-                created_at=created_at,
-            )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.exception(f"Error in submit_contact_request: {e}")
-            return ContactResponse(
-                success=False,
-                message="An error occurred. Please try again later.",
-            )
-
-    @app.post("/v1/booking", response_model=BookingResponse, tags=["Booking"])
-    async def submit_booking_request(booking: BookingRequest, request: Request):
-        """Submit demo booking request with reCAPTCHA verification.
-
-        Public endpoint for scheduling demo bookings from website.
-
-        Security:
-        - reCAPTCHA v3 verification (threshold: 0.7)
-        - IP-based rate limiting (5 bookings per hour)
-        - Input validation via Pydantic
-
-        Args:
-            booking: Validated booking request data
-            request: FastAPI request object (for IP extraction)
-
-        Returns:
-            BookingResponse with success status and booking ID
-
-        Raises:
-            HTTPException: 429 if rate limit exceeded
-        """
-        try:
-            # Extract client IP
-            remote_ip = request.client.host if request.client else "unknown"
-
-            # Step 1: Verify reCAPTCHA token
-            verification_result = await demo_agent.captcha_handler.verify_token(
-                token=booking.recaptcha_token,
-                remote_ip=remote_ip,
-            )
-
-            if not verification_result["success"]:
-                logger.warning(
-                    f"reCAPTCHA verification failed for booking",
-                    extra={
-                        "ip": remote_ip,
-                        "error": verification_result.get("error"),
-                    },
-                )
-                return BookingResponse(
-                    success=False,
-                    message="Security verification failed. Please try again.",
-                )
-
-            recaptcha_score = verification_result.get("score", 0.0)
-
-            if recaptcha_score < 0.7:
-                logger.warning(
-                    f"Low reCAPTCHA score for booking: {recaptcha_score}",
-                    extra={"ip": remote_ip, "email": booking.email},
-                )
-                return BookingResponse(
-                    success=False,
-                    message="Security check failed. Please try again.",
-                )
-
-            # Step 2: Check IP rate limiting (5 bookings per hour)
-            db = get_db()
-            rate_limit_query = """
-                SELECT COUNT(*) as count
-                FROM :SCHEMA_NAME.booking_requests
-                WHERE ip_address = %s AND created_at > NOW() - INTERVAL '1 hour'
-            """
-            rate_limit_result = await db.execute_one(rate_limit_query, (remote_ip,))
-
-            if rate_limit_result and rate_limit_result.get("count", 0) >= 5:
-                logger.warning(f"Rate limit exceeded for IP: {remote_ip}")
-                return BookingResponse(
-                    success=False,
-                    message="Too many booking requests. Please try again in an hour.",
-                )
-
-            # Step 3: Insert booking request into database
-            user_agent = request.headers.get("user-agent", "unknown")
-
-            insert_query = """
-                INSERT INTO :SCHEMA_NAME.booking_requests (
-                    full_name, email, phone, country_code, company,
-                    preferred_date, preferred_time, message,
-                    ip_address, user_agent, recaptcha_score, status
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, created_at
-            """
-
-            booking_result = await db.execute_one(
-                insert_query,
-                (
-                    booking.full_name,
-                    booking.email,
-                    booking.phone,
-                    booking.country_code,
-                    booking.company,
-                    booking.preferred_date,
-                    booking.preferred_time,
-                    booking.message,
-                    remote_ip,
-                    user_agent,
-                    recaptcha_score,
-                    "pending",
-                ),
-            )
-
-            if not booking_result:
-                logger.error("Failed to insert booking request")
-                return BookingResponse(
-                    success=False,
-                    message="Failed to create booking. Please try again.",
-                )
-
-            booking_id = booking_result["id"]
-            created_at = booking_result["created_at"]
-
-            logger.info(
-                f"Booking request created successfully",
-                extra={
-                    "booking_id": booking_id,
-                    "email": booking.email,
-                    "preferred_date": str(booking.preferred_date),
-                    "ip": remote_ip,
-                    "score": recaptcha_score,
-                },
-            )
-
-            return BookingResponse(
-                success=True,
-                message="Demo booking request submitted successfully! We'll contact you shortly.",
-                booking_id=booking_id,
-            )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.exception(f"Error in submit_booking_request: {e}")
-            return BookingResponse(
-                success=False,
-                message="An error occurred. Please try again later.",
-            )
-
-    # ========================================================================
-    # Helper Functions
-    # ========================================================================
-
-    async def get_tokens_remaining(user_key: str) -> int:
-        """Get remaining tokens for user."""
-        try:
-            global demo_agent
-            if demo_agent:
-                status = await demo_agent.get_user_status(user_key)
-                return status.get("tokens_remaining", 0)
-        except Exception as e:
-            logger.error(f"Error getting tokens_remaining: {e}")
-        return 0
+    app.include_router(health_router)
+    app.include_router(auth_router)
+    app.include_router(webhooks_router)
+    app.include_router(demo_router)
+    app.include_router(forms_router)
+
+    logger.info("✅ All routers registered successfully")
 
     return app
 
