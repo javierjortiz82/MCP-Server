@@ -208,17 +208,36 @@ class AgentOrchestrator:
                     self.session_id = self.memory_manager.get_or_create_session(customer_email=customer_email)
                     logger.info(f"✅ Memory session active: {self.session_id}")
 
-                    # Detect user's language preference from memory
+                    # Try to load session language from previous conversation first
+                    # This is the PRIMARY source of language for returning sessions
+                    retrieved_session_language = None
                     try:
-                        detected_language = self.memory_manager.get_user_preferred_language(
-                            customer_email=customer_email, default_language="es"
+                        retrieved_session_language = self.memory_manager.get_session_language(
+                            self.session_id
                         )
-                        if detected_language in ("es", "en"):
-                            self.language = detected_language
-                            logger.info(f"🌐 User language detected: {self.language.upper()}")
-                    except Exception as lang_error:
-                        logger.debug(f"Could not detect user language: {lang_error}, using default 'es'")
-                        self.language = "es"
+                        if retrieved_session_language in ("es", "en"):
+                            self.language = retrieved_session_language
+                            logger.info(f"🌐 Session language loaded from DB: {self.language.upper()}")
+                            self._session_language_detected = True
+                    except Exception as session_lang_error:
+                        logger.debug(f"Could not load session language from DB: {session_lang_error}")
+
+                    # Fallback: Try user preferred language from memory blocks
+                    # This is the SECONDARY source (cross-session preference)
+                    if not retrieved_session_language:
+                        try:
+                            detected_language = self.memory_manager.get_user_preferred_language(
+                                customer_email=customer_email, default_language="es"
+                            )
+                            if detected_language in ("es", "en"):
+                                self.language = detected_language
+                                logger.info(f"🌐 User language preference loaded: {self.language.upper()}")
+                        except Exception as lang_error:
+                            logger.debug(f"Could not detect user language: {lang_error}, using default 'es'")
+                            self.language = "es"
+                    else:
+                        # Session language found, use it as default
+                        self.language = retrieved_session_language
 
                 except Exception as mem_error:
                     logger.warning(f"⚠️ Failed to initialize memory system: {mem_error}")
@@ -427,20 +446,48 @@ class AgentOrchestrator:
             logger.info(f"Intent classified: {intent.value}")
             logger.info(f"🌐 Language (from session cache): {detected_language}")
 
+            # CRITICAL FIX: Update orchestrator language if router detected a language switch
+            # This ensures subsequent queries use the correct language
+            if detected_language != self.language:
+                logger.warning(
+                    f"⚠️ Router detected language switch: {self.language} → {detected_language}. "
+                    f"Updating session language for next requests."
+                )
+                self.language = detected_language
+                # Persist language change to DB for next session
+                if self.memory_manager and self.session_id:
+                    try:
+                        self.memory_manager.save_session_language(self.session_id, detected_language)
+                        logger.debug(f"💾 Language updated and persisted to DB: {detected_language}")
+                    except Exception as lang_save_error:
+                        logger.warning(f"⚠️ Failed to update language in DB: {lang_save_error}")
+
             # Save current intent for next iteration
             self.last_intent = intent
 
         except Exception as e:
             logger.exception(f"Intent classification failed: {e}")
-            # Fallback to general agent on classification errors
-            logger.warning("⚠️ Falling back to general agent due to classification error")
-            intent = Intent.GENERAL
-            # Try to detect language from query as fallback
-            try:
-                from gemini_agent.utils.language_detector import detect_user_language
-                detected_language = detect_user_language(query)
-            except Exception:
-                detected_language = "en"  # Default to English (international default)
+
+            # CRITICAL FIX: Better fallback strategy for classification errors
+            # Try sticky session (previous intent) for short queries (< 5 chars)
+            is_very_short = len(query.strip()) < 5
+            if is_very_short and self.last_intent:
+                logger.warning(
+                    f"⚠️ Classification failed on short query. "
+                    f"Maintaining previous intent: {self.last_intent.value} (sticky session fallback)"
+                )
+                intent = self.last_intent
+                detected_language = self.language  # Use current session language
+            else:
+                # For longer queries, fallback to general agent
+                logger.warning("⚠️ Falling back to general agent due to classification error")
+                intent = Intent.GENERAL
+                # Try to detect language from query as fallback
+                try:
+                    from gemini_agent.utils.language_detector import detect_user_language
+                    detected_language = detect_user_language(query)
+                except Exception:
+                    detected_language = self.language  # Use session language as fallback
 
         # Step 2: Route to specialized agent and save response
         try:
