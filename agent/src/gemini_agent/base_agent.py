@@ -551,7 +551,8 @@ Return ONLY the message itself - nothing else."""
         It performs the following initialization steps:
         1. Creates Gemini client with provided API key
         2. Builds generation configuration with tools (if provided)
-        3. Logs successful initialization
+        3. Auto-loads conversation history from database (if memory enabled)
+        4. Logs successful initialization
 
         Raises:
             RuntimeError: If client initialization fails (e.g., invalid API key)
@@ -573,16 +574,39 @@ Return ONLY the message itself - nothing else."""
             # Build generation configuration
             self.generation_config = self._build_generation_config(**self._generation_params)
 
+            # CRITICAL FIX: Auto-load conversation history from database (context preservation)
+            # This ensures agents maintain conversation context across requests
+            if self._memory_enabled:
+                try:
+                    messages_loaded = self.load_history_from_db(limit=10)
+                    self.logger.info(
+                        f"✅ Auto-loaded {messages_loaded} messages from DB "
+                        f"(session={self.session_id[:8]}..., memory enabled)"
+                    )
+                except Exception as history_error:
+                    self.logger.warning(
+                        f"⚠️ Failed to auto-load conversation history: {history_error}. "
+                        f"Agent will start with empty context."
+                    )
+                    # Continue gracefully - agent can still function without history
+            else:
+                self.logger.debug(
+                    "Memory not enabled - conversation history will remain empty "
+                    "(stateless mode)"
+                )
+
             self.logger.info(
                 f"✅ {self.agent_name} initialized successfully "
-                f"({len(self.mcp_tools)} tools available)"
+                f"({len(self.mcp_tools)} tools available, "
+                f"{len(self.conversation_history)} messages in context)"
             )
 
             if self.structured_logger:
                 self.structured_logger.info(
                     "Agent initialized successfully",
                     agent=self.agent_name,
-                    tools_available=len(self.mcp_tools)
+                    tools_available=len(self.mcp_tools),
+                    context_messages=len(self.conversation_history)
                 )
 
         except Exception as e:

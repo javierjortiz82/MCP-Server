@@ -558,19 +558,36 @@ NO agregues explicaciones ni puntuación adicional."""
             if self.metrics:
                 self.metrics.increment_counter("router_classifications_attempted", 1)
 
-            # CRITICAL FIX: Always detect query language and validate against session language
-            # This prevents language mismatch when user switches languages mid-conversation
+            # CRITICAL FIX: Detect query language but respect session language for ambiguous queries
+            # This prevents language detection errors on short queries like "1", "2", etc.
             # Reference: docs/ROUTER_EMPTY_RESPONSE_ROOT_CAUSE.md
             query_language = detect_user_language(query)
 
             if session_language:
+                # PRIORITY: Session language takes precedence for:
+                # - Ambiguous/short queries (single digits, punctuation, etc.)
+                # - Queries that could be detected as wrong language due to lack of content
+                #
+                # Only override session language if query has substantive content (>2 chars)
+                # and language is clearly different from session language
+                is_ambiguous_query = len(query) <= 2 or query.strip().isdigit()
+
                 if query_language != session_language:
-                    logger.warning(
-                        f"⚠️ Language mismatch detected! "
-                        f"Session language: {session_language}, Query language: {query_language}. "
-                        f"Using query language for accurate classification."
-                    )
-                    detected_language = query_language  # Override session with query language
+                    if is_ambiguous_query:
+                        # For ambiguous queries, trust session language over detection
+                        detected_language = session_language
+                        logger.info(
+                            f"🌐 Using session language ({session_language}) for ambiguous query "
+                            f"(detected: {query_language}, query: '{query}')"
+                        )
+                    else:
+                        # For substantive queries with clear language mismatch, allow language switch
+                        logger.warning(
+                            f"⚠️ Language mismatch detected! "
+                            f"Session language: {session_language}, Query language: {query_language}. "
+                            f"User may have switched languages (query: '{query}')."
+                        )
+                        detected_language = query_language  # Allow language switch for real content
                 else:
                     detected_language = session_language
                     logger.info(f"🌐 Using consistent language: {detected_language}")

@@ -279,6 +279,9 @@ class BookingAgent(BaseAgent):
         - TOKEN_ESTIMATE_RATIO: Ratio for estimating tokens from character count (default: 0.25)
         - BOOKING_MAX_PROMPT_SIZE_CHARS: Maximum prompt size in characters (warning threshold, default: 30000)
 
+        CRITICAL FIX: Includes memory blocks and conversation context in system prompt
+        to help agent understand user preferences and previous conversation state.
+
         Args:
             customer_email: Optional customer email for personalization.
             **kwargs: Additional parameters (user_id for A/B testing, etc.).
@@ -302,6 +305,41 @@ class BookingAgent(BaseAgent):
             user_id=kwargs.get("user_id"),
             user_lang=user_lang,  # Pass language context for template selection
         )
+
+        # CRITICAL FIX: Append memory blocks context to system prompt
+        # This helps the agent understand user preferences and conversation history
+        if self._memory_enabled:
+            try:
+                # Get session-level memory blocks (this conversation)
+                session_blocks = self.get_memory_blocks(agent_scope="booking")
+                if session_blocks:
+                    self.logger.debug(f"Including {len(session_blocks)} session memory blocks in prompt")
+                    blocks_text = "\n".join([
+                        f"  - {block['block_label']}: {block['block_value']}"
+                        for block in session_blocks
+                    ])
+                    prompt += f"\n\n## CONTEXTO DE CONVERSACIÓN (Session Memory):\n{blocks_text}"
+
+                # Get user-level memory blocks (cross-session) for personalization
+                if customer_email:
+                    try:
+                        user_blocks = self.memory_manager.get_user_memory_blocks(
+                            customer_email=customer_email,
+                            agent_scope="shared"
+                        )
+                        if user_blocks:
+                            self.logger.debug(f"Including {len(user_blocks)} user memory blocks in prompt")
+                            user_blocks_text = "\n".join([
+                                f"  - {block['block_label']}: {block['block_value']}"
+                                for block in user_blocks
+                            ])
+                            prompt += f"\n\n## PREFERENCIAS DE USUARIO (User Profile):\n{user_blocks_text}"
+                    except Exception as e:
+                        self.logger.debug(f"Could not load user memory blocks: {e}")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Failed to include memory blocks in prompt: {e}")
+                # Continue gracefully - agent can still function without memory blocks
+
         prompt_size = len(prompt)
         estimated_tokens = int(prompt_size * booking_agent_settings.TOKEN_ESTIMATE_RATIO)
         self.logger.info(
