@@ -85,6 +85,9 @@ class GeneralAgent(BaseAgent):
 
         Implements BaseAgent's abstract method.
 
+        CRITICAL FIX: Includes memory blocks and conversation context in system prompt
+        to help agent understand user preferences and previous conversation state.
+
         Args:
             **kwargs: Additional parameters (user_id for A/B testing, etc.).
 
@@ -100,10 +103,47 @@ class GeneralAgent(BaseAgent):
             self._prompt_manager = PromptManager()
 
         # Get prompt from PromptManager (supports A/B testing and multilingual)
+        user_lang = kwargs.get("user_lang", "es")
         prompt = self._prompt_manager.get_general_prompt(
             user_id=kwargs.get("user_id"),
-            user_lang=kwargs.get("user_lang", "es"),  # Pass language context for template selection
+            user_lang=user_lang,  # Pass language context for template selection
         )
+
+        # CRITICAL FIX: Append memory blocks context to system prompt
+        # This helps the agent understand user preferences and conversation history
+        customer_email = kwargs.get("customer_email")
+        if self._memory_enabled:
+            try:
+                # Get session-level memory blocks (this conversation)
+                session_blocks = self.get_memory_blocks(agent_scope="general")
+                if session_blocks:
+                    self.logger.debug(f"Including {len(session_blocks)} session memory blocks in prompt")
+                    blocks_text = "\n".join([
+                        f"  - {block['block_label']}: {block['block_value']}"
+                        for block in session_blocks
+                    ])
+                    prompt += f"\n\n## CONTEXTO DE CONVERSACIÓN (Session Memory):\n{blocks_text}"
+
+                # Get user-level memory blocks (cross-session) for personalization
+                if customer_email:
+                    try:
+                        user_blocks = self.memory_manager.get_user_memory_blocks(
+                            customer_email=customer_email,
+                            agent_scope="shared"
+                        )
+                        if user_blocks:
+                            self.logger.debug(f"Including {len(user_blocks)} user memory blocks in prompt")
+                            user_blocks_text = "\n".join([
+                                f"  - {block['block_label']}: {block['block_value']}"
+                                for block in user_blocks
+                            ])
+                            prompt += f"\n\n## PREFERENCIAS DE USUARIO (User Profile):\n{user_blocks_text}"
+                    except Exception as e:
+                        self.logger.debug(f"Could not load user memory blocks: {e}")
+            except Exception as e:
+                self.logger.debug(f"Could not include memory blocks in prompt: {e}")
+                # Continue gracefully - agent can still function without memory blocks
+
         self.logger.debug(f"Loaded general prompt from Jinja2 ({len(prompt)} chars)")
         return prompt
 
