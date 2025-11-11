@@ -1110,6 +1110,23 @@ Return ONLY the message itself - nothing else."""
                     self.language = detected_language
                 kwargs["language"] = detected_language
 
+            # CRITICAL FIX: Refresh conversation history from DB before generating response
+            # This ensures the agent has the latest messages from the current conversation,
+            # not just what was loaded at initialization time
+            if self._memory_enabled and include_history:
+                try:
+                    messages_loaded = self.load_history_from_db(limit=10)
+                    self.logger.debug(
+                        f"🔄 Refreshed conversation history: {messages_loaded} messages loaded "
+                        f"(session={self.session_id[:8]}...)"
+                    )
+                except Exception as refresh_error:
+                    self.logger.warning(
+                        f"⚠️ Failed to refresh conversation history: {refresh_error}. "
+                        f"Using existing in-memory history ({len(self.conversation_history)} messages)."
+                    )
+                    # Continue with existing history - don't fail the request
+
             # Build conversation contents (uses template method pattern)
             contents = self._build_contents(query, include_history, **kwargs)
 

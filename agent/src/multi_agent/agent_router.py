@@ -841,11 +841,17 @@ NO agregues explicaciones ni puntuación adicional."""
                     f"⚠️ Classification failed on short/follow-up query but context available. "
                     f"Maintaining previous intent: {last_intent_str} (sticky session for follow-ups)"
                 )
-                # In exception handler, detected_language might not be available
-                try:
-                    detected_lang = detect_user_language(query)
-                except Exception:
-                    detected_lang = "en"  # Default to English (international default)
+                # CRITICAL FIX: Use session_language for sticky session fallback
+                # Don't override with detected language which may be wrong for ambiguous queries
+                if session_language:
+                    detected_lang = session_language  # Use session language (correct!)
+                    logger.info(f"Using session language ({session_language}) for sticky session fallback")
+                else:
+                    # Fallback: Try to detect language from query
+                    try:
+                        detected_lang = detect_user_language(query)
+                    except Exception:
+                        detected_lang = "es"  # Default to Spanish (application default)
                 return (Intent(last_intent_str), detected_lang)
 
             # For complex/unrelated queries: Don't hide the error, let it propagate
