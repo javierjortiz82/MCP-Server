@@ -98,8 +98,16 @@ class ClerkService:
         Returns:
             str: Frontend API domain (e.g., "clerk.odiseo.com")
         """
-        # TODO: Extract from JWT iss claim for production
-        # For now, use default Clerk domain
+        # TODO-DEMO-002: Extract from JWT iss claim for production
+        # Description: Use JWT 'iss' claim to dynamically determine API domain
+        # Priority: MEDIUM | Status: PENDING | Effort: 1-2 hours
+        # Implementation: Parse JWT token to extract 'iss' claim and construct domain
+        # Acceptance Criteria:
+        #   - Extract 'iss' from JWT token header/payload
+        #   - Validate domain format is valid Clerk instance
+        #   - Fall back to config value if claim extraction fails
+        #   - Unit test with sample JWT tokens
+        # Current workaround: Use config.CLERK_FRONTEND_API or default domain
         return config.CLERK_FRONTEND_API if hasattr(config, "CLERK_FRONTEND_API") else "clerk.accounts.dev"
 
     async def verify_token(self, token: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
