@@ -1,0 +1,127 @@
+# Environment variables and secrets
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Virtual environments
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS generated files
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.Zone.Identifier
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*~
+.#*
+\#*#
+.*.swp
+.*.swo
+
+# Backup files
+*.bak
+*.backup
+*copy*
+*Copy*
+*.orig
+
+# Demo agent specific
+cache/
+.clerk_cache
+*.tmp.json
+api_keys_test/
+
+# Google Cloud credentials and keys
+credentials/
+*.key
+*.pem
+service-account.json
+
+# Claude
+.claude/
+
+# Code quality tools
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Metrics (keep directory structure, ignore data)
+metrics/*.json
+!metrics/README.md
