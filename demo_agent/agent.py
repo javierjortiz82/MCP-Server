@@ -10,19 +10,7 @@ Version: 1.1.0 (Async)
 
 from datetime import datetime, timezone
 
-# Import PromptManager directly to avoid loading BookingAgent with Pydantic errors
-import sys
-from pathlib import Path
-import importlib.util
-spec = importlib.util.spec_from_file_location(
-    "prompt_manager",
-    Path(__file__).resolve().parent.parent / "agent" / "src" / "multi_agent" / "prompt_manager.py"
-)
-prompt_manager_module = importlib.util.module_from_spec(spec)
-sys.modules["prompt_manager"] = prompt_manager_module
-spec.loader.exec_module(prompt_manager_module)
-PromptManager = prompt_manager_module.PromptManager
-
+from agent.src.multi_agent.prompt_manager import PromptManager
 from demo_agent.config.settings import config
 from demo_agent.db.connection import get_db
 from demo_agent.gemini_client import GeminiClient
