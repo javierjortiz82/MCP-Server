@@ -25,6 +25,8 @@ class Session:
         metadata: Metadatos adicionales del canal (ej: chat_id, username)
         created_at: Timestamp de creación
         last_activity: Timestamp de última actividad
+        message_count: Contador de mensajes procesados en esta sesión
+        previous_sentiment: Sentimiento del mensaje anterior (para análisis contextual)
     """
 
     session_id: str
@@ -32,10 +34,61 @@ class Session:
     metadata: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.now)
     last_activity: datetime = field(default_factory=datetime.now)
+    message_count: int = 0
+    previous_sentiment: str = "neutral"
 
     def update_activity(self) -> None:
         """Actualiza el timestamp de última actividad."""
         self.last_activity = datetime.now()
+
+    def increment_message_count(self) -> int:
+        """Incrementa el contador de mensajes y retorna el nuevo valor.
+
+        Returns:
+            Nuevo contador de mensajes
+
+        Example:
+            >>> session = Session(session_id="test")
+            >>> session.increment_message_count()
+            1
+            >>> session.increment_message_count()
+            2
+        """
+        self.message_count += 1
+        return self.message_count
+
+    def update_sentiment(self, sentiment: str) -> None:
+        """Actualiza el sentimiento previo para análisis contextual.
+
+        Args:
+            sentiment: Nuevo sentimiento ("positive", "negative", "neutral")
+
+        Example:
+            >>> session = Session(session_id="test")
+            >>> session.update_sentiment("positive")
+            >>> session.previous_sentiment
+            'positive'
+        """
+        self.previous_sentiment = sentiment
+
+    def get_user_context(self) -> dict[str, Any]:
+        """Retorna contexto del usuario para análisis de sentimientos.
+
+        Returns:
+            Diccionario con previous_sentiment y conversation_count
+
+        Example:
+            >>> session = Session(session_id="test")
+            >>> session.message_count = 5
+            >>> session.previous_sentiment = "neutral"
+            >>> context = session.get_user_context()
+            >>> context["conversation_count"]
+            5
+        """
+        return {
+            "previous_sentiment": self.previous_sentiment,
+            "conversation_count": self.message_count
+        }
 
 
 class SessionManager:
