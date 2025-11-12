@@ -64,7 +64,7 @@ from enum import Enum
 from typing import Any
 
 from gemini_agent.config import settings
-from gemini_agent.utils.language_detector import detect_user_language
+from gemini_agent.services.language_detector_service import LanguageDetectorService
 from gemini_agent.utils.logger import setup_logging
 from google import genai
 from google.genai import types
@@ -271,6 +271,12 @@ NO agregues explicaciones ni puntuación adicional."""
         self.client: genai.Client | None = None
         self.generation_config: types.GenerateContentConfig | None = None
 
+        # Language detection service (Gemini-powered, no hardcoded keywords)
+        self.language_detector = LanguageDetectorService(
+            api_key=self.api_key,
+            model_name=self.model_name
+        )
+
         # Memory integration (optional)
         self.memory_manager = memory_manager
         self.session_id = session_id
@@ -313,7 +319,10 @@ NO agregues explicaciones ni puntuación adicional."""
                 response_mime_type="text/plain",
             )
 
-            logger.info("✅ AgentRouter initialized successfully (temperature=0)")
+            # Initialize language detector service
+            await self.language_detector.initialize()
+
+            logger.info("✅ AgentRouter initialized successfully (temperature=0, Gemini-based language detection)")
 
             if self.structured_logger:
                 self.structured_logger.info("Router initialized successfully")
@@ -558,43 +567,29 @@ NO agregues explicaciones ni puntuación adicional."""
             if self.metrics:
                 self.metrics.increment_counter("router_classifications_attempted", 1)
 
-            # CRITICAL FIX: Detect query language but respect session language for ambiguous queries
-            # This prevents language detection errors on short queries like "1", "2", etc.
-            # Reference: docs/ROUTER_EMPTY_RESPONSE_ROOT_CAUSE.md
-            query_language = detect_user_language(query)
-
+            # CRITICAL FIX: Detect query language using Gemini (no hardcoded keywords)
+            # Only detect when session_language is None to avoid rate limiting
+            # Reference: agent/src/gemini_agent/services/language_detector_service.py
             if session_language:
-                # PRIORITY: Session language takes precedence for:
-                # - Ambiguous/short queries (single digits, punctuation, etc.)
-                # - Queries that could be detected as wrong language due to lack of content
-                #
-                # Only override session language if query has substantive content (>2 chars)
-                # and language is clearly different from session language
-                is_ambiguous_query = len(query) <= 2 or query.strip().isdigit()
-
-                if query_language != session_language:
-                    if is_ambiguous_query:
-                        # For ambiguous queries, trust session language over detection
-                        detected_language = session_language
-                        logger.info(
-                            f"🌐 Using session language ({session_language}) for ambiguous query "
-                            f"(detected: {query_language}, query: '{query}')"
-                        )
-                    else:
-                        # For substantive queries with clear language mismatch, allow language switch
-                        logger.warning(
-                            f"⚠️ Language mismatch detected! "
-                            f"Session language: {session_language}, Query language: {query_language}. "
-                            f"User may have switched languages (query: '{query}')."
-                        )
-                        detected_language = query_language  # Allow language switch for real content
-                else:
-                    detected_language = session_language
-                    logger.info(f"🌐 Using consistent language: {detected_language}")
+                # Use session language directly (most common case)
+                query_language = session_language
+                logger.debug(f"Using session language: {session_language}")
             else:
-                # Auto-detect user language from query (first message or when session_language not provided)
-                detected_language = query_language
-                logger.info(f"🌐 Auto-detected language: {detected_language}")
+                # First message - detect using Gemini
+                try:
+                    query_language = await self.language_detector.detect_language(
+                        text=query,
+                        session_language=None,
+                        use_cache=True
+                    )
+                    logger.info(f"🌐 Language detected via Gemini: {query_language}")
+                except Exception as detect_error:
+                    logger.warning(f"Gemini detection failed: {detect_error}. Using default 'es'")
+                    query_language = "es"  # Default fallback
+
+            # Use the detected/session language consistently
+            detected_language = query_language
+            logger.debug(f"🌐 Using language: {detected_language}")
 
             # Get classification prompt using PromptManager with detected language
             classification_prompt = self._get_classification_prompt_with_language(
@@ -847,11 +842,16 @@ NO agregues explicaciones ni puntuación adicional."""
                     detected_lang = session_language  # Use session language (correct!)
                     logger.info(f"Using session language ({session_language}) for sticky session fallback")
                 else:
-                    # Fallback: Try to detect language from query
+                    # Fallback: Try to detect language from query using Gemini
                     try:
-                        detected_lang = detect_user_language(query)
-                    except Exception:
-                        detected_lang = "es"  # Default to Spanish (application default)
+                        detected_lang = await self.language_detector.detect_language(
+                            text=query,
+                            session_language=None,
+                            use_cache=True
+                        )
+                    except Exception as lang_error:
+                        logger.warning(f"Language detection failed: {lang_error}. Using default.")
+                        detected_lang = "en"  # Default to English (international default)
                 return (Intent(last_intent_str), detected_lang)
 
             # For complex/unrelated queries: Don't hide the error, let it propagate

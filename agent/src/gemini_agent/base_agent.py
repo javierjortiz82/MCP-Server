@@ -46,7 +46,7 @@ from gemini_agent.utils.gemini_response_handler import (
     ResponseStatus,
     RetryConfig,
 )
-from gemini_agent.utils.language_detector import detect_user_language
+from gemini_agent.services.language_detector_service import LanguageDetectorService
 from gemini_agent.utils.logger import setup_logging
 from google import genai
 from google.genai import types
@@ -219,6 +219,12 @@ class BaseAgent(ABC):
             self.response_handler: GeminiResponseHandler | None = self._create_response_handler()
         else:
             self.response_handler = None
+
+        # Initialize language detector service (Gemini-based, no hardcode)
+        self.language_detector = LanguageDetectorService(
+            api_key=self.api_key,
+            model_name=self.model_name
+        )
 
         self.logger.info(
             f"Initializing {self.agent_name} - "
@@ -570,6 +576,9 @@ Return ONLY the message itself - nothing else."""
 
             # Initialize Gemini client
             self.client = genai.Client(api_key=self.api_key)
+
+            # Initialize language detector service
+            await self.language_detector.initialize()
 
             # Build generation configuration
             self.generation_config = self._build_generation_config(**self._generation_params)
@@ -1102,7 +1111,11 @@ Return ONLY the message itself - nothing else."""
                     self.language = new_language
             else:
                 # Priority 2: Auto-detect language from user query (prevents English input → Spanish output)
-                detected_language = detect_user_language(query)
+                detected_language = await self.language_detector.detect_language(
+                    text=query,
+                    session_language=self.language,  # Use current language as fallback
+                    use_cache=True
+                )
                 if detected_language != self.language:
                     self.logger.info(
                         f"🌐 Auto-detected language: {self.language} → {detected_language}"

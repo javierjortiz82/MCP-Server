@@ -1,0 +1,13 @@
+# Requirements adicionales para Telegram adapter
+#
+# Instalación:
+#   pip install -r requirements_telegram.txt
+#
+# O instalar junto con las dependencias base:
+#   pip install -r requirements.txt -r requirements_telegram.txt
+
+# Telegram Bot SDK (version 21.x compatible with httpx>=0.28.0)
+python-telegram-bot>=21.0,<22.0
+
+# Python dotenv para variables de entorno (opcional pero recomendado)
+python-dotenv>=1.0.0

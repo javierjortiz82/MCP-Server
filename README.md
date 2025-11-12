@@ -120,6 +120,15 @@ python -m client_mcp
 
 ### Advanced Features
 
+#### 🌐 Gemini-Powered Language Detection (NEW v2.3.0)
+- Automatic language detection using Gemini 2.5 Flash
+- No hardcoded keywords - fully AI-powered
+- Context-aware detection (idioms, expressions, temporal words)
+- In-memory caching (< 1ms cached, ~200ms first call)
+- Handles edge cases: "proximo martes" → "es" ✅
+- Easy to add new languages (config only, no code changes)
+- Session language fallback for ambiguous inputs
+
 #### 🧠 Gemini 2.5 Thinking Mode
 - Internal reasoning before responses
 - Reduced hallucinations by up to 40%
@@ -712,6 +721,119 @@ python -m client_mcp
 **Phase 3 (Week 2):** Increase to 50% if metrics stable
 **Phase 4 (Week 3):** Full rollout to 100% of users
 **Phase 5 (Week 4+):** Deprecate legacy mode (optional)
+
+---
+
+## 📱 Multi-Channel Architecture (NEW v2.3.0)
+
+**Status**: ✅ Production Ready | **Release Date**: 2025-11-11
+
+### Overview
+
+The platform now supports **multiple communication channels** (CLI, Telegram, Web, Discord, etc.) without duplicating business logic. A centralized `ChatCore` component orchestrates all conversations, maintaining consistent behavior across channels.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│         Channels (Adapters)                          │
+│  CLI  │  Telegram  │  Web  │  Discord  │  Future   │
+└───────┬────────────┴───────┴───────────┴───────────┘
+        │
+   ┌────▼──────┐
+   │ ChatCore  │  ← Single source of truth for conversations
+   └────┬──────┘
+        │
+   ┌────▼─────────────────┐
+   │ AgentOrchestrator    │  ← Multi-agent routing
+   └──────────────────────┘
+```
+
+### Supported Channels
+
+#### ✅ CLI (Command Line Interface)
+- **Launcher**: `python main_cli.py`
+- **Session**: One per execution (`cli_{uuid}`)
+- **Features**: Interactive shell, `/quit`, `/clear`, `/stats`
+- **Use Case**: Development, testing, power users
+
+#### ✅ Telegram Bot (NEW)
+- **Launcher**: `python main_telegram.py`
+- **Session**: Persistent per chat (`telegram_{chat_id}`)
+- **Features**: `/start`, `/help`, `/clear`, typing indicators
+- **Use Case**: End users, customer support, mobile access
+
+**Quick Start Telegram:**
+```bash
+# 1. Install dependencies
+pip install -r requirements_telegram.txt
+
+# 2. Get bot token from @BotFather on Telegram
+# 3. Configure token
+export TELEGRAM_BOT_TOKEN="123456:ABC-DEF..."
+
+# 4. Launch bot
+python main_telegram.py
+```
+
+[📖 Full Telegram Setup Guide](docs/QUICK_START_TELEGRAM.md) | [🏗️ Architecture Details](docs/TELEGRAM_INTEGRATION.md)
+
+#### 🔜 Coming Soon
+- **Web UI**: WebSocket-based real-time chat
+- **Discord Bot**: Server integration with slash commands
+- **WhatsApp**: Business API integration
+- **Slack**: Workspace bot
+
+### Key Benefits
+
+| Benefit | Description |
+|---------|-------------|
+| **No Code Duplication** | Single `ChatCore` for all channels |
+| **Easy Extensibility** | Add new channel = create adapter (~100 LOC) |
+| **Consistent Behavior** | Same AI logic across all channels |
+| **Independent Sessions** | Each channel/user has isolated context |
+| **Unified Memory** | Cross-channel user memory (if email provided) |
+
+### How It Works
+
+**User sends message** → **Adapter** (CLI/Telegram/Web) → **ChatCore** → **AgentOrchestrator** → **Gemini + MCP Tools** → **Response** → **Adapter** → **User**
+
+Each channel:
+1. Generates unique `session_id`
+2. Calls `ChatCore.process_message(session_id, message, email)`
+3. Receives text response
+4. Formats and sends to user
+
+### Adding a New Channel
+
+Example: Discord Bot (future)
+
+```python
+# integrations/discord_adapter.py
+from chat_core import ChatCore
+
+class DiscordAdapter:
+    def __init__(self):
+        self.chat_core = ChatCore()
+
+    async def on_message(self, message):
+        session_id = f"discord_{message.author.id}"
+        response = await self.chat_core.process_message(
+            session_id=session_id,
+            user_message=message.content,
+            customer_email=message.author.email
+        )
+        await message.channel.send(response)
+```
+
+**That's it!** No changes to `ChatCore`, `AgentOrchestrator`, or MCP tools required.
+
+### Documentation
+
+- **Quick Start**: [docs/QUICK_START_TELEGRAM.md](docs/QUICK_START_TELEGRAM.md)
+- **Architecture**: [docs/TELEGRAM_INTEGRATION.md](docs/TELEGRAM_INTEGRATION.md)
+- **Diagrams**: [docs/ARCHITECTURE_DIAGRAM.md](docs/ARCHITECTURE_DIAGRAM.md)
+- **Implementation Notes**: [docs/NOTAS_CLAUDE.md](docs/NOTAS_CLAUDE.md) (Section: 2025-11-11)
 
 ---
 

@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING, Any
 
 # Import BaseAgent
 from gemini_agent.base_agent import BaseAgent
-from gemini_agent.utils.language_detector import detect_user_language
 from google.genai import types
 
 if TYPE_CHECKING:
