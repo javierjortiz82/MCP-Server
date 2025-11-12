@@ -38,7 +38,6 @@ from typing import TYPE_CHECKING, Any
 from gemini_agent.base_agent import BaseAgent
 from gemini_agent.config.booking_agent_settings import booking_agent_settings
 from gemini_agent.utils.gemini_response_handler import ResponseStatus
-from gemini_agent.utils.language_detector import detect_user_language
 from google.genai import types
 from multi_agent.prompt_manager import PromptManager
 
@@ -431,8 +430,12 @@ class BookingAgent(BaseAgent):
                     )
                     self.language = new_language
             else:
-                # Priority 2: Auto-detect language from user query
-                detected_language = detect_user_language(query)
+                # Priority 2: Auto-detect language from user query (using inherited language_detector)
+                detected_language = await self.language_detector.detect_language(
+                    text=query,
+                    session_language=self.language,  # Use current language as fallback
+                    use_cache=True
+                )
                 if detected_language != self.language:
                     self.logger.info(
                         f"🌐 Auto-detected language: {self.language} → {detected_language}"
