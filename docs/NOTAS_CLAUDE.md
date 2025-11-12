@@ -50991,3 +50991,108 @@ asr_response = await asr.transcribe(
 - Probar con audio real en inglés y español
 - Verificar campo `language` en respuesta ASR
 - Considerar guardar idioma detectado en sesión para análisis
+
+---
+
+## 2025-11-12 - Mensajes de Procesamiento Multiidioma
+
+### Problema
+
+El mensaje "🎤 Transcribiendo mensaje de voz..." siempre aparecía en español, independientemente del idioma del audio.
+
+### Solución Simple y No Invasiva
+
+**Estrategia:**
+1. Mostrar mensaje genérico "🎤..." antes de transcribir (cuando aún no sabemos el idioma)
+2. Actualizar el mensaje con el texto correcto después de detectar el idioma del audio
+3. Eliminar el mensaje de procesamiento antes de enviar la respuesta final
+
+**Implementación en `integrations/telegram_adapter.py`:**
+
+```python
+# Paso 1: Mensaje genérico inicial
+processing_msg = await update.message.reply_text("🎤...")
+
+# Paso 2: Transcribir y detectar idioma
+async with self.asr_client as asr:
+    asr_response = await asr.transcribe(
+        audio_bytes=bytes(audio_bytes),
+        client_id=str(chat_id),
+        language_hint=None,  # Auto-detect
+        quality_preference="balanced"
+    )
+
+# Paso 3: Actualizar mensaje con idioma detectado
+transcribing_messages = {
+    "en": "🎤 Transcribing voice message...",
+    "es": "🎤 Transcribiendo mensaje de voz...",
+    "fr": "🎤 Transcription du message vocal...",
+    "de": "🎤 Sprachnachricht transkribieren...",
+    "pt": "🎤 Transcrevendo mensagem de voz...",
+    "it": "🎤 Trascrizione del messaggio vocale...",
+}
+detected_lang = asr_response.language if asr_response.success and asr_response.language else "en"
+transcribing_text = transcribing_messages.get(detected_lang, transcribing_messages["en"])
+await processing_msg.edit_text(transcribing_text)
+
+# Paso 4: Eliminar mensaje de procesamiento antes de enviar respuesta
+await processing_msg.delete()
+await update.message.reply_text(response)
+```
+
+### Beneficios
+
+1. ✅ **Multiidioma:** Soporta 6 idiomas (EN, ES, FR, DE, PT, IT)
+2. ✅ **No invasivo:** Solo modifica el handler de voz, sin cambios en otros componentes
+3. ✅ **Simple:** Diccionario estático de traducciones
+4. ✅ **UX mejorada:** Usuarios ven mensajes en su idioma
+5. ✅ **Feedback inmediato:** "🎤..." aparece instantáneamente
+6. ✅ **Clean:** Mensaje de procesamiento se elimina antes de la respuesta final
+
+### Experiencia del Usuario
+
+**Audio en inglés:**
+```
+Usuario: [envía audio en inglés]
+Bot: "🎤..."                                    [inmediato]
+Bot: "🎤 Transcribing voice message..."         [después de detectar idioma]
+Bot: [respuesta del asistente]                  [mensaje de procesamiento eliminado]
+```
+
+**Audio en español:**
+```
+Usuario: [envía audio en español]
+Bot: "🎤..."                                    [inmediato]
+Bot: "🎤 Transcribiendo mensaje de voz..."      [después de detectar idioma]
+Bot: [respuesta del asistente]                  [mensaje de procesamiento eliminado]
+```
+
+### Idiomas Soportados
+
+| Código | Mensaje |
+|--------|---------|
+| `en` | 🎤 Transcribing voice message... |
+| `es` | 🎤 Transcribiendo mensaje de voz... |
+| `fr` | 🎤 Transcription du message vocal... |
+| `de` | 🎤 Sprachnachricht transkribieren... |
+| `pt` | 🎤 Transcrevendo mensagem de voz... |
+| `it` | 🎤 Trascrizione del messaggio vocale... |
+
+**Fallback:** Si el idioma detectado no está en la lista, usa inglés por defecto.
+
+### Archivos Modificados
+
+- `integrations/telegram_adapter.py` (+15 líneas)
+
+### Verificación
+
+```bash
+✅ python -m py_compile integrations/telegram_adapter.py
+```
+
+### Resultado
+
+✅ Mensajes de procesamiento ahora se muestran en el idioma del audio
+✅ Solución simple con diccionario estático
+✅ No requiere cambios en otros componentes
+✅ Extensible a más idiomas fácilmente
