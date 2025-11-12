@@ -1379,8 +1379,18 @@ Return ONLY the message itself - nothing else."""
         if include_history:
             contents.extend(self.conversation_history)
 
-        # Add current query
-        contents.append(types.Content(role="user", parts=[types.Part(text=query)]))
+        # Add current query with language prefix (Gemini 2.5 bug workaround)
+        # Reference: https://discuss.ai.google.dev/t/couldnt-switch-language-mid-conversation/92622
+        # Gemini ignores system_instruction when history is in different language
+        # Solution: Add explicit language instruction to EACH user message
+        language_prefix = ""
+        if self.language == "en":
+            language_prefix = "[RESPOND IN ENGLISH] "
+        elif self.language == "es":
+            language_prefix = "[RESPONDE EN ESPAÑOL] "
+
+        query_with_prefix = f"{language_prefix}{query}"
+        contents.append(types.Content(role="user", parts=[types.Part(text=query_with_prefix)]))
 
         return contents
 

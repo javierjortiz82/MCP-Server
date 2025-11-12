@@ -385,6 +385,7 @@ class PromptManager:
             "services": services,  # None = dynamic loading via MCP tools
             "customer_email": customer_email,
             "show_pre_confirmation_summary": show_pre_confirmation_summary,
+            "user_lang": user_lang,  # Language for explicit response language control
             # Date/time context for flexible date parsing
             "current_date": now.strftime("%Y-%m-%d"),  # 2025-10-13
             "current_datetime": now,  # Full datetime object for Jinja2 filters
@@ -475,6 +476,7 @@ class PromptManager:
             "business": business,
             "policies": policies,
             "response_detail_level": response_detail_level,
+            "user_lang": user_lang,  # Language for explicit response language control
         }
 
         logger.debug(
@@ -551,6 +553,7 @@ class PromptManager:
             "version": version,
             "tools_context": tools_context,
             "pagination_page_size": pagination_page_size,
+            "user_lang": user_lang,  # Language for explicit response language control
         }
 
         logger.debug(

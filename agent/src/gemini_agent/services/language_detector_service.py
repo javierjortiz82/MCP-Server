@@ -26,7 +26,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from typing import Literal, Optional
-from functools import lru_cache
 
 from google import genai
 from google.genai import types
@@ -97,14 +96,8 @@ class LanguageDetectorService:
         """
         try:
             # Try to load from Jinja2 template
-            from pathlib import Path
-            import sys
-
-            prompts_path = Path(__file__).parent.parent.parent.parent.parent / "prompts"
-            if str(prompts_path) not in sys.path:
-                sys.path.insert(0, str(prompts_path))
-
-            from prompt_manager import PromptManager
+            # Correct path: go up to agent/src/ and then to multi_agent module
+            from multi_agent.prompt_manager import PromptManager
 
             pm = PromptManager()
             template = pm.env.get_template("base/language_detection.jinja2")
@@ -213,54 +206,36 @@ Examples:
             logger.debug(f"🔄 Cache hit for '{text[:30]}...' → {cached_lang}")
             return cached_lang
 
-        # Detect using Gemini
+        # Detect using Gemini (simple approach)
         try:
             logger.debug(f"🔍 Detecting language for: '{text[:50]}...'")
 
-            # Build conversation
-            contents = [
-                types.Content(
-                    role="user",
-                    parts=[types.Part(text=self._prompt_template)]
-                ),
-                types.Content(
-                    role="model",
-                    parts=[types.Part(text="Understood. I will detect the language and respond with only the code.")]
-                ),
-                types.Content(
-                    role="user",
-                    parts=[types.Part(text=f"Text: {text}")]
-                )
-            ]
+            # Simple prompt
+            prompt = f"{self._prompt_template}\n\nText to analyze: {text}\n\nLanguage code:"
 
-            # Call Gemini with low temperature for deterministic results
+            # CRITICAL: max_output_tokens must be >= 2048 for reliability
+            # Reference: https://github.com/googleapis/python-genai/issues/1289
             config = types.GenerateContentConfig(
                 temperature=0.0,
-                max_output_tokens=10,  # Only need 2-4 chars ("en", "es", "null")
+                max_output_tokens=2048,  # Prevents empty responses
+                response_mime_type="text/plain",
             )
 
             response = await self.client.aio.models.generate_content(
                 model=self.model_name,
-                contents=contents,
+                contents=prompt,
                 config=config
             )
 
-            # Extract language code with defensive checks
-            if not response:
-                raise RuntimeError("Empty response from Gemini (no response)")
-
-            if not response.candidates or len(response.candidates) == 0:
-                raise RuntimeError("Empty response from Gemini (no candidates)")
+            # Extract language code
+            if not response or not response.candidates:
+                raise RuntimeError("Empty response from Gemini")
 
             candidate = response.candidates[0]
-            if not candidate.content or not candidate.content.parts or len(candidate.content.parts) == 0:
-                raise RuntimeError("Empty response from Gemini (no content parts)")
+            if not candidate.content or not candidate.content.parts:
+                raise RuntimeError("No content in response")
 
-            text_part = candidate.content.parts[0]
-            if not hasattr(text_part, 'text') or not text_part.text:
-                raise RuntimeError("Empty response from Gemini (no text in part)")
-
-            detected = text_part.text.strip().lower()
+            detected = candidate.content.parts[0].text.strip().lower()
 
             # Handle "null" or ambiguous responses
             if detected == "null" or detected not in self.supported_languages:
@@ -269,10 +244,7 @@ Examples:
 
             # Cache result
             self._cache[cache_key] = detected
-
-            # Limit cache size to 1000 entries
             if len(self._cache) > 1000:
-                # Remove oldest 200 entries
                 for key in list(self._cache.keys())[:200]:
                     del self._cache[key]
 
@@ -281,7 +253,6 @@ Examples:
 
         except Exception as e:
             logger.error(f"Language detection failed: {e}")
-            # Fallback to session language or default
             fallback = session_language or "en"
             logger.warning(f"Using fallback language: {fallback}")
             return fallback

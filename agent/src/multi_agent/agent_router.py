@@ -311,11 +311,13 @@ NO agregues explicaciones ni puntuación adicional."""
             self.client = genai.Client(api_key=self.api_key)
 
             # Build generation config with temperature=0 for deterministic classification
+            # CRITICAL: max_output_tokens must be >= 2048 for reliability
+            # Reference: https://github.com/googleapis/python-genai/issues/1289
             self.generation_config = types.GenerateContentConfig(
                 temperature=0.0,  # Deterministic classification
                 top_k=1,  # Take only the top prediction
                 top_p=1.0,  # No nucleus sampling needed
-                max_output_tokens=500,  # Generous limit for thinking tokens + response (Gemini 2.5 Flash uses variable thinking)
+                max_output_tokens=2048,  # Prevents empty responses (Gemini bug)
                 response_mime_type="text/plain",
             )
 
@@ -500,7 +502,7 @@ NO agregues explicaciones ni puntuación adicional."""
         context: dict[str, Any] | None = None,
         persist_intent: bool = True,
         session_language: str | None = None,
-    ) -> Intent:
+    ) -> tuple[Intent, str]:
         """Classify user query into sales, booking, or general intent.
 
         Uses Gemini 2.5 Flash with temperature=0 for deterministic classification.
@@ -567,29 +569,27 @@ NO agregues explicaciones ni puntuación adicional."""
             if self.metrics:
                 self.metrics.increment_counter("router_classifications_attempted", 1)
 
-            # CRITICAL FIX: Detect query language using Gemini (no hardcoded keywords)
-            # Only detect when session_language is None to avoid rate limiting
+            # CRITICAL FIX: ALWAYS detect query language using Gemini (no hardcoded keywords)
+            # This ensures the agent responds in the language of the CURRENT message
+            # even if the session was initiated in a different language
             # Reference: agent/src/gemini_agent/services/language_detector_service.py
-            if session_language:
-                # Use session language directly (most common case)
-                query_language = session_language
-                logger.debug(f"Using session language: {session_language}")
-            else:
-                # First message - detect using Gemini
-                try:
-                    query_language = await self.language_detector.detect_language(
-                        text=query,
-                        session_language=None,
-                        use_cache=True
-                    )
-                    logger.info(f"🌐 Language detected via Gemini: {query_language}")
-                except Exception as detect_error:
-                    logger.warning(f"Gemini detection failed: {detect_error}. Using default 'es'")
-                    query_language = "es"  # Default fallback
+            try:
+                # Always detect current message language (use session_language as fallback)
+                query_language = await self.language_detector.detect_language(
+                    text=query,
+                    session_language=session_language,  # Used as fallback for ambiguous cases
+                    use_cache=True  # Cache avoids redundant API calls for similar messages
+                )
+                logger.info(f"🌐 Language detected via Gemini for current message: {query_language}")
+            except Exception as detect_error:
+                # Fallback: Use session language if detection fails
+                fallback_lang = session_language or "es"
+                logger.warning(f"Gemini detection failed: {detect_error}. Using fallback: {fallback_lang}")
+                query_language = fallback_lang
 
-            # Use the detected/session language consistently
+            # Use the detected language consistently for this turn
             detected_language = query_language
-            logger.debug(f"🌐 Using language: {detected_language}")
+            logger.debug(f"🌐 Using language for this turn: {detected_language}")
 
             # Get classification prompt using PromptManager with detected language
             classification_prompt = self._get_classification_prompt_with_language(
@@ -899,7 +899,7 @@ NO agregues explicaciones ni puntuación adicional."""
     async def classify_batch(
         self,
         queries: list[str],
-    ) -> list[Intent]:
+    ) -> list[tuple[Intent, str]]:
         """Classify multiple queries in batch.
 
         Useful for testing and analytics. Classifies each query independently.
@@ -908,7 +908,7 @@ NO agregues explicaciones ni puntuación adicional."""
             queries: List of query strings to classify.
 
         Returns:
-            List of Intent enum values, one per query.
+            List of tuples (Intent, detected_language), one per query.
 
         Example:
             >>> queries = [
@@ -916,24 +916,24 @@ NO agregues explicaciones ni puntuación adicional."""
             ...     "Quiero reservar",
             ...     "Cuál es su horario?"
             ... ]
-            >>> intents = await router.classify_batch(queries)
-            >>> print(intents)  # [Intent.SALES, Intent.BOOKING, Intent.GENERAL]
+            >>> results = await router.classify_batch(queries)
+            >>> print(results)  # [(Intent.SALES, "es"), (Intent.BOOKING, "es"), (Intent.GENERAL, "es")]
         """
         logger.info(f"Classifying batch of {len(queries)} queries")
 
-        intents = []
+        results = []
         for i, query in enumerate(queries, 1):
             try:
-                intent = await self.classify_intent(query)
-                intents.append(intent)
-                logger.debug(f"Batch {i}/{len(queries)}: '{query[:30]}...' → {intent.value}")
+                intent, language = await self.classify_intent(query)
+                results.append((intent, language))
+                logger.debug(f"Batch {i}/{len(queries)}: '{query[:30]}...' → {intent.value} ({language})")
 
             except Exception as e:
                 logger.error(f"Error classifying query {i}: {e}")
-                intents.append(Intent.GENERAL)  # Fallback
+                results.append((Intent.GENERAL, "es"))  # Fallback
 
-        logger.info(f"✅ Batch classification completed: {len(intents)} results")
-        return intents
+        logger.info(f"✅ Batch classification completed: {len(results)} results")
+        return results
 
     def get_intent_statistics(
         self,

@@ -410,9 +410,9 @@ Tool response: price = null
 - Never mention failed search - smooth UX recovery
 
 **Pattern 2: Language Handling**
-- Customer language → Use for intro/labels
-- Database description → Show as-is (data integrity)
-- See response_format.jinja2 for language detection
+- Customer language → Use for ALL your response (intro, labels, translated product data)
+- Database description → TRANSLATE to match user's language
+- See response_format.jinja2 for detailed translation rules
 
 **Pattern 3: Pagination Request** ("show me more", "next")
 - See pagination logic in display_rules.jinja2
