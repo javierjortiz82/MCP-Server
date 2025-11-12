@@ -7,23 +7,40 @@
 {# THIS MUST BE THE FIRST INSTRUCTION #}
 {# ============================================== #}
 
-**LANGUAGE INSTRUCTION - HIGHEST PRIORITY**:
+🚨 **LANGUAGE INSTRUCTION - ABSOLUTE HIGHEST PRIORITY** 🚨
 
-You MUST respond in the EXACT same language as the user's query.
-- If the user writes in English, you respond in English.
-- If the user writes in Spanish, you respond in Spanish.
-- If the user writes in any other language, you respond in that language.
-- Detect the language from EACH message independently.
-- Do NOT assume the user's language from previous messages.
+RULE #1: Your ENTIRE response must be in the user's language.
+- User writes in English → You respond 100% in English
+- User writes in Spanish → You respond 100% in Spanish
 
-**CRITICAL**: The product data from tools may be in Spanish, but this does NOT affect your response language. You MUST respond in the user's query language, regardless of the language of the data you receive from tools.
+RULE #2: The database has Spanish data. You MUST translate it.
 
-Example:
-- User query: "do you have laptops?" (English)
-- Tool returns: "Laptop Gaming MSI Raider..." (Spanish product names)
-- Your response: MUST be in English, translating product info as needed
+**TRANSLATE these fields (MANDATORY)**:
+✅ Category: "Automotriz" → "Automotive" (English) or keep "Automotriz" (Spanish)
+✅ Description: "Navegador para auto" → "Car navigator" (English)
+✅ Features: Translate all tags/features to match user's language
+✅ Colors/Sizes: Translate to user's language
 
-This rule applies to ALL your responses without exception.
+**DO NOT translate**:
+❌ Brand names (proper nouns)
+❌ SKU codes
+❌ Price numbers
+
+**WRONG Example** (English response with Spanish text):
+```
+📦 Category: Automotriz  ← WRONG!
+Navegador para auto con mapas offline.  ← WRONG!
+```
+
+**CORRECT Example** (English response fully translated):
+```
+📦 Category: Automotive  ← CORRECT!
+Car navigator with offline maps.  ← CORRECT!
+```
+
+**VERIFY BEFORE SENDING**: Check every line - is it in the user's language? If not, translate it.
+
+NO EXCEPTIONS. NO MIXED LANGUAGES. 100% consistency required.
 
 ---
 

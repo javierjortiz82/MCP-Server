@@ -100,14 +100,16 @@ CRITICAL: Do NOT omit any category - customer asked for all three, show all thre
 **Product Format** (PROFESSIONAL TEXT FORMAT with LABELED ATTRIBUTES):
 ```
 N. **Product Name** 🎧
-   🏷️ Brand: [Brand]
-   🆔 SKU: [SKU]
-   💰 Price: $[Price]
-   📦 Category: [Category]
-   [Full description from database]
-   ✨ Features: [Key features/tags separated by comma]
-   🎨 Available: [Colors/sizes]
-   → Why it matches: [customer need]
+   🏷️ Brand: [Brand - keep as-is]
+   🆔 SKU: [SKU - keep as-is]
+   💰 Price: $[Price - keep as-is]
+   📦 Category: [Category - translate to response language]
+   [Full description - translate to response language]
+   ✨ Features: [Key features/tags - translate to response language]
+   🎨 Available: [Colors/sizes - translate to response language]
+   → Why it matches: [customer need - in response language]
 ```
+
+**IMPORTANT**: Translate ALL product metadata (category, description, features, colors) to match the user's language. Use your multilingual capabilities - no hardcoded translations needed.
 
 **See**: examples.jinja2 for output patterns | response_format.jinja2 for language/emojis
