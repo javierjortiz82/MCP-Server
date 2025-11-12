@@ -335,7 +335,7 @@ class TelegramAdapter:
 
             # Indicar que el bot está procesando
             await update.message.chat.send_action("typing")
-            await update.message.reply_text("🎤 Transcribiendo mensaje de voz...")
+            processing_msg = await update.message.reply_text("🎤...")
 
             # Descargar archivo de voz
             voice_file = await voice.get_file()
@@ -352,6 +352,19 @@ class TelegramAdapter:
                     language_hint=None,  # Auto-detect language from audio
                     quality_preference="balanced"
                 )
+
+            # Actualizar mensaje con idioma detectado
+            transcribing_messages = {
+                "en": "🎤 Transcribing voice message...",
+                "es": "🎤 Transcribiendo mensaje de voz...",
+                "fr": "🎤 Transcription du message vocal...",
+                "de": "🎤 Sprachnachricht transkribieren...",
+                "pt": "🎤 Transcrevendo mensagem de voz...",
+                "it": "🎤 Trascrizione del messaggio vocale...",
+            }
+            detected_lang = asr_response.language if asr_response.success and asr_response.language else "en"
+            transcribing_text = transcribing_messages.get(detected_lang, transcribing_messages["en"])
+            await processing_msg.edit_text(transcribing_text)
 
             if not asr_response.success or not asr_response.transcription:
                 logger.warning(f"[chat_id={chat_id}] ASR failed: {asr_response.error}")
@@ -383,6 +396,8 @@ class TelegramAdapter:
                 }
             )
 
+            # Eliminar mensaje de procesamiento y enviar respuesta
+            await processing_msg.delete()
             await update.message.reply_text(response)
 
         except Exception as e:
