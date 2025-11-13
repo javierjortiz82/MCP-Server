@@ -38,6 +38,7 @@ try:
         ContextTypes,
         filters,
     )
+    from telegram.error import BadRequest
 except ImportError:
     raise ImportError(
         "python-telegram-bot not installed. "
@@ -216,20 +217,20 @@ class TelegramAdapter:
             return
 
         await update.message.reply_text(
-            "👋 ¡Hola! Soy el asistente de Lab01-MCP.\n\n"
-            "Puedo ayudarte con:\n"
-            "• Búsqueda de productos\n"
-            "• Reservas de citas\n"
-            "• Información general\n\n"
-            "Acepto:\n"
-            "📝 Mensajes de texto\n"
-            "🎤 Mensajes de voz\n"
-            "📷 Imágenes\n"
-            "📄 Documentos (PDF, DOCX)\n\n"
-            "Comandos:\n"
-            "/help - Mostrar ayuda\n"
-            "/clear - Reiniciar conversación\n\n"
-            "¿En qué puedo ayudarte?"
+            "*👋 Hi! I'm the Odiseo Assistant.*\n\n"
+            "*✨ Features:*\n"
+            "• 🎤 *Voice Message Processing* - Automatic transcription with language detection\n"
+            "• 🖼️ *Image & Document OCR* - Extract text from photos and PDFs\n"
+            "• 🌍 *Multilingual Support* - English, Spanish, French, German, Portuguese, Italian\n"
+            "• 📊 *Sentiment Analysis* - Emotion detection and urgency assessment\n"
+            "• 🚨 *Smart Escalation* - Automatic routing to support teams for urgent issues\n"
+            "• 🤖 *AI-Powered Responses* - Powered by advanced language models\n"
+            "• 📅 *Booking & Sales* - Integrated appointment scheduling and product inquiries\n\n"
+            "*📋 Commands:*\n"
+            "`/help` - Show help\n"
+            "`/clear` - Reset conversation\n\n"
+            "_How can I help you?_",
+            parse_mode="Markdown"
         )
 
     async def _cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
@@ -243,16 +244,17 @@ class TelegramAdapter:
             return
 
         await update.message.reply_text(
-            "📖 Comandos disponibles:\n\n"
-            "/start - Iniciar conversación\n"
-            "/help - Mostrar esta ayuda\n"
-            "/clear - Reiniciar conversación\n\n"
-            "Tipos de entrada soportados:\n"
-            "• Texto - Escribe tu consulta\n"
-            "• Voz - Envía nota de voz\n"
-            "• Imagen - Envía foto con texto\n"
-            "• Documento - Envía PDF o DOCX\n\n"
-            "Simplemente envíame tu mensaje y te ayudaré."
+            "*📖 Available Commands:*\n\n"
+            "`/start` - Start conversation\n"
+            "`/help` - Show this help\n"
+            "`/clear` - Reset conversation\n\n"
+            "*Supported Input Types:*\n"
+            "• 📝 *Text* - Write your query\n"
+            "• 🎤 *Voice* - Send voice note\n"
+            "• 📷 *Image* - Send photo with text\n"
+            "• 📄 *Document* - Send PDF or DOCX\n\n"
+            "_Just send me your message and I'll help you._",
+            parse_mode="Markdown"
         )
 
     async def _cmd_clear(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
@@ -271,7 +273,10 @@ class TelegramAdapter:
         # Limpiar sesión
         await self.chat_core.cleanup_session(session_id)
 
-        await update.message.reply_text("✅ Conversación reiniciada")
+        await update.message.reply_text(
+            "*✅ Conversation reset!*",
+            parse_mode="Markdown"
+        )
 
     # ==================== Message Handlers ====================
 
@@ -304,14 +309,22 @@ class TelegramAdapter:
                 source_type="text"
             )
 
-            # Enviar respuesta
-            await update.message.reply_text(response)
+            # Enviar respuesta con fallback si Markdown falla
+            try:
+                await update.message.reply_text(response, parse_mode="Markdown")
+            except BadRequest as e:
+                if "Can't parse entities" in str(e):
+                    logger.warning(f"[chat_id={chat_id}] Markdown parsing failed, sending as plain text")
+                    await update.message.reply_text(response)
+                else:
+                    raise
 
         except Exception as e:
             logger.exception(f"[chat_id={chat_id}] Error processing text message: {e}")
             await update.message.reply_text(
-                f"❌ Lo siento, ocurrió un error al procesar tu mensaje.\n\n"
-                f"Error: {str(e)}"
+                f"❌ *Sorry, an error occurred while processing your message.*\n\n"
+                f"`Error: {str(e)}`",
+                parse_mode="Markdown"
             )
 
     async def _handle_voice_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
@@ -369,8 +382,9 @@ class TelegramAdapter:
             if not asr_response.success or not asr_response.transcription:
                 logger.warning(f"[chat_id={chat_id}] ASR failed: {asr_response.error}")
                 await update.message.reply_text(
-                    f"❌ No pude transcribir el audio.\n\n"
-                    f"Error: {asr_response.error or 'Unknown error'}"
+                    f"❌ *Couldn't transcribe the audio.*\n\n"
+                    f"`Error: {asr_response.error or 'Unknown error'}`",
+                    parse_mode="Markdown"
                 )
                 return
 
@@ -396,15 +410,23 @@ class TelegramAdapter:
                 }
             )
 
-            # Eliminar mensaje de procesamiento y enviar respuesta
+            # Eliminar mensaje de procesamiento y enviar respuesta con fallback
             await processing_msg.delete()
-            await update.message.reply_text(response)
+            try:
+                await update.message.reply_text(response, parse_mode="Markdown")
+            except BadRequest as e:
+                if "Can't parse entities" in str(e):
+                    logger.warning(f"[chat_id={chat_id}] Markdown parsing failed, sending as plain text")
+                    await update.message.reply_text(response)
+                else:
+                    raise
 
         except Exception as e:
             logger.exception(f"[chat_id={chat_id}] Error processing voice message: {e}")
             await update.message.reply_text(
-                f"❌ Error al procesar mensaje de voz.\n\n"
-                f"Error: {str(e)}"
+                f"❌ *Error processing voice message.*\n\n"
+                f"`Error: {str(e)}`",
+                parse_mode="Markdown"
             )
 
     async def _handle_photo_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
@@ -426,7 +448,7 @@ class TelegramAdapter:
             start_time = time.time()
 
             await update.message.chat.send_action("typing")
-            await update.message.reply_text("📷 Extrayendo texto de la imagen...")
+            await update.message.reply_text("📷 *Extracting text from image...*", parse_mode="Markdown")
 
             # Obtener la foto de mayor resolución
             photo = update.message.photo[-1]
@@ -447,8 +469,9 @@ class TelegramAdapter:
             if not ocr_response.success or not ocr_response.text:
                 logger.warning(f"[chat_id={chat_id}] OCR failed: {ocr_response.error}")
                 await update.message.reply_text(
-                    f"❌ No pude extraer texto de la imagen.\n\n"
-                    f"Error: {ocr_response.error or 'No text found'}"
+                    f"❌ *Couldn't extract text from the image.*\n\n"
+                    f"`Error: {ocr_response.error or 'No text found'}`",
+                    parse_mode="Markdown"
                 )
                 return
 
@@ -473,13 +496,22 @@ class TelegramAdapter:
                 }
             )
 
-            await update.message.reply_text(response)
+            # Enviar respuesta con fallback si Markdown falla
+            try:
+                await update.message.reply_text(response, parse_mode="Markdown")
+            except BadRequest as e:
+                if "Can't parse entities" in str(e):
+                    logger.warning(f"[chat_id={chat_id}] Markdown parsing failed, sending as plain text")
+                    await update.message.reply_text(response)
+                else:
+                    raise
 
         except Exception as e:
             logger.exception(f"[chat_id={chat_id}] Error processing photo: {e}")
             await update.message.reply_text(
-                f"❌ Error al procesar imagen.\n\n"
-                f"Error: {str(e)}"
+                f"❌ *Error processing image.*\n\n"
+                f"`Error: {str(e)}`",
+                parse_mode="Markdown"
             )
 
     async def _handle_document_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
@@ -505,15 +537,16 @@ class TelegramAdapter:
 
             if file_extension not in supported_extensions:
                 await update.message.reply_text(
-                    f"❌ Formato no soportado: .{file_extension}\n\n"
-                    f"Formatos soportados: {', '.join(supported_extensions)}"
+                    f"❌ *Unsupported format:* `.{file_extension}`\n\n"
+                    f"*Supported formats:* `{', '.join(supported_extensions)}`",
+                    parse_mode="Markdown"
                 )
                 return
 
             start_time = time.time()
 
             await update.message.chat.send_action("typing")
-            await update.message.reply_text(f"📄 Extrayendo texto de {document.file_name}...")
+            await update.message.reply_text(f"📄 *Extracting text from* `{document.file_name}`*...*", parse_mode="Markdown")
 
             # Descargar documento
             doc_file = await document.get_file()
@@ -534,8 +567,9 @@ class TelegramAdapter:
             if not ocr_response.success or not ocr_response.text:
                 logger.warning(f"[chat_id={chat_id}] OCR failed: {ocr_response.error}")
                 await update.message.reply_text(
-                    f"❌ No pude extraer texto del documento.\n\n"
-                    f"Error: {ocr_response.error or 'No text found'}"
+                    f"❌ *Couldn't extract text from the document.*\n\n"
+                    f"`Error: {ocr_response.error or 'No text found'}`",
+                    parse_mode="Markdown"
                 )
                 return
 
@@ -561,13 +595,22 @@ class TelegramAdapter:
                 }
             )
 
-            await update.message.reply_text(response)
+            # Enviar respuesta con fallback si Markdown falla
+            try:
+                await update.message.reply_text(response, parse_mode="Markdown")
+            except BadRequest as e:
+                if "Can't parse entities" in str(e):
+                    logger.warning(f"[chat_id={chat_id}] Markdown parsing failed, sending as plain text")
+                    await update.message.reply_text(response)
+                else:
+                    raise
 
         except Exception as e:
             logger.exception(f"[chat_id={chat_id}] Error processing document: {e}")
             await update.message.reply_text(
-                f"❌ Error al procesar documento.\n\n"
-                f"Error: {str(e)}"
+                f"❌ *Error processing document.*\n\n"
+                f"`Error: {str(e)}`",
+                parse_mode="Markdown"
             )
 
     # ==================== Core Processing ====================

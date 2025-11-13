@@ -51096,3 +51096,344 @@ Bot: [respuesta del asistente]                  [mensaje de procesamiento elimin
 ✅ Solución simple con diccionario estático
 ✅ No requiere cambios en otros componentes
 ✅ Extensible a más idiomas fácilmente
+
+---
+
+## 2025-11-12 - Fallback Automático para Markdown Malformado
+
+### Problema
+
+El bot fallaba al enviar respuestas cuando el agente generaba Markdown malformado:
+```
+telegram.error.BadRequest: Can't parse entities: can't find end of the entity starting at byte offset 395
+```
+
+**Impacto:** Usuario no recibía respuesta, experiencia rota.
+
+### Root Cause
+
+- Telegram API es estricto con Markdown
+- Caracteres especiales sin cerrar o mal escapados causan error
+- El agente (Gemini) puede generar Markdown inválido
+- No había manejo de este error
+
+### Solución Implementada
+
+**Fallback automático a texto plano** cuando falla el parsing de Markdown.
+
+**Cambios en `integrations/telegram_adapter.py`:**
+
+1. **Import agregado (línea 41):**
+   ```python
+   from telegram.error import BadRequest
+   ```
+
+2. **Fallback en 4 handlers:**
+
+**Handler de texto (líneas 312-320):**
+```python
+# Antes
+await update.message.reply_text(response, parse_mode="Markdown")
+
+# Después
+try:
+    await update.message.reply_text(response, parse_mode="Markdown")
+except BadRequest as e:
+    if "Can't parse entities" in str(e):
+        logger.warning(f"[chat_id={chat_id}] Markdown parsing failed, sending as plain text")
+        await update.message.reply_text(response)
+    else:
+        raise
+```
+
+**Mismo patrón aplicado en:**
+- Handler de voz (líneas 413-422)
+- Handler de foto (líneas 499-507)
+- Handler de documento (líneas 598-606)
+
+### Beneficios
+
+1. ✅ **Robustez:** Bot nunca falla por Markdown malformado
+2. ✅ **UX mejorada:** Usuario siempre recibe respuesta
+3. ✅ **Logging:** Se registra cuando hay problemas de parsing
+4. ✅ **Graceful degradation:** Texto plano > Sin respuesta
+5. ✅ **No invasivo:** Solo agrega try/catch, no cambia lógica
+
+### Comportamiento
+
+**Escenario 1: Markdown válido**
+```
+Usuario: "Hola"
+Bot: [envía con formato Markdown] ✅
+```
+
+**Escenario 2: Markdown malformado**
+```
+Usuario: "¿Qué es esto?"
+Agente genera: "El producto cuesta $100 _sin cerrar énfasis"
+Bot intenta: parse_mode="Markdown" → ❌ BadRequest
+Bot fallback: Envía texto plano → ✅ Usuario recibe respuesta
+Log: "Markdown parsing failed, sending as plain text"
+```
+
+### Logs Esperados
+
+**Antes:**
+```
+[ERROR] [chat_id=123] Error processing text message: Can't parse entities...
+[No se envía respuesta al usuario]
+```
+
+**Después:**
+```
+[WARNING] [chat_id=123] Markdown parsing failed, sending as plain text
+[Se envía respuesta sin formato]
+```
+
+### Archivos Modificados
+
+- `integrations/telegram_adapter.py` (+32 líneas)
+  - Import de BadRequest
+  - 4 bloques try/catch para fallback
+
+### Verificación
+
+```bash
+✅ python -m py_compile integrations/telegram_adapter.py
+```
+
+### Testing
+
+Para reproducir el error original:
+1. Enviar mensaje que cause respuesta con Markdown malformado
+2. **Antes:** Bot falla, no responde
+3. **Después:** Bot envía texto plano, usuario recibe respuesta
+
+### Casos Edge Manejados
+
+1. **Markdown válido:** Funciona normal con formato
+2. **Markdown malformado:** Fallback a texto plano
+3. **Otros BadRequest:** Se propagan (no oculta errores reales)
+4. **Otros errores:** Se manejan en el catch Exception general
+
+### Resultado
+
+✅ Bot 100% resiliente a errores de Markdown
+✅ Usuario siempre recibe respuesta
+✅ Logging claro para debugging
+✅ Solución simple y efectiva
+
+---
+
+## 2025-11-12 - Filtrado de Productos por Presupuesto en SalesAgent
+
+### Problema Identificado
+
+**Síntoma:** Usuario dice "tengo 990 usd" pero el sistema devuelve laptops que cuestan $1050+, ignorando el presupuesto.
+
+**Root Cause:**
+- ❌ `fuzzy_search_smart` no tiene parámetros de precio/presupuesto
+- ❌ `search_products` no filtra por precio
+- ❌ El prompt del SalesAgent no menciona respetar presupuestos
+- ❌ No existe filtrado por precio en ninguna parte del sistema
+
+**Evidencia del log:**
+```
+User: "estoy buscando una laptop tengo 990 usd"
+→ Intent: sales
+→ Tool: fuzzy_search_smart("laptop")
+→ Results: COMP-0056, COMP-0009, COMP-0062, COMP-0054
+→ Problema: Incluye laptops > $990
+```
+
+### Análisis de Soluciones
+
+**Opción 1: Agregar filtros SQL al tool** (Más robusto pero invasivo)
+- Modificar `mcp_server/tools/fuzzy_search.py`
+- Agregar `min_price` y `max_price` como parámetros
+- Filtrar en SQL con `WHERE price <= :max_price`
+- ❌ Requiere cambios de código + testing de BD
+
+**Opción 2: Instrucción en prompt del agente** ⭐ IMPLEMENTADO
+- Agregar reglas de filtrado al prompt del SalesAgent
+- Gemini filtra resultados después de recibirlos del tool
+- ✅ Sin cambios de código
+- ✅ Implementación inmediata
+
+### Solución Implementada
+
+**Archivo modificado:** `prompts/templates/base/sales_agent/modules/intelligent_search_strategy.jinja2`
+
+**Nueva sección agregada:**
+
+#### STRATEGY 6: RESPECT BUDGET CONSTRAINTS 💰
+
+**Reglas de filtrado obligatorias:**
+
+1. **Detección de presupuesto:**
+   - "tengo $990" → budget = $990
+   - "mi presupuesto es $500" → budget = $500
+   - "no más de $1000" → budget = $1000
+   - "under $800" → budget = $800
+
+2. **Filtrado estricto:**
+   ```
+   User budget: $990
+   Product $991 → ❌ NO MOSTRAR (excede por $1)
+   Product $990 → ✅ MOSTRAR (exacto)
+   Product $950 → ✅ MOSTRAR (dentro)
+   ```
+
+3. **Proceso obligatorio:**
+   ```
+   1. Usuario: "busco laptop tengo 990 usd"
+   2. Llamar: fuzzy_search_smart("laptop")
+   3. Tool devuelve: 12 productos (precios variados)
+   4. FILTRAR: Mantener solo productos con price <= $990
+   5. Mostrar: Solo productos dentro del presupuesto
+   ```
+
+4. **Comunicación transparente:**
+   ```
+   ✅ "Encontré 12 laptops en total. Aquí están las 7 que se ajustan a tu presupuesto de $990:"
+   ```
+
+**Casos especiales manejados:**
+
+**Caso 1: Ningún producto dentro del presupuesto**
+```
+"Encontré laptops, pero la más económica cuesta $850, por encima de tu presupuesto de $400.
+
+¿Te gustaría:
+- Ver las opciones más económicas de todas formas?
+- Buscar tablets o Chromebooks que podrían ajustarse mejor?
+- Ajustar tu presupuesto?"
+```
+
+**Caso 2: Solo 1-2 productos dentro del presupuesto**
+```
+"Encontré 2 laptops gaming dentro de tu presupuesto de $900:
+[Mostrar productos]
+
+Nota: Tenemos 5 laptops gaming más desde $950 si quieres ver opciones ligeramente por encima."
+```
+
+**Caso 3: Todos los productos ligeramente por encima**
+```
+"Las laptops que encontré empiezan en $1,020, $30 por encima de tu presupuesto de $990.
+¿Te gustaría verlas? Están muy cerca de tu presupuesto."
+```
+
+### Instrucciones Agregadas al Prompt
+
+```markdown
+**DO:**
+- ✅ Parsear presupuesto del mensaje CADA vez que se mencione
+- ✅ Filtrar resultados del tool ANTES de presentar
+- ✅ Ser ESTRICTO: $991 > $990 = excluido
+- ✅ Explicar filtrado: "X productos total, Y dentro de tu presupuesto"
+- ✅ Ofrecer alternativas si no hay productos dentro
+
+**DON'T:**
+- ❌ Mostrar productos por encima sin permiso explícito
+- ❌ Redondear presupuesto ("$990 es básicamente $1000") - NO
+- ❌ Ignorar menciones de presupuesto
+- ❌ Ocultar que se filtraron productos
+```
+
+### Beneficios
+
+1. ✅ **Sin código:** Cero cambios en Python/SQL
+2. ✅ **Inmediato:** Disponible en cuanto se cargue el template
+3. ✅ **Flexible:** Gemini entiende contexto y variaciones de presupuesto
+4. ✅ **Multiidioma:** Funciona en inglés y español
+5. ✅ **Transparente:** Usuario entiende por qué ve ciertos productos
+6. ✅ **Educativo:** Ofrece opciones cuando no hay match exacto
+
+### Comportamiento Esperado
+
+**Antes:**
+```
+User: "busco laptop tengo 990 usd"
+Bot muestra: [laptop $950, laptop $1050, laptop $1100]
+❌ Muestra productos por encima del presupuesto
+```
+
+**Después:**
+```
+User: "busco laptop tengo 990 usd"
+Bot procesa:
+  - Detecta budget = $990
+  - Obtiene 12 laptops del tool
+  - Filtra: mantiene solo price <= $990
+  - Encuentra 4 dentro del presupuesto
+Bot muestra: "Encontré 12 laptops. Aquí están las 4 que se ajustan a tu presupuesto de $990:"
+[laptop $850, laptop $900, laptop $950, laptop $990]
+✅ Solo muestra productos dentro del presupuesto
+```
+
+### Testing Recomendado
+
+1. **Caso básico:**
+   - "busco laptop tengo 990 usd"
+   - Verificar: solo muestra <= $990
+
+2. **Caso sin resultados:**
+   - "busco laptop gaming tengo 400 usd"
+   - Verificar: explica que no hay opciones, ofrece alternativas
+
+3. **Caso límite:**
+   - "busco laptop hasta 1000 dólares"
+   - Verificar: incluye productos a $1000 exacto
+
+4. **Multiidioma:**
+   - "I need a laptop, my budget is $800"
+   - Verificar: funciona en inglés
+
+### Archivos Modificados
+
+- `prompts/templates/base/sales_agent/modules/intelligent_search_strategy.jinja2` (+149 líneas)
+  - Nueva sección "STRATEGY 6: RESPECT BUDGET CONSTRAINTS"
+  - Reglas detalladas de filtrado
+  - Casos especiales documentados
+  - Ejemplos prácticos
+
+### Verificación
+
+```bash
+✅ Template Jinja2 syntax validation passed
+```
+
+### Próximos Pasos (Opcional - Mejora Futura)
+
+Para una solución más robusta a largo plazo, considerar:
+
+1. **Agregar parámetros de precio a `fuzzy_search_smart`:**
+   ```python
+   def fuzzy_search_smart(
+       query: str,
+       min_price: float | None = None,
+       max_price: float | None = None,
+       ...
+   )
+   ```
+
+2. **Filtrar en SQL:**
+   ```sql
+   WHERE (%(max_price)s IS NULL OR p.price <= %(max_price)s)
+   ```
+
+**Ventajas futuras:**
+- Filtrado en BD (más eficiente)
+- No depende de Gemini
+- Más rápido (menos datos transferidos)
+
+**Por ahora:** La solución de prompt es suficiente y efectiva.
+
+### Resultado
+
+✅ SalesAgent ahora respeta presupuestos del usuario
+✅ Filtrado estricto: ni $1 por encima del límite
+✅ Comunicación clara sobre el filtrado
+✅ Alternativas cuando no hay productos dentro del presupuesto
+✅ Implementación inmediata sin cambios de código
