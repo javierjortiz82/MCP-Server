@@ -718,6 +718,19 @@ class BookingAgent(BaseAgent):
                 # Clear auth flow flags
                 self._set_auth_flow_pending(False)
 
+                # UPDATE SESSION ACTIVITY to prevent immediate re-expiration
+                # After successful authentication, reset the inactivity timer
+                # so the session doesn't expire 1 minute later while user is still active
+                try:
+                    self.logger.info("⏱️ Updating session activity after authentication...")
+                    activity_result = await self.mcp_client.call_tool(
+                        "update_session_activity",
+                        {"session_id": str(self.session_id)}
+                    )
+                    self.logger.info(f"✅ Session activity updated: {activity_result}")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Error updating session activity: {e}")
+
                 # CRITICAL: Clear conversation history to avoid Gemini hallucinating
                 # "session expired" messages based on old auth prompts
                 # After successful authentication, user should start fresh without
