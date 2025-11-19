@@ -55,6 +55,28 @@ user_handlers.register_user_tools(mcp)  # Register user management tools
 resource_handlers.init_resource_handlers(mcp)
 prompt_handlers.init_prompt_handlers(mcp)
 
+# Validate tool registries (auto-discovery system)
+try:
+    from mcp_handlers.tool_discovery_validator import (
+        validate_tool_registries,
+        log_tool_discovery_status,
+    )
+
+    validation = validate_tool_registries(
+        mcp,
+        booking_registry=booking_handlers.booking_tool_registry,
+        product_registry=product_handlers.product_tool_registry,
+        pageable_registry=product_handlers.pageable_tool_registry,
+    )
+    log_tool_discovery_status(validation)
+
+    if not validation.is_valid:
+        logger.error("Tool discovery validation failed. See errors above.")
+        logger.error("Some tools may not be available to agents.")
+except Exception as e:
+    logger.warning(f"Tool discovery validation skipped: {e}")
+    logger.warning("This is not critical, but tool discovery may not work optimally.")
+
 
 # ============================================================================
 # Server Lifecycle with Official MCP Patterns
