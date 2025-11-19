@@ -351,10 +351,12 @@ class BookingAgent(BaseAgent):
 
                 if is_in_auth_flow:
                     self.logger.info(
-                        "🔓 User is responding to authentication prompt - "
-                        "allowing Gemini to process (email/OTP collection)"
+                        "🔐 User is in auth flow - intercepting to collect email/OTP"
                     )
-                    return None  # Let Gemini handle authentication flow
+                    # Instead of letting Gemini handle it (which it doesn't do properly),
+                    # we intercept and return a specific prompt to collect email/OTP
+                    # The _get_otp_collection_prompt() method will handle the flow
+                    return self._get_otp_collection_prompt(language=kwargs.get("language", "es"))
 
                 # User is NOT in auth flow - set flag and show authentication prompt
                 # Set auth_flow_pending flag in memory blocks so next request knows user is in auth flow
@@ -547,6 +549,29 @@ class BookingAgent(BaseAgent):
         except Exception as e:
             self.logger.warning(f"Error setting auth_flow_pending flag: {e}")
             # Don't fail the whole request if we can't set the flag
+
+    def _get_otp_collection_prompt(self, language: str = "es") -> str:
+        """Get the prompt that guides user to provide email and OTP.
+
+        This is the CONTINUATION of authentication flow when user is IN auth_flow.
+        Shows context-appropriate message based on what step they're at.
+
+        Args:
+            language: User's language (es|en)
+
+        Returns:
+            str: Localized OTP collection prompt
+        """
+        if language == "en":
+            return (
+                "Thank you for your message.\n\n"
+                "To continue, I need to verify your email. Please provide your email address."
+            )
+        else:  # Spanish (default)
+            return (
+                "Gracias por tu mensaje.\n\n"
+                "Para continuar, necesito verificar tu email. Por favor, proporciona tu correo electrónico."
+            )
 
     def _get_authentication_prompt(
         self,
