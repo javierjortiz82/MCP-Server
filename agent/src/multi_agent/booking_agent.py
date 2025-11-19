@@ -325,14 +325,25 @@ class BookingAgent(BaseAgent):
                     f"expired={session_expired}"
                 )
 
-                # ⚠️ CRITICAL: If session expired, CLEAR the auth_flow_pending flag
-                # because it MUST be from the EXPIRED session and is STALE.
-                # The user will need to authenticate again from scratch.
+                # ⚠️ CRITICAL: If session expired, check if auth_flow_pending flag is from CURRENT session
+                # If it's from a PREVIOUS (expired) session, it's STALE and must be cleared.
                 if session_expired:
-                    self.logger.warning(
-                        "⚠️ Session expired - auth_flow_pending flag is stale (from previous session), clearing it"
-                    )
-                    self._set_auth_flow_pending(False)
+                    # Check if the auth_flow_pending was set in THIS session_id or a previous one
+                    auth_session_id = self._get_memory_block_value("auth_flow_pending_session_id")
+                    current_session = str(self.session_id)
+
+                    if auth_session_id and auth_session_id != current_session:
+                        # The flag is from a DIFFERENT (expired) session - it's STALE
+                        self.logger.warning(
+                            f"⚠️ auth_flow_pending flag from session {auth_session_id} "
+                            f"but current is {current_session} - flag is STALE, clearing it"
+                        )
+                        self._set_auth_flow_pending(False)
+                    elif auth_session_id:
+                        # The flag is from THIS session - user is responding to auth prompt
+                        self.logger.info(
+                            f"✅ auth_flow_pending flag is from CURRENT session {current_session} - NOT stale"
+                        )
 
                 # Now check if user is IN THE MIDDLE of authentication flow
                 is_in_auth_flow = self._is_user_in_auth_flow()
@@ -348,6 +359,8 @@ class BookingAgent(BaseAgent):
                 # User is NOT in auth flow - set flag and show authentication prompt
                 # Set auth_flow_pending flag in memory blocks so next request knows user is in auth flow
                 self._set_auth_flow_pending(True)
+                # ALSO save the current session_id so we can detect if flag becomes stale later
+                self._save_auth_flow_session_id(str(self.session_id))
 
                 return self._get_authentication_prompt(
                     session_expired=session_expired,
@@ -1405,6 +1418,58 @@ class BookingAgent(BaseAgent):
         else:
             # Other errors (EMPTY_RESPONSE, NO_CANDIDATES, etc.)
             return await self._create_fallback_response(iteration=2)
+
+    def _get_memory_block_value(self, block_label: str) -> str | None:
+        """Get a value from memory blocks by label.
+
+        Args:
+            block_label: The label of the memory block to retrieve.
+
+        Returns:
+            The value of the memory block, or None if not found.
+        """
+        try:
+            if not self._memory_enabled or not self.memory_manager:
+                return None
+
+            # Get memory blocks scoped to booking agent
+            memory_blocks = self.memory_manager.get_memory_blocks(
+                session_id=self.session_id,
+                agent_scope="booking"
+            )
+
+            # Find the block with matching label
+            for block in memory_blocks:
+                if block.get("block_label") == block_label:
+                    return block.get("block_value")
+
+            return None
+        except Exception as e:
+            self.logger.warning(f"Error getting memory block {block_label}: {e}")
+            return None
+
+    def _save_auth_flow_session_id(self, session_id: str) -> None:
+        """Save the current session_id alongside auth_flow_pending flag.
+
+        This allows us to detect later if the auth_flow_pending flag is from
+        a PREVIOUS (expired) session or the CURRENT session.
+
+        Args:
+            session_id: The current session ID to save.
+        """
+        try:
+            if not self._memory_enabled or not self.memory_manager or not self.session_id:
+                return
+
+            self.logger.info(f"💾 Saving auth_flow_pending_session_id={session_id}")
+            self.save_memory_block(
+                block_label="auth_flow_pending_session_id",
+                block_value=session_id,
+                priority=10,
+                agent_scope="booking"
+            )
+        except Exception as e:
+            self.logger.warning(f"Error saving auth_flow_pending_session_id: {e}")
 
     def __repr__(self) -> str:
         """String representation of BookingAgent."""
