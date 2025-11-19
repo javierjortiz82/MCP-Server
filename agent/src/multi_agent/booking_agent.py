@@ -1429,12 +1429,12 @@ class BookingAgent(BaseAgent):
             The value of the memory block, or None if not found.
         """
         try:
-            if not self._memory_enabled or not self.memory_manager:
+            if not self._memory_enabled or not self.memory_manager or not self.session_id:
                 return None
 
-            # Get memory blocks scoped to booking agent
-            memory_blocks = self.memory_manager.get_memory_blocks(
-                session_id=self.session_id,
+            # Get active memory blocks scoped to booking agent
+            memory_blocks = self.memory_manager.get_active_memory_blocks(
+                session_id=str(self.session_id),
                 agent_scope="booking"
             )
 
