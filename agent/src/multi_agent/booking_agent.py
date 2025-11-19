@@ -50,55 +50,31 @@ if TYPE_CHECKING:
     from core.mcp_connector import MCPConnector  # type: ignore[import-not-found]
 
 # Gemini 2.5 Function Calling Optimization (Scope Limiting)
-# Autodiscover booking tools from MCP server (single source of truth)
-# This avoids hardcoding tool names and ensures automatic sync when tools change
-
-# Setup MCP server path for imports
-mcp_server_path = Path(__file__).parent.parent.parent.parent / "mcp_server"
-if str(mcp_server_path) not in sys.path:
-    sys.path.insert(0, str(mcp_server_path))
-
-# Try to import autodiscovered booking tools
-# Fallback to hardcoded list if MCP server not available
-try:
-    from mcp_handlers.booking_handlers import get_booking_tool_names  # type: ignore[import-not-found]
-
-    BOOKING_TOOLS_ALLOWED = set(get_booking_tool_names())
-    _logger = __import__("logging").getLogger("booking_agent_init")
-    _logger.info(
-        f"✅ Autodiscovered {len(BOOKING_TOOLS_ALLOWED)} booking tools from MCP server"
-    )
-except ImportError as e:
-    _logger = __import__("logging").getLogger("booking_agent_init")
-    _logger.warning(
-        f"⚠️ Could not autodiscover booking tools from MCP server: {e}. "
-        f"Using fallback hardcoded list."
-    )
-    # Fallback: Hardcoded list (17 tools: 8 booking + 9 auth/user)
-    # This ensures the agent works even if MCP server is not available
-    # But updates to tools must be made in BOTH places (not ideal - prefer autodiscover)
-    # CRITICAL: Include auth/user tools needed for OTP flow
-    BOOKING_TOOLS_ALLOWED = {
-        # Booking operations (8 tools)
-        "create_booking",
-        "cancel_booking",
-        "reschedule_booking",
-        "get_available_slots",
-        "get_booking_by_id",
-        "list_customer_bookings",
-        "get_services",
-        "get_business_hours",
-        # Authentication & user management (9 tools)
-        "check_user_exists",
-        "create_user",
-        "request_otp",
-        "verify_otp",
-        "update_user",
-        "check_session_auth",
-        "save_session_auth",
-        "clear_session_auth",
-        "update_session_activity",
-    }
+# Hardcoded allowed tools for booking operations
+# CRITICAL: Must include ALL tools that BookingAgent may need for OTP/auth flow
+# These are: 8 booking operations + 9 auth/user management = 17 total
+BOOKING_TOOLS_ALLOWED = {
+    # Booking operations (8 tools)
+    "create_booking",
+    "cancel_booking",
+    "reschedule_booking",
+    "get_available_slots",
+    "get_booking_by_id",
+    "list_customer_bookings",
+    "get_services",
+    "get_business_hours",
+    # Authentication & user management (9 tools)
+    # CRITICAL for OTP flow: request_otp, verify_otp, check_session_auth, save_session_auth
+    "check_user_exists",
+    "create_user",
+    "request_otp",
+    "verify_otp",
+    "update_user",
+    "check_session_auth",
+    "save_session_auth",
+    "clear_session_auth",
+    "update_session_activity",
+}
 
 # Import language context for MCP tool execution
 try:
