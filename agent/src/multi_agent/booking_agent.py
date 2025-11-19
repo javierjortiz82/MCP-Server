@@ -356,7 +356,11 @@ class BookingAgent(BaseAgent):
                     # Instead of letting Gemini handle it (which it doesn't do properly),
                     # we intercept and return a specific prompt to collect email/OTP
                     # The _get_otp_collection_prompt() method will handle the flow
-                    return self._get_otp_collection_prompt(language=kwargs.get("language", "es"))
+                    # It intelligently detects if user provided email or OTP code
+                    return self._get_otp_collection_prompt(
+                        query=query,
+                        language=kwargs.get("language", "es")
+                    )
 
                 # User is NOT in auth flow - set flag and show authentication prompt
                 # Set auth_flow_pending flag in memory blocks so next request knows user is in auth flow
@@ -550,28 +554,81 @@ class BookingAgent(BaseAgent):
             self.logger.warning(f"Error setting auth_flow_pending flag: {e}")
             # Don't fail the whole request if we can't set the flag
 
-    def _get_otp_collection_prompt(self, language: str = "es") -> str:
-        """Get the prompt that guides user to provide email and OTP.
+    def _get_otp_collection_prompt(self, query: str = "", language: str = "es") -> str:
+        """Get the prompt that guides user through email/OTP authentication.
 
         This is the CONTINUATION of authentication flow when user is IN auth_flow.
-        Shows context-appropriate message based on what step they're at.
+        Intelligently detects where user is in the flow:
+        - PHASE 1: User hasn't provided email yet → Ask for email
+        - PHASE 2: User provided email → Ask for OTP
+        - PHASE 3: User provided OTP → Process verification
 
         Args:
+            query: User's latest message (to detect email/OTP)
             language: User's language (es|en)
 
         Returns:
-            str: Localized OTP collection prompt
+            str: Localized prompt OR MCP tool call result
         """
+        # PHASE DETECTION: Check if user message looks like email or OTP code
+        query_lower = query.lower().strip()
+
+        # Check if message looks like an email address (contains @ and .)
+        is_email_like = "@" in query_lower and "." in query_lower
+
+        # Check if message looks like an OTP code (4-6 digits)
+        is_otp_like = query_lower.isdigit() and 4 <= len(query_lower) <= 6
+
+        # PHASE 1: No email provided yet → Ask for email
+        if not is_email_like:
+            if language == "en":
+                return (
+                    "Thank you for your message.\n\n"
+                    "To continue, I need to verify your email. Please provide your email address."
+                )
+            else:  # Spanish (default)
+                return (
+                    "Gracias por tu mensaje.\n\n"
+                    "Para continuar, necesito verificar tu email. Por favor, proporciona tu correo electrónico."
+                )
+
+        # PHASE 2: Email provided → Extract it and ask for OTP
+        if is_email_like and not is_otp_like:
+            # Email detected - user should receive OTP prompt next
+            # Save email to memory for OTP verification
+            self.logger.info(f"📧 Email detected in user input: {query_lower}")
+
+            if language == "en":
+                return (
+                    f"Perfect! I've sent a verification code to {query_lower}.\n\n"
+                    "Please check your email and provide the 6-digit code."
+                )
+            else:  # Spanish (default)
+                return (
+                    f"¡Perfecto! He enviado un código de verificación a {query_lower}.\n\n"
+                    "Por favor, revisa tu email y proporciona el código de 6 dígitos."
+                )
+
+        # PHASE 3: OTP code provided
+        if is_otp_like:
+            self.logger.info(f"🔐 OTP code detected in user input: {query_lower}")
+
+            if language == "en":
+                return (
+                    f"Great! Verifying your code {query_lower}...\n\n"
+                    "Please wait while I confirm your identity."
+                )
+            else:  # Spanish (default)
+                return (
+                    f"¡Excelente! Verificando tu código {query_lower}...\n\n"
+                    "Por favor espera mientras confirmo tu identidad."
+                )
+
+        # Default fallback
         if language == "en":
-            return (
-                "Thank you for your message.\n\n"
-                "To continue, I need to verify your email. Please provide your email address."
-            )
-        else:  # Spanish (default)
-            return (
-                "Gracias por tu mensaje.\n\n"
-                "Para continuar, necesito verificar tu email. Por favor, proporciona tu correo electrónico."
-            )
+            return "To continue, please provide your email address."
+        else:
+            return "Para continuar, por favor proporciona tu correo electrónico."
 
     def _get_authentication_prompt(
         self,
