@@ -325,18 +325,9 @@ class BookingAgent(BaseAgent):
                     f"expired={session_expired}"
                 )
 
-                # ⚠️ CRITICAL: If session expired, clean up old auth flow state
-                # When session expires, we need to RESET the auth_flow_pending flag
-                # because the OLD session's authentication is no longer valid
-                if session_expired:
-                    self.logger.warning(
-                        "⚠️ Session has expired - clearing old auth_flow_pending state"
-                    )
-                    self._set_auth_flow_pending(False)
-
-                # ⚠️ CRITICAL: Check if user is IN THE MIDDLE of authentication flow
-                # If the last system message was an authentication prompt, then user
-                # is responding with their email/OTP and we should let Gemini process it
+                # ⚠️ CRITICAL: Check if user is IN THE MIDDLE of authentication flow FIRST
+                # BEFORE clearing any flags. If session expired but user is responding to
+                # auth prompt, we should allow them to complete authentication.
                 is_in_auth_flow = self._is_user_in_auth_flow()
                 self.logger.info(f"🔍 Auth flow check: is_in_auth_flow={is_in_auth_flow}")
 
@@ -346,6 +337,15 @@ class BookingAgent(BaseAgent):
                         "allowing Gemini to process (email/OTP collection)"
                     )
                     return None  # Let Gemini handle authentication flow
+
+                # ⚠️ CRITICAL: If session expired and user is NOT in auth flow,
+                # clean up old auth flow state. This happens AFTER we check if
+                # user is responding to prompt, so we don't interrupt their re-auth.
+                if session_expired:
+                    self.logger.warning(
+                        "⚠️ Session has expired - clearing old auth_flow_pending state"
+                    )
+                    self._set_auth_flow_pending(False)
 
                 # User is NOT in auth flow - set flag and show authentication prompt
                 # Set auth_flow_pending flag in memory blocks so next request knows user is in auth flow
