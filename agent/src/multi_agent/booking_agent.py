@@ -74,10 +74,12 @@ except ImportError as e:
         f"⚠️ Could not autodiscover booking tools from MCP server: {e}. "
         f"Using fallback hardcoded list."
     )
-    # Fallback: Hardcoded list (8 booking tools)
+    # Fallback: Hardcoded list (17 tools: 8 booking + 9 auth/user)
     # This ensures the agent works even if MCP server is not available
     # But updates to tools must be made in BOTH places (not ideal - prefer autodiscover)
+    # CRITICAL: Include auth/user tools needed for OTP flow
     BOOKING_TOOLS_ALLOWED = {
+        # Booking operations (8 tools)
         "create_booking",
         "cancel_booking",
         "reschedule_booking",
@@ -86,6 +88,16 @@ except ImportError as e:
         "list_customer_bookings",
         "get_services",
         "get_business_hours",
+        # Authentication & user management (9 tools)
+        "check_user_exists",
+        "create_user",
+        "request_otp",
+        "verify_otp",
+        "update_user",
+        "check_session_auth",
+        "save_session_auth",
+        "clear_session_auth",
+        "update_session_activity",
     }
 
 # Import language context for MCP tool execution
