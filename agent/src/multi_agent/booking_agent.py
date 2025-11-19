@@ -574,7 +574,9 @@ class BookingAgent(BaseAgent):
 
         # PHASE DETECTION
         is_email_like = "@" in query_lower and "." in query_lower
-        is_otp_like = query_lower.isdigit() and 4 <= len(query_lower) <= 6
+        # OTP detection: 4-6 digits OR user might have sent partial input
+        # Accept 4-6 digits as OTP, or if message has only digits (length 1-6)
+        is_otp_like = query_lower.isdigit() and 1 <= len(query_lower) <= 6
 
         # ================================================================
         # PHASE 1: EMAIL DETECTION → REQUEST OTP
@@ -641,6 +643,22 @@ class BookingAgent(BaseAgent):
         elif is_otp_like:
             otp_code = query_lower
             self.logger.info(f"🔐 PHASE 2: OTP code detected: {otp_code}")
+
+            # Validate OTP is exactly 6 digits
+            if len(otp_code) != 6:
+                self.logger.warning(f"⚠️ OTP must be exactly 6 digits, got {len(otp_code)}: {otp_code}")
+                if language == "en":
+                    return (
+                        f"The verification code must be exactly 6 digits.\n\n"
+                        f"You provided: {otp_code} ({len(otp_code)} digits)\n\n"
+                        f"Please check your email and provide the 6-digit code."
+                    )
+                else:
+                    return (
+                        f"El código de verificación debe ser exactamente 6 dígitos.\n\n"
+                        f"Proporcionaste: {otp_code} ({len(otp_code)} dígitos)\n\n"
+                        f"Por favor, revisa tu email y proporciona el código de 6 dígitos."
+                    )
 
             # Get stored email from memory blocks (set when user provided it)
             stored_email = self._get_memory_block_value("auth_email")
