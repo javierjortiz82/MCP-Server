@@ -153,6 +153,17 @@ result = verify_otp(
 if result["success"]:
     # ✅ OTP verified - email ownership confirmed
 
+    # CRITICAL: Update session activity timestamp to mark session as ACTIVE
+    # This resets the inactivity timer so user doesn't get logged out again
+    update_activity = update_session_activity(
+        session_id=SESSION_ID_FROM_CONTEXT
+    )
+
+    if update_activity.get("success"):
+        logger.info(f"✅ Session activity updated for session: {SESSION_ID_FROM_CONTEXT}")
+    else:
+        logger.warning(f"⚠️ Failed to update session activity, but OTP verified successfully")
+
     # Check if user exists (we checked this in STEP 1)
     user_check = check_user_exists(email=validated_email)
 
@@ -170,7 +181,8 @@ if result["success"]:
         )
 
         if auth_saved["success"]:
-            # Proceed to STEP 4 (Welcome Menu)
+            # ✅ Session activity updated AND authentication saved
+            # User is now fully authenticated with an active session
             proceed_to_welcome_menu(user_check)
         else:
             # Failed to save authentication
