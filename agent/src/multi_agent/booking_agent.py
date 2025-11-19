@@ -351,13 +351,12 @@ class BookingAgent(BaseAgent):
 
                 if is_in_auth_flow:
                     self.logger.info(
-                        "🔐 User is in auth flow - intercepting to collect email/OTP"
+                        "🔐 User is in auth flow - intercepting to handle email/OTP"
                     )
-                    # Instead of letting Gemini handle it (which it doesn't do properly),
-                    # we intercept and return a specific prompt to collect email/OTP
-                    # The _get_otp_collection_prompt() method will handle the flow
-                    # It intelligently detects if user provided email or OTP code
-                    return self._get_otp_collection_prompt(
+                    # Instead of just returning a prompt, we need to actually EXECUTE
+                    # the authentication flow: detect email → call request_otp() → detect OTP → call verify_otp()
+                    # This is a HARD BLOCK that directly manages authentication, not via Gemini
+                    return await self._handle_auth_flow(
                         query=query,
                         language=kwargs.get("language", "es")
                     )
@@ -553,6 +552,188 @@ class BookingAgent(BaseAgent):
         except Exception as e:
             self.logger.warning(f"Error setting auth_flow_pending flag: {e}")
             # Don't fail the whole request if we can't set the flag
+
+    async def _handle_auth_flow(self, query: str = "", language: str = "es") -> str:
+        """Handle authentication flow by executing MCP tools directly.
+
+        This HARD BLOCK directly manages the authentication workflow:
+        1. PHASE 1: Detect email → Call request_otp() → Send code to email
+        2. PHASE 2: Detect OTP → Call verify_otp() → Authenticate user
+        3. PHASE 3: Success → Call save_session_auth() → Allow booking
+
+        This bypasses Gemini entirely for authentication - security critical!
+
+        Args:
+            query: User's latest message
+            language: User's language (es|en)
+
+        Returns:
+            str: Response message or error
+        """
+        query_lower = query.lower().strip()
+
+        # PHASE DETECTION
+        is_email_like = "@" in query_lower and "." in query_lower
+        is_otp_like = query_lower.isdigit() and 4 <= len(query_lower) <= 6
+
+        # ================================================================
+        # PHASE 1: EMAIL DETECTION → REQUEST OTP
+        # ================================================================
+        if is_email_like and not is_otp_like:
+            email = query_lower
+            self.logger.info(f"📧 PHASE 1: Email detected: {email}")
+
+            try:
+                # Call request_otp() to send code to email
+                self.logger.info(f"🔐 Calling request_otp() for {email}...")
+                otp_result = await self.mcp_client.call_tool(
+                    "request_otp",
+                    {"email": email, "purpose": "booking_auth"}
+                )
+
+                if not otp_result or not otp_result.get("success"):
+                    error_msg = otp_result.get("error", "Error enviando OTP") if otp_result else "Error desconocido"
+                    self.logger.error(f"❌ OTP request failed: {error_msg}")
+                    if language == "en":
+                        return f"I couldn't send the verification code. Error: {error_msg}"
+                    else:
+                        return f"No pude enviar el código de verificación. Error: {error_msg}"
+
+                # SUCCESS: OTP sent - SAVE EMAIL TO MEMORY for PHASE 2
+                self.logger.info(f"✅ OTP sent successfully to {email}")
+                expires_in = otp_result.get("expires_in_minutes", 10)
+
+                # Save email for later OTP verification
+                try:
+                    self.save_memory_block(
+                        block_label="auth_email",
+                        block_value=email,
+                        priority=10,
+                        agent_scope="booking"
+                    )
+                    self.logger.info(f"💾 Saved auth_email={email} to memory for OTP verification")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Error saving auth_email to memory: {e}")
+
+                if language == "en":
+                    return (
+                        f"Perfect! I've sent a verification code to {email}.\n\n"
+                        f"Please check your email and provide the 6-digit code.\n"
+                        f"The code expires in {expires_in} minutes."
+                    )
+                else:
+                    return (
+                        f"¡Perfecto! He enviado un código de verificación a {email}.\n\n"
+                        f"Por favor, revisa tu email y proporciona el código de 6 dígitos.\n"
+                        f"El código expira en {expires_in} minutos."
+                    )
+
+            except Exception as e:
+                self.logger.exception(f"❌ Error in OTP request: {e}")
+                if language == "en":
+                    return f"Error sending verification code: {str(e)}"
+                else:
+                    return f"Error al enviar código de verificación: {str(e)}"
+
+        # ================================================================
+        # PHASE 2: OTP DETECTION → VERIFY OTP
+        # ================================================================
+        elif is_otp_like:
+            otp_code = query_lower
+            self.logger.info(f"🔐 PHASE 2: OTP code detected: {otp_code}")
+
+            # Get stored email from memory blocks (set when user provided it)
+            stored_email = self._get_memory_block_value("auth_email")
+            if not stored_email:
+                self.logger.warning("❌ No stored email in memory - cannot verify OTP")
+                if language == "en":
+                    return "I couldn't find your email in memory. Please start over with your email address."
+                else:
+                    return "No encontré tu email en memoria. Por favor, comienza de nuevo con tu correo."
+
+            try:
+                # Call verify_otp() to verify the code
+                self.logger.info(f"🔐 Calling verify_otp() for {stored_email} with code {otp_code}...")
+                verify_result = await self.mcp_client.call_tool(
+                    "verify_otp",
+                    {"email": stored_email, "code": otp_code, "purpose": "booking_auth"}
+                )
+
+                if not verify_result or not verify_result.get("success"):
+                    attempts_remaining = verify_result.get("attempts_remaining", 0) if verify_result else 0
+                    error_msg = verify_result.get("error", "Invalid code") if verify_result else "Unknown error"
+                    self.logger.error(f"❌ OTP verification failed: {error_msg} ({attempts_remaining} attempts left)")
+
+                    if language == "en":
+                        return (
+                            f"The code you provided is incorrect.\n\n"
+                            f"Attempts remaining: {attempts_remaining}\n"
+                            f"Please try again with the code from your email."
+                        )
+                    else:
+                        return (
+                            f"El código que proporcionaste es incorrecto.\n\n"
+                            f"Intentos restantes: {attempts_remaining}\n"
+                            f"Por favor, intenta de nuevo con el código de tu email."
+                        )
+
+                # SUCCESS: OTP verified - now authenticate session
+                self.logger.info(f"✅ OTP verified successfully for {stored_email}")
+
+                # Save authentication to session
+                try:
+                    self.logger.info(f"💾 Saving session authentication for {stored_email}...")
+                    auth_result = await self.mcp_client.call_tool(
+                        "save_session_auth",
+                        {
+                            "session_id": str(self.session_id),
+                            "user_id": 1,  # TODO: Get from verify_otp result or check_user_exists
+                            "email": stored_email,
+                            "full_name": "User",  # TODO: Get from user profile
+                            "language": language
+                        }
+                    )
+                    self.logger.info(f"✅ Session authentication saved: {auth_result}")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Error saving session auth: {e}")
+
+                # Clear auth flow flags
+                self._set_auth_flow_pending(False)
+
+                if language == "en":
+                    return (
+                        f"Excellent! Your identity has been verified.\n\n"
+                        f"You're now authenticated and can proceed with your booking."
+                    )
+                else:
+                    return (
+                        f"¡Excelente! Tu identidad ha sido verificada.\n\n"
+                        f"Ya estás autenticado y puedes proceder con tu reserva."
+                    )
+
+            except Exception as e:
+                self.logger.exception(f"❌ Error in OTP verification: {e}")
+                if language == "en":
+                    return f"Error verifying code: {str(e)}"
+                else:
+                    return f"Error al verificar código: {str(e)}"
+
+        # ================================================================
+        # PHASE 0: NO EMAIL OR OTP DETECTED → ASK FOR EMAIL
+        # ================================================================
+        else:
+            self.logger.info("📧 PHASE 0: No email/OTP detected - asking for email")
+
+            if language == "en":
+                return (
+                    "Thank you for your message.\n\n"
+                    "To authenticate, please provide your email address."
+                )
+            else:
+                return (
+                    "Gracias por tu mensaje.\n\n"
+                    "Para autenticarte, por favor proporciona tu correo electrónico."
+                )
 
     def _get_otp_collection_prompt(self, query: str = "", language: str = "es") -> str:
         """Get the prompt that guides user through email/OTP authentication.
