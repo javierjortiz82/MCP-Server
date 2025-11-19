@@ -242,8 +242,10 @@ class BookingAgent(BaseAgent):
         """Return agent name for logging.
 
         Required by BaseAgent abstract property.
+        CRITICAL: Must return "booking" (without "_agent" suffix) to match memory scope
+        used in save_memory_block() and database constraints.
         """
-        return "booking_agent"
+        return "booking"
 
     async def initialize(self) -> None:
         """Initialize BookingAgent and log available MCP tools.
@@ -475,9 +477,14 @@ class BookingAgent(BaseAgent):
                 self.logger.info("🔍 Memory not enabled - cannot check auth_flow_pending")
                 return False
 
+            # Debug: Log session_id and memory manager state
+            self.logger.info(f"🔍 DEBUG: session_id={self.session_id}, memory_manager={self.memory_manager is not None}")
+
             # Get session memory blocks (use default scope to match save_memory_block)
             memory_blocks = self.get_memory_blocks()
-            self.logger.info(f"🔍 Found {len(memory_blocks)} memory blocks (default scope)")
+            self.logger.info(f"🔍 Found {len(memory_blocks)} memory blocks (scope={self.agent_name})")
+            if memory_blocks:
+                self.logger.info(f"🔍 DEBUG: Memory blocks: {[(b.get('block_label'), b.get('block_value')) for b in memory_blocks]}")
 
             # Look for auth_flow_pending flag
             for block in memory_blocks:
