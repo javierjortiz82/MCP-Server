@@ -179,21 +179,25 @@ class ChatCore:
         Note:
             Los orchestrators se crean lazy (solo cuando se necesitan)
             Si db_session_id está disponible, se pasa al orchestrator para memoria persistente.
+            CRITICAL: Cache key uses db_session_id (not transient session_id) to detect
+            when a session is archived and needs to be recreated.
         """
-        session_id = session.session_id
+        # CRITICAL: Use db_session_id as cache key, NOT transient session_id
+        # This ensures that if DB session is archived, a new orchestrator is created
+        cache_key = db_session_id or session.session_id
 
-        if session_id not in self.orchestrators:
-            logger.info(f"Creating new orchestrator for session: {session_id}")
+        if cache_key not in self.orchestrators:
+            logger.info(f"Creating new orchestrator for session: {cache_key}")
             orchestrator = AgentOrchestrator()
             await orchestrator.initialize(
                 customer_email=session.customer_email,
                 db_session_id=db_session_id
             )
-            self.orchestrators[session_id] = orchestrator
+            self.orchestrators[cache_key] = orchestrator
         else:
-            logger.debug(f"Reusing existing orchestrator for session: {session_id}")
+            logger.debug(f"Reusing existing orchestrator for session: {cache_key}")
 
-        return self.orchestrators[session_id]
+        return self.orchestrators[cache_key]
 
     async def _process_with_orchestrator(
         self,
