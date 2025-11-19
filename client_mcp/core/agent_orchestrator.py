@@ -186,12 +186,14 @@ class AgentOrchestrator:
                 mode="multi_agent" if self.routing_enabled else "single_agent"
             )
 
-    async def initialize(self, customer_email: str | None = None) -> None:
+    async def initialize(self, customer_email: str | None = None, db_session_id: str | None = None) -> None:
         """Initialize orchestrator and agents based on feature flag.
 
         Args:
             customer_email: Optional customer email for persistent memory sessions.
                           If provided, enables memory for all agents.
+            db_session_id: Optional database session UUID. If provided, reuses existing session
+                         instead of creating/looking up based on customer_email.
 
         Raises:
             RuntimeError: If initialization fails.
@@ -205,7 +207,12 @@ class AgentOrchestrator:
                     self.customer_email = customer_email
 
                     # Get existing session or create new one
-                    self.session_id = self.memory_manager.get_or_create_session(customer_email=customer_email)
+                    # CRITICAL: If db_session_id is provided, use it directly instead of looking up by email
+                    if db_session_id:
+                        logger.info(f"✅ Using provided database session: {db_session_id}")
+                        self.session_id = db_session_id
+                    else:
+                        self.session_id = self.memory_manager.get_or_create_session(customer_email=customer_email)
                     logger.info(f"✅ Memory session active: {self.session_id}")
 
                     # Try to load session language from previous conversation first
