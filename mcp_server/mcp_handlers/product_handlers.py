@@ -14,12 +14,17 @@ from tools import ingest as ingest_tool
 from tools import search as search_tool
 from utils.logger import setup_logging
 from utils.mcp_i18n import mcp_info, mcp_debug, mcp_progress
+from mcp_handlers.tool_registry import ToolRegistry
 
 # Setup logger for tool handlers
 logger = setup_logging("mcp_tool_handlers")
 
 # Global mcp instance - will be injected from server.py
 mcp = None
+
+# Dynamic tool registries - tracks tools as they're registered (no hardcoding!)
+product_tool_registry = ToolRegistry()
+pageable_tool_registry = ToolRegistry()
 
 
 def init_product_handlers(mcp_instance):
@@ -31,27 +36,27 @@ def init_product_handlers(mcp_instance):
 
 def get_product_tool_names() -> list[str]:
     """
-    Return list of registered product tool names.
+    Return list of registered product tool names (dynamically discovered).
 
-    This function provides dynamic tool discovery without hardcoding tool lists
-    in client code. Tools are defined here in the handler module and exposed
-    via MCP resources for client-side filtering.
+    This function provides dynamic tool discovery without hardcoding tool lists.
+    Tools are registered via product_tool_registry.register_tool() as they're
+    defined, and this function returns the discovered list.
+
+    BENEFITS:
+    - No hardcoded lists to maintain
+    - Single source of truth: the tool decorator + registry call
+    - Automatically includes newly registered tools
+    - No risk of forgetting to update this list
 
     Returns:
         List of product tool names registered in this module
     """
-    return [
-        "fetch_by_sku",
-        "fetch_by_id",
-        "search_products",
-        "fuzzy_search_smart",
-        "ingest_products",
-    ]
+    return product_tool_registry.get_tools_by_category("product")
 
 
 def get_pageable_tool_names() -> list[str]:
     """
-    Return list of product tools that return pageable result lists.
+    Return list of product tools that return pageable result lists (dynamically discovered).
 
     Pageable tools are those that return collections of items (not single items)
     and support client-side pagination. This enables dynamic tool discovery for
@@ -61,13 +66,15 @@ def get_pageable_tool_names() -> list[str]:
     - {"items": [...], "count": N} - structured format
     - Direct list - fallback format
 
+    BENEFITS:
+    - No hardcoded lists to maintain
+    - Single source of truth: the pageable_tool_registry
+    - Automatically updated when tools are marked as pageable
+
     Returns:
         List of product tool names that support pagination
     """
-    return [
-        "fuzzy_search_smart",
-        "search_products",
-    ]
+    return pageable_tool_registry.get_tools_by_category("pageable")
 
 
 def register_tools():
@@ -436,3 +443,27 @@ def register_tools():
         except Exception as e:
             await mcp_debug(ctx, "product.ingest.error_general", error=str(e))
             raise
+
+    # === DYNAMIC TOOL REGISTRATION ===
+    # Register each tool in the appropriate category (no hardcoding!)
+    # This replaces the hardcoded lists in get_product_tool_names() and get_pageable_tool_names()
+    product_tools = [
+        "fetch_by_sku",
+        "fetch_by_id",
+        "search_products",
+        "fuzzy_search_smart",
+        "ingest_products",
+    ]
+    product_tool_registry.register_tools(product_tools, "product")
+
+    # Also mark which tools support pagination
+    pageable_tools = [
+        "fuzzy_search_smart",
+        "search_products",
+    ]
+    pageable_tool_registry.register_tools(pageable_tools, "pageable")
+
+    logger.info(
+        f"Registered {len(product_tools)} product tools + "
+        f"{len(pageable_tools)} pageable tools"
+    )

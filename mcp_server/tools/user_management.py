@@ -38,6 +38,7 @@ from demo_agent.models.user import OTPPurpose, UserRegisterRequest
 from demo_agent.services.email_integration import EmailIntegrationService
 from demo_agent.db.connection import get_db
 from utils.logger import setup_logging
+from config.otp_session_config import OTPSessionConfig
 import asyncio
 
 # Setup logger
@@ -391,7 +392,7 @@ async def request_otp(email: str, purpose: str = "booking_auth") -> dict:
             "success": True,
             "email": "user@example.com",
             "expires_in_minutes": 10,
-            "can_retry_in_seconds": 60
+            "can_retry_in_seconds": 60  # Configured via OTP_RATE_LIMIT_SECONDS env var
         }
 
     Rate Limiting:
@@ -456,7 +457,7 @@ async def request_otp(email: str, purpose: str = "booking_auth") -> dict:
                     "success": False,
                     "email": email,
                     "expires_in_minutes": 0,
-                    "can_retry_in_seconds": 60,
+                    "can_retry_in_seconds": OTPSessionConfig.OTP_RATE_LIMIT_SECONDS,
                     "error": "Failed to prepare OTP verification"
                 }
             user_id = create_result.get("user_id")
@@ -490,7 +491,7 @@ async def request_otp(email: str, purpose: str = "booking_auth") -> dict:
                 "success": False,
                 "email": email,
                 "expires_in_minutes": 0,
-                "can_retry_in_seconds": 60,
+                "can_retry_in_seconds": OTPSessionConfig.OTP_RATE_LIMIT_SECONDS,
                 "error": error_msg or "Failed to generate OTP code"
             }
 
@@ -526,7 +527,7 @@ async def request_otp(email: str, purpose: str = "booking_auth") -> dict:
             "success": False,
             "email": email,
             "expires_in_seconds": 0,
-            "can_retry_in_seconds": 60,
+            "can_retry_in_seconds": OTPSessionConfig.OTP_RATE_LIMIT_SECONDS,
             "error": str(e)
         }
 
@@ -790,7 +791,7 @@ async def check_session_auth(session_id: str) -> dict:
                 "full_name": str | None,
                 "language": str | None,
                 "last_activity": str | None,  # ISO timestamp
-                "session_expired": bool,  # True if > 30 minutes inactive
+                "session_expired": bool,  # True if > 1 minute inactive
                 "requires_reauth": bool  # True if expired or not authenticated
             }
 
@@ -801,7 +802,7 @@ async def check_session_auth(session_id: str) -> dict:
         >>>     request_email()
 
     Security:
-        - 30-minute session timeout policy
+        - 1-minute session inactivity timeout policy
         - Checks last_activity_timestamp to detect expired sessions
         - Returns requires_reauth=True if session is expired or invalid
     """
@@ -830,9 +831,10 @@ async def check_session_auth(session_id: str) -> dict:
         # Check authentication status
         is_authenticated = memory_blocks.get("is_authenticated") == "true"
 
-        # Check session expiration (30 minutes = 1800 seconds)
+        # Check session expiration (from centralized config)
         session_expired = False
         requires_reauth = True
+        idle_timeout_seconds = OTPSessionConfig.SESSION_IDLE_TIMEOUT_SECONDS()
 
         if is_authenticated:
             last_activity_str = memory_blocks.get("last_activity_timestamp")
@@ -843,7 +845,7 @@ async def check_session_auth(session_id: str) -> dict:
                     current_time = datetime.now(timezone.utc)
                     seconds_inactive = (current_time - last_activity).total_seconds()
 
-                    if seconds_inactive < 1800:  # 30 minutes
+                    if seconds_inactive < idle_timeout_seconds:
                         session_expired = False
                         requires_reauth = False
                         logger.info(f"Session {session_id} is valid (last activity: {seconds_inactive:.0f}s ago)")
@@ -1003,7 +1005,7 @@ async def update_session_activity(session_id: str) -> dict:
     """Update last_activity_timestamp for authenticated session.
 
     Updates the last_activity_timestamp memory block to track session activity.
-    This is used to enforce the 30-minute timeout policy.
+    This is used to enforce the 1-minute inactivity timeout policy.
 
     Args:
         session_id: UUID of the conversation session

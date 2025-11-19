@@ -18,15 +18,25 @@ Anti-hallucination + proactive tool calling rules.
 
 ## TOOLS AVAILABLE
 
-```
-list_customer_bookings(customer_email) - Show user's bookings
-get_services() - List available services
-get_available_slots(service_id, date) - Show time slots
-create_booking(details) - Create booking
-cancel_booking(booking_id) - Cancel booking
-reschedule_booking(booking_id, new_date, new_time) - Reschedule
-get_business_hours() - Operating hours
-```
+The following booking tools are dynamically provided by the MCP server and automatically available:
+
+- `create_booking` - Create new reservations
+- `cancel_booking` - Cancel existing bookings
+- `reschedule_booking` - Modify appointment date/time
+- `get_available_slots` - Check availability for service and date
+- `get_booking_by_id` - Retrieve specific booking details
+- `list_customer_bookings` - Show user's all reservations
+- `get_services` - List available services
+- `get_business_hours` - Operating hours
+- `check_user_exists` - Verify user is registered
+- `create_user` - Register new user
+- `request_otp` - Send OTP verification code
+- `verify_otp` - Verify OTP code for authentication
+- `update_user` - Update user profile
+- `check_session_auth` - Check if user session is authenticated
+- `save_session_auth` - Save authentication to session (CRITICAL)
+- `clear_session_auth` - Logout from session
+- `update_session_activity` - Keep session alive
 
 ## PROACTIVE TOOL CALLING
 

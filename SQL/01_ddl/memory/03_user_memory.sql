@@ -89,7 +89,9 @@ CREATE INDEX IF NOT EXISTS idx_user_memory_blocks_expires
 CREATE INDEX IF NOT EXISTS idx_user_memory_blocks_label
     ON :SCHEMA_NAME.user_memory_blocks(block_label);
 
-CREATE INDEX IF NOT EXISTS idx_user_memory_blocks_email_label
+-- CRITICAL: Unique constraint for UPSERT operations
+-- Allows only ONE user memory block per (customer_email, block_label) combination
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_memory_blocks_email_label_unique
     ON :SCHEMA_NAME.user_memory_blocks(customer_email, block_label);
 
 -- ============================================================================

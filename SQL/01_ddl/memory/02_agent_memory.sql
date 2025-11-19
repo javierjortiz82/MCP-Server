@@ -51,6 +51,12 @@ CREATE INDEX IF NOT EXISTS idx_memory_blocks_scope
 CREATE INDEX IF NOT EXISTS idx_memory_blocks_label
     ON :SCHEMA_NAME.agent_memory_blocks(block_label);
 
+-- CRITICAL: Unique constraint for UPSERT operations
+-- Allows only ONE memory block per (session_id, block_label) combination
+-- Used for memory blocks that get updated not inserted (e.g., auth_flow_pending)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_memory_blocks_session_label_unique
+    ON :SCHEMA_NAME.agent_memory_blocks(session_id, block_label);
+
 -- ============================================================================
 -- AGENT CONTEXT TRANSFERS TABLE - Tracks handoffs between agents
 -- ============================================================================

@@ -52,12 +52,16 @@ from tools import bookings as booking_tool
 from utils.logger import setup_logging
 from utils.language_context import get_current_language
 from utils.mcp_i18n import mcp_info, mcp_debug, mcp_progress
+from mcp_handlers.tool_registry import ToolRegistry
 
 # Setup logger for booking handlers
 logger = setup_logging("mcp_booking_handlers")
 
 # Global mcp instance - will be injected from server.py
 mcp = None
+
+# Dynamic tool registry - tracks tools as they're registered (no hardcoding!)
+booking_tool_registry = ToolRegistry()
 
 
 def init_booking_handlers(mcp_instance):
@@ -74,31 +78,22 @@ def init_booking_handlers(mcp_instance):
 
 def get_booking_tool_names() -> list[str]:
     """
-    Return list of registered booking tool names.
+    Return list of registered booking tool names (dynamically discovered).
 
-    This function provides dynamic tool discovery without hardcoding tool lists
-    in client code. Tools are defined here in the handler module and exposed
-    via MCP resources for client-side filtering.
+    This function provides dynamic tool discovery without hardcoding tool lists.
+    Tools are registered via booking_tool_registry.register_tool() as they're
+    defined, and this function returns the discovered list.
+
+    BENEFITS:
+    - No hardcoded lists to maintain
+    - Single source of truth: the tool decorator + registry call
+    - Automatically includes newly registered tools
+    - No risk of forgetting to update this list
 
     Returns:
         List of booking tool names registered in this module
     """
-    return [
-        "create_booking",
-        "cancel_booking",
-        "reschedule_booking",
-        "get_available_slots",
-        "get_booking_by_id",
-        "list_customer_bookings",
-        "get_services",
-        "get_business_hours",
-        # User Management Tools (v2.9 - Authentication & Registration)
-        "check_user_exists",
-        "create_user",
-        "request_otp",
-        "verify_otp",
-        "update_user",
-    ]
+    return booking_tool_registry.get_tools_by_category("booking")
 
 
 def register_booking_tools():
@@ -1125,3 +1120,38 @@ def register_booking_tools():
             )
             logger.exception(f"Error in get_business_hours: {str(e)}")
             raise
+
+    # === DYNAMIC TOOL REGISTRATION ===
+    # Register each tool in the booking category (no hardcoding!)
+    # This replaces the hardcoded list in get_booking_tool_names()
+    booking_tools = [
+        "create_booking",
+        "cancel_booking",
+        "reschedule_booking",
+        "get_available_slots",
+        "get_booking_by_id",
+        "list_customer_bookings",
+        "get_services",
+        "get_business_hours",
+    ]
+    booking_tool_registry.register_tools(booking_tools, "booking")
+
+    # Also register user/session management tools (imported from user_handlers)
+    # These are CRITICAL for authentication flow
+    user_and_session_tools = [
+        "check_user_exists",
+        "create_user",
+        "request_otp",
+        "verify_otp",
+        "update_user",
+        "check_session_auth",
+        "save_session_auth",
+        "clear_session_auth",
+        "update_session_activity",
+    ]
+    booking_tool_registry.register_tools(user_and_session_tools, "booking")
+
+    logger.info(
+        f"Registered {len(booking_tools)} booking tools + "
+        f"{len(user_and_session_tools)} user/session tools in booking category"
+    )
