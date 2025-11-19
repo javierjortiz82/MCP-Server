@@ -117,7 +117,7 @@ class EmailIntegrationService:
                 ) AS email_id
             """
 
-            result = self.db.execute_one(
+            result = await self.db.execute_one(
                 query,
                 (
                     "otp_verification",  # email_type

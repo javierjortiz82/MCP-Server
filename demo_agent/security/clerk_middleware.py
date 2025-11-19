@@ -185,7 +185,11 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
             return self._unauthorized_response("Invalid token: missing user ID")
 
         # Fetch user from database (optional - may not exist yet)
-        db_user = await self.clerk_service.get_user_by_clerk_id(clerk_user_id)
+        # Pass email as fallback in case clerk_user_id changed
+        db_user = await self.clerk_service.get_user_by_clerk_id(
+            clerk_user_id,
+            fallback_email=email
+        )
 
         # Attach user info to request state
         request.state.user = {
