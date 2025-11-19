@@ -325,6 +325,15 @@ class BookingAgent(BaseAgent):
                     f"expired={session_expired}"
                 )
 
+                # ⚠️ CRITICAL: If session expired, clean up old auth flow state
+                # When session expires, we need to RESET the auth_flow_pending flag
+                # because the OLD session's authentication is no longer valid
+                if session_expired:
+                    self.logger.warning(
+                        "⚠️ Session has expired - clearing old auth_flow_pending state"
+                    )
+                    self._set_auth_flow_pending(False)
+
                 # ⚠️ CRITICAL: Check if user is IN THE MIDDLE of authentication flow
                 # If the last system message was an authentication prompt, then user
                 # is responding with their email/OTP and we should let Gemini process it
