@@ -41,6 +41,10 @@ from gemini_agent.utils.gemini_response_handler import ResponseStatus
 from google.genai import types
 from multi_agent.prompt_manager import PromptManager
 
+# Import centralized configuration for session/OTP timeouts
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "mcp_server"))
+from config.otp_session_config import OTPSessionConfig
+
 if TYPE_CHECKING:
     from core.function_call_handler import FunctionCallHandler  # type: ignore[import-not-found]
     from core.mcp_connector import MCPConnector  # type: ignore[import-not-found]
@@ -425,33 +429,38 @@ class BookingAgent(BaseAgent):
             return False
 
     def _check_recent_auth_prompt_in_db(self) -> bool:
-        """Check if we recently sent an auth prompt.
+        """Check if user is responding to a recent authentication prompt.
 
-        Since we can't easily query DB from here, we use a simple heuristic:
-        If there's NO history available, it means this is likely the FIRST message
-        after an auth prompt was returned (which doesn't get added to history yet).
+        IMPROVED LOGIC: Don't assume user is in auth flow just because history is empty.
+        Instead, check the auth_flow_pending memory block:
+        - If auth_flow_pending=true → User IS responding to auth prompt
+        - If auth_flow_pending=false/missing → User is NOT in auth flow (show new prompt)
 
-        In this case, we ALLOW the request to proceed so Gemini can process the email/OTP.
+        This fixes the issue where users were automatically allowed without seeing the prompt.
 
         Returns:
-            bool: True if this looks like a response to auth prompt, False otherwise.
+            bool: True if user is responding to auth prompt, False if new auth needed.
         """
         try:
-            # SIMPLE HEURISTIC: If history is empty/unavailable AND we're not authenticated,
-            # this is likely the user responding to an auth prompt we just sent.
-            #
-            # Why? Because:
-            # 1. Hard block returns auth prompt text directly (bypasses Gemini)
-            # 2. That text doesn't get added to history
-            # 3. When user responds, history is still empty
-            # 4. So empty history + not authenticated = probably in auth flow
+            # IMPROVED: Check auth_flow_pending memory block to determine actual state
+            # This is more reliable than guessing based on history availability
 
-            self.logger.info("🔍 No history available - assuming user is responding to auth prompt")
-            self.logger.info("✅ Allowing request to proceed (will let Gemini handle auth flow)")
-            return True
+            is_in_auth_flow = self._check_auth_flow_from_memory()
+
+            if is_in_auth_flow:
+                self.logger.info("✅ auth_flow_pending=true found - user is responding to auth prompt")
+                self.logger.info("✅ Allowing request to proceed (will let Gemini handle email/OTP)")
+                return True
+            else:
+                # auth_flow_pending is false or missing
+                # User is NOT in auth flow - should show authentication prompt
+                self.logger.info("❌ auth_flow_pending=false/missing - user needs authentication")
+                self.logger.info("❌ User is NOT responding to auth prompt - will show new prompt")
+                return False
 
         except Exception as e:
-            self.logger.warning(f"Error in auth flow check: {e}")
+            self.logger.warning(f"Error checking auth flow from memory: {e}")
+            # On error, be conservative and show auth prompt
             return False
 
     def _check_auth_flow_from_memory(self) -> bool:
@@ -500,14 +509,15 @@ class BookingAgent(BaseAgent):
                 return
 
             # Set or clear the flag using BaseAgent's save_memory_block method
-            # Use default agent_scope to ensure consistency with get_memory_blocks()
+            # CRITICAL: Specify agent_scope="booking" to match get_memory_blocks() default
+            # Without this, save goes to "shared" but get reads from "booking"
             if pending:
                 self.logger.info("🔐 Setting auth_flow_pending flag - waiting for user email/OTP")
                 self.save_memory_block(
                     block_label="auth_flow_pending",
                     block_value="true",
-                    priority=10
-                    # agent_scope uses default (self.agent_name)
+                    priority=10,
+                    agent_scope="booking"  # CRITICAL: Must match get_memory_blocks() scope
                 )
             else:
                 self.logger.info("✅ Clearing auth_flow_pending flag - authentication complete")
@@ -515,8 +525,8 @@ class BookingAgent(BaseAgent):
                 self.save_memory_block(
                     block_label="auth_flow_pending",
                     block_value="false",
-                    priority=10
-                    # agent_scope uses default (self.agent_name)
+                    priority=10,
+                    agent_scope="booking"  # CRITICAL: Must match get_memory_blocks() scope
                 )
 
         except Exception as e:
@@ -537,17 +547,20 @@ class BookingAgent(BaseAgent):
         Returns:
             str: Localized authentication prompt
         """
+        # Get timeout value from centralized configuration
+        timeout_display = OTPSessionConfig.get_session_timeout_display(language)
+
         if session_expired:
             # Session was valid but expired due to inactivity
             if language == "en":
                 return (
-                    "⏰ Your session has expired due to inactivity (30 minutes).\n\n"
+                    f"⏰ Your session has expired due to inactivity ({timeout_display}).\n\n"
                     "For security, I need to verify your identity again.\n"
                     "What's your email address?"
                 )
             else:  # Spanish (default)
                 return (
-                    "⏰ Tu sesión ha expirado por inactividad (30 minutos).\n\n"
+                    f"⏰ Tu sesión ha expirado por inactividad ({timeout_display}).\n\n"
                     "Por seguridad, necesito verificar tu identidad nuevamente.\n"
                     "¿Cuál es tu correo electrónico?"
                 )
