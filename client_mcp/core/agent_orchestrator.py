@@ -402,7 +402,7 @@ class AgentOrchestrator:
         try:
             # PHASE 1: Detect language on first query and cache it
             if not self._session_language_detected:
-                from gemini_agent.utils.language_detector import detect_user_language
+                from gemini_agent.utils.language_detector import detect_language_async
 
                 # Try to retrieve language from existing session first (persistence)
                 retrieved_language = None
@@ -417,7 +417,7 @@ class AgentOrchestrator:
 
                 # If not found in session, detect from first query
                 if not retrieved_language:
-                    self.language = detect_user_language(query)
+                    self.language = await detect_language_async(query)
                     logger.info(f"🌐 Language detected on first query: {self.language.upper()}")
 
                     # PHASE 2: Save language to database for persistence
@@ -482,12 +482,8 @@ class AgentOrchestrator:
                 # For longer queries, fallback to general agent
                 logger.warning("⚠️ Falling back to general agent due to classification error")
                 intent = Intent.GENERAL
-                # Try to detect language from query as fallback
-                try:
-                    from gemini_agent.utils.language_detector import detect_user_language
-                    detected_language = detect_user_language(query)
-                except Exception:
-                    detected_language = self.language  # Use session language as fallback
+                # Use session language as fallback (avoid nested language detection in error context)
+                detected_language = self.language
 
         # Step 2: Route to specialized agent and save response
         try:

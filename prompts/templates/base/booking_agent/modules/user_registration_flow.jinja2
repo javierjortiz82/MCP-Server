@@ -355,21 +355,116 @@ respond_in_user_language(
 ```
 
 **Error 4: User Already Exists (Edge Case)**
+
+⚠️ **CRITICAL: TEMPORARY USER DETECTION LOGIC**
+
+When `create_user()` returns `error="User already exists"`, you MUST:
+
+1. **Check if it's a TEMPORARY user from OTP flow** (not a real duplicate)
+2. **If temporary**: Call `update_user()` to replace placeholder with real name
+3. **If real duplicate**: Show error about email already registered
+
+**Implementation:**
+
 ```python
-# This shouldn't happen if authentication_flow is followed correctly
-# But handle it gracefully if check_user_exists was not called
+# This can happen because OTP flow creates a temporary user with full_name="Temporary User"
+# We need to detect this and UPDATE instead of showing error
 
 if "already exists" in error_message.lower():
-    respond_in_user_language(
-        es="Parece que ya tienes una cuenta registrada con este correo.\n"
-           "Voy a cargar tu información existente.",
-        en="It seems you already have an account registered with this email.\n"
-           "I'll load your existing information."
-    )
+    # ⚠️ IMPORTANT: Check if this is our TEMPORARY user or a REAL duplicate
 
-    # Fetch user data and proceed to welcome menu
-    user_data = check_user_exists(email=validated_email)
-    proceed_to_welcome_menu(user_data)
+    # Call check_user_exists to get the existing user details
+    check_result = check_user_exists(email=validated_email)
+
+    if check_result["exists"]:
+        existing_user_name = check_result.get("full_name", "")
+
+        # ✅ DETECT: Is this the temporary user from OTP flow?
+        if existing_user_name == "Temporary User":
+            # YES - This is our temporary user - UPDATE IT instead of creating new
+            logger.info(f"Detected temporary user for {email} - updating instead of creating")
+
+            # Call update_user to replace "Temporary User" with actual name
+            update_result = update_user(
+                email=validated_email,
+                data={
+                    "full_name": full_name,  # Replace "Temporary User" with real name
+                    "language": language_preference  # Ensure correct language
+                }
+            )
+
+            if update_result["success"]:
+                # ✅ SUCCESS - User updated successfully
+                user_id = check_result["user_id"]  # Use existing user_id from OTP
+
+                # Log successful update
+                logger.info(f"✅ Temporary user {email} updated: "
+                           f"{existing_user_name} → {full_name}")
+
+                # ⚠️ CRITICAL: Save authentication to session using existing user_id
+                auth_saved = save_session_auth(
+                    session_id=SESSION_ID_FROM_CONTEXT,
+                    user_id=user_id,
+                    email=validated_email,
+                    full_name=full_name,
+                    language=language_preference
+                )
+
+                if not auth_saved["success"]:
+                    logger.warning(f"Failed to save session auth for updated user {validated_email}")
+
+                # Show success message and proceed to welcome menu
+                respond_in_user_language(
+                    es=f"✅ ¡Registro completado exitosamente!\n\n"
+                       f"📋 Tu cuenta:\n"
+                       f"• Nombre: {full_name}\n"
+                       f"• Email: {validated_email}\n\n"
+                       f"Ya puedes gestionar tus reservas.",
+                    en=f"✅ Registration completed successfully!\n\n"
+                       f"📋 Your account:\n"
+                       f"• Name: {full_name}\n"
+                       f"• Email: {validated_email}\n\n"
+                       f"You can now manage your reservations."
+                )
+
+                proceed_to_welcome_menu(check_result)
+                return
+            else:
+                # Update failed - show error
+                error_msg = update_result.get("error", "Unknown error")
+                respond_in_user_language(
+                    es=f"❌ No pudimos completar tu registro: {error_msg}\n"
+                       f"Por favor, intenta de nuevo más tarde.",
+                    en=f"❌ We couldn't complete your registration: {error_msg}\n"
+                       f"Please try again later."
+                )
+                return
+        else:
+            # NO - This is a REAL existing user (not temporary)
+            # User already has an account with this email
+            respond_in_user_language(
+                es=f"Parece que ya tienes una cuenta registrada con este correo.\n"
+                   f"Tu nombre en el sistema: {existing_user_name}\n\n"
+                   f"Voy a cargar tu información existente.",
+                en=f"It seems you already have an account registered with this email.\n"
+                   f"Your name in the system: {existing_user_name}\n\n"
+                   f"I'll load your existing information."
+            )
+
+            # Proceed with existing user data
+            proceed_to_welcome_menu(check_result)
+            return
+    else:
+        # Unexpected case: error says user exists but check_user_exists says no
+        # This shouldn't happen - log as error
+        logger.error(f"Inconsistent state: create_user returned error but check_user_exists says user doesn't exist")
+        respond_in_user_language(
+            es="❌ Hubo un error inconsistente al verificar tu cuenta.\n"
+               "Por favor, intenta de nuevo.",
+            en="❌ There was an inconsistency checking your account.\n"
+               "Please try again."
+        )
+        return
 ```
 
 ---

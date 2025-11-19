@@ -68,7 +68,6 @@ class CleanupScheduler:
                 f"runs every {cleanup_interval_hours} hour(s)"
             )
             logger.info(f"   Job ID: {job.id}")
-            logger.info(f"   Next run: {job.next_run_time}")
 
             # Start scheduler
             scheduler.start()

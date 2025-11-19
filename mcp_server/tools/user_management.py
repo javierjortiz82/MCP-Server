@@ -440,13 +440,15 @@ async def request_otp(email: str, purpose: str = "booking_auth") -> dict:
         # For new users (no user_id), we need to create a temporary user first
         # or handle OTP without user_id. Since OTPService requires user_id,
         # we'll create a minimal user record if needed.
+        # IMPORTANT: Use minimal data (email + language only) - full name will be set during registration
         if not user_id:
             logger.info(f"Creating temporary user for OTP: {email}")
             # Create user with minimal info (will be updated after OTP verification)
+            # Use only email + language as minimal required fields
             create_result = await create_user(
                 email=email,
-                full_name="Temporary User",  # Will be updated after OTP verification
-                language="es"
+                full_name="Temporary User",  # Placeholder - will be updated during registration
+                language=user_language  # Use detected session language
             )
             if not create_result.get("success"):
                 logger.error(f"Failed to create temporary user for OTP: {email}")
@@ -459,7 +461,7 @@ async def request_otp(email: str, purpose: str = "booking_auth") -> dict:
                 }
             user_id = create_result.get("user_id")
             user_name = "User"  # Generic name for new users
-            logger.info(f"Temporary user created: user_id={user_id}")
+            logger.info(f"Temporary user created: user_id={user_id}, email={email}, language={user_language}")
 
         # Check rate limiting
         otp_service = _get_otp_service()
@@ -640,6 +642,8 @@ async def update_user(email: str, data: dict) -> dict:
         dict: Update result with keys:
             - success (bool): True if update succeeded
             - email (str): User email address
+            - full_name (str|None): Updated full name
+            - language (str|None): Updated language
             - updated_fields (list[str]): List of fields that were updated
             - error (str|None): Error message if update failed
 
@@ -652,6 +656,8 @@ async def update_user(email: str, data: dict) -> dict:
         {
             "success": True,
             "email": "user@example.com",
+            "full_name": "Jane Doe",
+            "language": "en",
             "updated_fields": ["full_name", "language"]
         }
 
@@ -660,6 +666,7 @@ async def update_user(email: str, data: dict) -> dict:
         - Only provided fields are updated (partial updates supported)
         - Phone field is ignored (demo_users table doesn't support it)
         - Invalid language codes are rejected (must be es or en)
+        - This is specifically designed to update temporary users created during OTP flow
     """
     try:
         # Ensure DB connection
@@ -677,22 +684,26 @@ async def update_user(email: str, data: dict) -> dict:
             return {
                 "success": False,
                 "email": email,
+                "full_name": None,
+                "language": None,
                 "updated_fields": [],
                 "error": "User not found"
             }
 
         # Validate and prepare updates
         updated_fields = []
+        update_values = {}
+        current_full_name = user.full_name or user.display_name
+        current_language = user.preferred_language or "es"
 
         # Full name update
         if "full_name" in data and data["full_name"]:
             new_name = data["full_name"].strip()
             if len(new_name) >= 2:
-                # Update user record (demo_users table)
-                # Note: UserService doesn't have update_user method, would need to add it
-                # For now, log the intention
-                logger.info(f"Would update full_name for {email} to '{new_name}'")
+                update_values["full_name"] = new_name
                 updated_fields.append("full_name")
+                current_full_name = new_name
+                logger.info(f"Preparing to update full_name for {email} to '{new_name}'")
             else:
                 logger.warning(f"Invalid full_name for {email}: too short")
 
@@ -700,22 +711,52 @@ async def update_user(email: str, data: dict) -> dict:
         if "language" in data and data["language"]:
             lang = data["language"].strip().lower()
             if lang in ["es", "en"]:
-                logger.info(f"Would update language for {email} to '{lang}'")
+                update_values["language"] = lang
                 updated_fields.append("language")
+                current_language = lang
+                logger.info(f"Preparing to update language for {email} to '{lang}'")
             else:
                 logger.warning(f"Invalid language for {email}: {lang}")
 
         # Phone update (not supported by demo_users table)
         if "phone" in data:
-            logger.info(f"Phone update requested for {email} but not supported in demo_users table")
+            logger.debug(f"Phone update requested for {email} but not supported in demo_users table")
 
-        # Note: Actual database update would go here
-        # For now, we just log the updates since UserService doesn't have update method
+        # Execute database updates if there are any changes
+        if update_values:
+            db = get_db()
+
+            # Build dynamic UPDATE query
+            set_clauses = []
+            params = []
+
+            if "full_name" in update_values:
+                set_clauses.append("full_name = %s")
+                params.append(update_values["full_name"])
+
+            if "language" in update_values:
+                set_clauses.append("preferred_language = %s")
+                params.append(update_values["language"])
+
+            params.append(email)  # WHERE clause parameter
+
+            update_query = f"""
+                UPDATE test.demo_users
+                SET {', '.join(set_clauses)},
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE email = %s
+            """
+
+            logger.info(f"Executing update query for {email}: {update_query}")
+            await db.execute_one(update_query, tuple(params))
+            logger.info(f"User {email} updated successfully: {updated_fields}")
 
         logger.info(f"User update completed for {email}: {updated_fields}")
         return {
             "success": True,
             "email": email,
+            "full_name": current_full_name,
+            "language": current_language,
             "updated_fields": updated_fields
         }
 
@@ -724,6 +765,8 @@ async def update_user(email: str, data: dict) -> dict:
         return {
             "success": False,
             "email": email,
+            "full_name": None,
+            "language": None,
             "updated_fields": [],
             "error": str(e)
         }
