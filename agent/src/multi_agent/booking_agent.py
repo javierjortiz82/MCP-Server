@@ -325,17 +325,16 @@ class BookingAgent(BaseAgent):
                     f"expired={session_expired}"
                 )
 
-                # ⚠️ CRITICAL: If session expired, ALWAYS clear the auth_flow_pending flag
-                # The flag from the PREVIOUS session (which expired) is STALE and must not be reused.
-                # Even if auth_flow_pending=true, it's from the old session and no longer valid.
+                # ⚠️ CRITICAL: If session expired, CLEAR the auth_flow_pending flag
+                # because it MUST be from the EXPIRED session and is STALE.
+                # The user will need to authenticate again from scratch.
                 if session_expired:
                     self.logger.warning(
-                        "⚠️ Session has expired - the auth_flow_pending flag is stale, clearing it"
+                        "⚠️ Session expired - auth_flow_pending flag is stale (from previous session), clearing it"
                     )
                     self._set_auth_flow_pending(False)
 
                 # Now check if user is IN THE MIDDLE of authentication flow
-                # This uses the FRESH flag state after cleanup
                 is_in_auth_flow = self._is_user_in_auth_flow()
                 self.logger.info(f"🔍 Auth flow check: is_in_auth_flow={is_in_auth_flow}")
 
