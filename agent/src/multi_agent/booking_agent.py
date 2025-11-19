@@ -325,18 +325,24 @@ class BookingAgent(BaseAgent):
                     f"expired={session_expired}"
                 )
 
-                # ⚠️ CRITICAL: If session expired, FIRST clear old auth_flow_pending state
-                # from previous session. This prevents reusing stale authentication state.
-                if session_expired:
+                # ⚠️ CRITICAL: Check if user is IN THE MIDDLE of authentication flow BEFORE clearing
+                # If user just provided email/OTP in response to auth prompt, we should NOT clear the flag
+                # yet - we need to let Gemini process their response first
+                is_in_auth_flow = self._is_user_in_auth_flow()
+                self.logger.info(f"🔍 Auth flow check (before cleanup): is_in_auth_flow={is_in_auth_flow}")
+
+                # Only clear the flag if:
+                # 1. Session expired AND
+                # 2. User is NOT currently in auth flow (meaning we're starting fresh re-auth)
+                if session_expired and not is_in_auth_flow:
                     self.logger.warning(
-                        "⚠️ Session has expired - clearing old auth_flow_pending state"
+                        "⚠️ Session has expired AND user not in auth flow - clearing old auth_flow_pending state"
                     )
                     self._set_auth_flow_pending(False)
 
-                # ⚠️ CRITICAL: Now check if user is IN THE MIDDLE of authentication flow
-                # This check uses the FRESH flag state (cleared if session expired)
+                # Now check auth flow again after potential cleanup
                 is_in_auth_flow = self._is_user_in_auth_flow()
-                self.logger.info(f"🔍 Auth flow check: is_in_auth_flow={is_in_auth_flow}")
+                self.logger.info(f"🔍 Auth flow check (after cleanup): is_in_auth_flow={is_in_auth_flow}")
 
                 if is_in_auth_flow:
                     self.logger.info(
