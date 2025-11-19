@@ -67,6 +67,7 @@
 \i '../01_ddl/memory/01_conversation.sql'
 \i '../01_ddl/memory/02_agent_memory.sql'
 \i '../01_ddl/memory/03_user_memory.sql'
+\i '../01_ddl/memory/04_add_unique_constraint.sql'
 \echo ''
 
 -- ============================================================================
