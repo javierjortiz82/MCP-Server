@@ -204,8 +204,10 @@ class SalesAgent(BaseAgent):
         """Return agent name for logging.
 
         Required by BaseAgent abstract property.
+        CRITICAL: Must return "sales" (without "_agent" suffix) to match memory scope
+        used in save_memory_block() and database constraints.
         """
-        return "sales_agent"
+        return "sales"
 
     def get_system_prompt(self, **kwargs: Any) -> str:
         """Get system prompt for SalesAgent using PromptManager (Jinja2).

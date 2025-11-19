@@ -77,8 +77,10 @@ class GeneralAgent(BaseAgent):
         """Return agent name for logging.
 
         Required by BaseAgent abstract property.
+        CRITICAL: Must return "general" (without "_agent" suffix) to match memory scope
+        used in save_memory_block() and database constraints.
         """
-        return "general_agent"
+        return "general"
 
     def get_system_prompt(self, **kwargs: Any) -> str:
         """Get system prompt for GeneralAgent using PromptManager (Jinja2).
