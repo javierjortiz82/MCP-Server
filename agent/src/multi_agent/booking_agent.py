@@ -1093,6 +1093,21 @@ class BookingAgent(BaseAgent):
             # If we reach here, user is authenticated - proceed normally
             self.logger.info("✅ User authenticated - proceeding with request")
 
+            # UPDATE SESSION ACTIVITY ON EVERY REQUEST
+            # CRITICAL: Reset inactivity timer on each user action
+            # This ensures session stays alive as long as user is actively sending messages
+            # Only expires if user is INACTIVE for SESSION_IDLE_TIMEOUT_MINUTES
+            try:
+                self.logger.info("⏱️ Updating session activity for authenticated user...")
+                activity_result = await self.mcp_client.call_tool(
+                    "update_session_activity",
+                    {"session_id": str(self.session_id)}
+                )
+                self.logger.debug(f"✅ Session activity updated: {activity_result}")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Error updating session activity: {e}")
+                # Don't fail the request if activity update fails - continue processing
+
             # Auto-detect or use provided language for consistent context
             if "language" in kwargs:
                 # Priority 1: Explicit language parameter from caller
