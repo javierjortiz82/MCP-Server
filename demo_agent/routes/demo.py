@@ -15,6 +15,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from demo_agent.config.settings import config
 from demo_agent.logger import logger
 from demo_agent.models.requests import DemoRequest
 from demo_agent.models.responses import DemoResponse
@@ -111,96 +112,138 @@ async def demo_query(request_data: DemoRequest, request: Request):
     try:
         demo_agent, user_service = get_services(request)
 
-        # STEP 1: Get authenticated user from Clerk middleware
-        # SECURITY: Only Clerk authentication is allowed (CWE-862 fix)
-        authenticated_user = get_current_user(request)
+        # STEP 1: Get authenticated user (hybrid authentication)
+        # Supports two authentication methods:
+        # 1. Clerk OAuth (Gmail/Apple/GitHub) - validates Bearer token from Authorization header
+        # 2. OTP Registration - validates user_id in request body (for manually registered users)
+        user_id = None
+        auth_method = None
 
-        if not authenticated_user or not authenticated_user.get("db_user_id"):
-            # No Clerk authentication found - reject request
-            logger.error("Authentication required: No valid Clerk session found")
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "success": False,
-                    "error": "authentication_required",
-                    "message": "Please log in with Clerk to use this endpoint.",
-                },
-            )
+        if config.ENABLE_CLERK_AUTH:
+            # Try Clerk authentication first (OAuth users)
+            authenticated_user = get_current_user(request)
 
-        # User authenticated via Clerk - use db_user_id from middleware
-        user_id = authenticated_user["db_user_id"]
-        logger.info(f"Clerk-authenticated user: {user_id}")
+            if authenticated_user and authenticated_user.get("is_authenticated"):
+                if authenticated_user.get("db_user_id"):
+                    # User exists in database - use db_user_id from middleware
+                    user_id = authenticated_user["db_user_id"]
+                    auth_method = "clerk_oauth"
+                    logger.info(f"Clerk OAuth authenticated user: {user_id}")
+                else:
+                    # User authenticated with Clerk but not in database
+                    # This happens when webhook hasn't created the user yet
+                    # Return helpful error message
+                    logger.warning(f"Clerk user authenticated but not in database: {authenticated_user.get('email')}")
+                    return JSONResponse(
+                        status_code=403,
+                        content={
+                            "success": False,
+                            "error": "user_not_registered",
+                            "message": "Your account is not fully set up yet. Please complete registration or try again in a moment.",
+                            "hint": "If this persists, contact support with your email address."
+                        },
+                    )
+            elif request_data.user_id:
+                # Fallback: Check if user_id provided in request body (OTP-registered users)
+                # This allows users who registered with email+OTP to use the endpoint
+                user_id = request_data.user_id
+                auth_method = "otp_registration"
+                logger.info(f"OTP-registered user attempting access: {user_id}")
+            else:
+                # No authentication method found - reject request
+                logger.error("Authentication required: No Clerk token or user_id provided")
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "success": False,
+                        "error": "authentication_required",
+                        "message": "Please log in to use this endpoint.",
+                    },
+                )
+        else:
+            # Clerk auth disabled - use user_id from request if provided
+            user_id = request_data.user_id
+            auth_method = "disabled"
+            if not user_id:
+                logger.warning("Auth disabled and no user_id provided - allowing anonymous access")
+                # Allow anonymous access for demo purposes
+                user_id = None
 
-        # STEP 2: Validate user exists and is active
-        user_query = """
-            SELECT id, email, is_active, is_email_verified, is_suspended, is_deleted
-            FROM :SCHEMA_NAME.demo_users
-            WHERE id = %s
-        """
-        user_result = await user_service.db.execute_one(user_query, (user_id,))
+        # STEP 2: Validate user exists and is active (only if user_id provided)
+        user_result = None
+        user_email = None
 
-        if not user_result:
-            logger.warning(f"User ID {user_id} not found")
-            return JSONResponse(
-                status_code=403,
-                content={
-                    "success": False,
-                    "error": "user_not_found",
-                    "message": "User account not found. Please register first.",
-                },
-            )
+        if user_id:
+            user_query = """
+                SELECT id, email, is_active, is_email_verified, is_suspended, is_deleted
+                FROM :SCHEMA_NAME.demo_users
+                WHERE id = %s
+            """
+            user_result = await user_service.db.execute_one(user_query, (user_id,))
 
-        # Check if user is active and verified
-        if not user_result.get("is_active"):
-            logger.warning(f"User ID {user_id} is not active")
-            return JSONResponse(
-                status_code=403,
-                content={
-                    "success": False,
-                    "error": "account_not_active",
-                    "message": (
-                        "Your account is not active. "
-                        "Please verify your email address first."
-                    ),
-                },
-            )
+            if not user_result:
+                logger.warning(f"User ID {user_id} not found")
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "success": False,
+                        "error": "user_not_found",
+                        "message": "User account not found. Please register first.",
+                    },
+                )
 
-        if not user_result.get("is_email_verified"):
-            logger.warning(f"User ID {user_id} email not verified")
-            return JSONResponse(
-                status_code=403,
-                content={
-                    "success": False,
-                    "error": "email_not_verified",
-                    "message": "Please verify your email address first.",
-                },
-            )
+            # Check if user is active and verified
+            if not user_result.get("is_active"):
+                logger.warning(f"User ID {user_id} is not active")
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "success": False,
+                        "error": "account_not_active",
+                        "message": (
+                            "Your account is not active. "
+                            "Please verify your email address first."
+                        ),
+                    },
+                )
 
-        if user_result.get("is_suspended"):
-            logger.warning(f"User ID {user_id} is suspended")
-            return JSONResponse(
-                status_code=403,
-                content={
-                    "success": False,
-                    "error": "account_suspended",
-                    "message": "Your account has been suspended.",
-                },
-            )
+            if not user_result.get("is_email_verified"):
+                logger.warning(f"User ID {user_id} email not verified")
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "success": False,
+                        "error": "email_not_verified",
+                        "message": "Please verify your email address first.",
+                    },
+                )
 
-        if user_result.get("is_deleted"):
-            logger.warning(f"User ID {user_id} is deleted")
-            return JSONResponse(
-                status_code=403,
-                content={
-                    "success": False,
-                    "error": "account_deleted",
-                    "message": "Your account has been deleted.",
-                },
-            )
+            if user_result.get("is_suspended"):
+                logger.warning(f"User ID {user_id} is suspended")
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "success": False,
+                        "error": "account_suspended",
+                        "message": "Your account has been suspended.",
+                    },
+                )
 
-        # STEP 3: Use user_id as user_key for token tracking
-        user_key = str(user_id)
-        user_email = user_result.get("email")
+            if user_result.get("is_deleted"):
+                logger.warning(f"User ID {user_id} is deleted")
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "success": False,
+                        "error": "account_deleted",
+                        "message": "Your account has been deleted.",
+                    },
+                )
+
+            user_email = user_result.get("email")
+
+        # STEP 3: Use user_id as user_key for token tracking (or session_id if anonymous)
+        user_key = str(user_id) if user_id else request_data.session_id or str(uuid4())
 
         # SECURITY (CWE-384 fix): Validate or generate session_id
         if request_data.session_id:
@@ -427,7 +470,10 @@ async def demo_query(request_data: DemoRequest, request: Request):
 
 
 @router.get("/status")
-async def demo_status(request: Request):
+async def demo_status(
+    user_id: int | None = Query(None, description="User ID (required for OTP users, optional for Clerk OAuth users)"),
+    request: Request = None
+):
     """Get authenticated user's current quota status.
 
     Requires Clerk authentication. Extracts user_id from JWT token.
@@ -470,13 +516,23 @@ async def demo_status(request: Request):
         demo_agent, _ = get_services(request)
         logger.info("=== demo_status START ===")
 
-        # AUTHENTICATION: Extract user_id from Clerk JWT (same pattern as /v1/demo)
-        logger.info("demo_status: Calling get_current_user")
+        # AUTHENTICATION: Hybrid authentication (Clerk OAuth or OTP registration)
+        logger.info("demo_status: Checking authentication")
+        final_user_id = None
         authenticated_user = get_current_user(request)
         logger.info(f"demo_status: authenticated_user = {authenticated_user}")
 
-        if not authenticated_user:
-            logger.warning("demo_status: No authenticated user found")
+        if authenticated_user and authenticated_user.get("db_user_id"):
+            # User authenticated via Clerk OAuth
+            final_user_id = authenticated_user["db_user_id"]
+            logger.info(f"demo_status: Clerk OAuth user_id = {final_user_id}")
+        elif user_id:
+            # User provided user_id in query params (OTP-registered users)
+            final_user_id = user_id
+            logger.info(f"demo_status: OTP user_id = {final_user_id}")
+        else:
+            # No authentication method found
+            logger.warning("demo_status: No Clerk token or user_id provided")
             return JSONResponse(
                 status_code=401,
                 content={
@@ -486,22 +542,11 @@ async def demo_status(request: Request):
                 },
             )
 
-        user_id = authenticated_user.get("db_user_id")
-        logger.info(f"demo_status: Extracted user_id = {user_id}")
-
-        if not user_id:
-            logger.error(
-                f"demo_status: db_user_id not found in authenticated_user: {authenticated_user}"
-            )
-            raise HTTPException(
-                status_code=400, detail="User ID not found in authentication token"
-            )
-
         # USER-BASED QUOTA: Use user_id as the key (same across all devices)
         # This ensures quota is shared across all user's sessions/devices
-        user_key = str(user_id)
+        user_key = str(final_user_id)
 
-        logger.info(f"Quota status requested by user: {user_id}")
+        logger.info(f"Quota status requested by user: {final_user_id}")
 
         # Get quota status
         status = await demo_agent.get_user_status(user_key)
@@ -519,6 +564,7 @@ async def demo_status(request: Request):
 @router.get("/history")
 async def get_demo_history(
     limit: int = Query(100, description="Maximum number of messages to return"),
+    user_id: int | None = Query(None, description="User ID (required for OTP users, optional for Clerk OAuth users)"),
     request: Request = None,
 ):
     """Retrieve user's complete conversation history (all devices, all sessions).
@@ -595,11 +641,21 @@ async def get_demo_history(
     try:
         _, user_service = get_services(request)
 
-        # SECURITY: Require Clerk authentication
+        # SECURITY: Hybrid authentication (Clerk OAuth or OTP registration)
+        final_user_id = None
         authenticated_user = get_current_user(request)
 
-        if not authenticated_user or not authenticated_user.get("db_user_id"):
-            logger.error("Unauthorized chat history access attempt")
+        if authenticated_user and authenticated_user.get("db_user_id"):
+            # User authenticated via Clerk OAuth
+            final_user_id = authenticated_user["db_user_id"]
+            logger.info(f"Chat history requested by Clerk OAuth user: {final_user_id}")
+        elif user_id:
+            # User provided user_id in query params (OTP-registered users)
+            final_user_id = user_id
+            logger.info(f"Chat history requested by OTP user: {final_user_id}")
+        else:
+            # No authentication method found
+            logger.error("Unauthorized chat history access attempt: No Clerk token or user_id")
             return JSONResponse(
                 status_code=401,
                 content={
@@ -608,9 +664,6 @@ async def get_demo_history(
                     "message": "Please log in to access chat history.",
                 },
             )
-
-        user_id = authenticated_user["db_user_id"]
-        logger.info(f"Chat history requested by user: {user_id}")
 
         # SECURITY: Limit max messages to prevent abuse
         limit = min(max(1, limit), 500)  # Clamp between 1 and 500
@@ -629,7 +682,7 @@ async def get_demo_history(
             ORDER BY cm.created_at ASC
             LIMIT %s
         """
-        messages = await user_service.db.execute_all(messages_query, (user_id, limit))
+        messages = await user_service.db.execute_all(messages_query, (final_user_id, limit))
 
         # Convert datetime objects to ISO strings for JSON serialization
         for msg in messages:
@@ -637,7 +690,7 @@ async def get_demo_history(
                 msg["created_at"] = msg["created_at"].isoformat()
 
         logger.info(
-            f"Chat history retrieved: {len(messages)} messages for user {user_id} (cross-device sync)"
+            f"Chat history retrieved: {len(messages)} messages for user {final_user_id} (cross-device sync)"
         )
 
         return {

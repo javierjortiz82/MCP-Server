@@ -10,6 +10,9 @@ mcp==1.21.0  # Official MCP SDK from Anthropic (latest stable)
 # Database
 psycopg2-binary>=2.9.10
 pgvector>=0.4.1
+asyncpg>=0.30.0  # Required for demo_agent user management integration
+sqlalchemy>=2.0.36  # Required for demo_agent ORM
+bcrypt>=4.2.0  # Required for demo_agent password hashing
 
 # AI/ML - Google Gemini
 google-genai>=1.49.0

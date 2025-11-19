@@ -71,6 +71,7 @@ services:
     volumes:
       - mcp_logs:/app/logs
       - ../email_service:/app/email_service:ro
+      - ../demo_agent:/app/demo_agent:ro
       # Google Calendar credentials (read-only for security)
       # Development: bind mount from host directory
       # Production: consider using Docker secrets (see docs/NOTAS_CLAUDE.md)

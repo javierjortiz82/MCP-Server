@@ -320,11 +320,16 @@ class ClerkService:
             self.metrics.increment_counter("clerk_user_sync_error")
             return None, False, f"Sync error: {str(e)}"
 
-    async def get_user_by_clerk_id(self, clerk_user_id: str) -> Optional[Dict[str, Any]]:
-        """Get user from database by Clerk user ID.
+    async def get_user_by_clerk_id(
+        self,
+        clerk_user_id: str,
+        fallback_email: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Get user from database by Clerk user ID with email fallback.
 
         Args:
             clerk_user_id: Clerk user ID (e.g., "user_2abc...")
+            fallback_email: Optional email to use as fallback if clerk_user_id not found
 
         Returns:
             Optional[Dict]: User record (if found), None otherwise
@@ -334,8 +339,9 @@ class ClerkService:
           is_active, is_email_verified, created_at, last_login_at
         """
         try:
-            self.logger.info("Fetching user by Clerk ID", clerk_user_id=clerk_user_id)
+            self.logger.info(f"Fetching user by Clerk ID: {clerk_user_id}")
 
+            # STEP 1: Try to find user by clerk_user_id (primary lookup)
             query = f"""
                 SELECT
                     id, email, full_name, display_name,
@@ -348,10 +354,55 @@ class ClerkService:
                     AND is_deleted = false
             """
 
+            self.logger.info(f"DEBUG: Executing query with clerk_user_id={clerk_user_id}, schema={config.SCHEMA_NAME}")
             result = await self.db.execute_one(query, (clerk_user_id,))
+            self.logger.info(f"DEBUG: Query result by clerk_user_id: {result}")
+
+            if not result and fallback_email:
+                self.logger.info(f"User not found by clerk_user_id: {clerk_user_id}, trying email fallback: {fallback_email}")
+
+                # STEP 2: Fallback - Try to find user by email
+                # This handles cases where:
+                # - User has multiple Clerk accounts with same email
+                # - clerk_user_id changed (user deleted/recreated account)
+                # - Old registration with different clerk_user_id
+
+                fallback_query = f"""
+                    SELECT
+                        id, email, full_name, display_name,
+                        clerk_user_id, clerk_session_id, clerk_metadata,
+                        is_active, is_email_verified,
+                        preferred_language, timezone,
+                        created_at, updated_at, last_login_at
+                    FROM {config.SCHEMA_NAME}.demo_users
+                    WHERE LOWER(email) = LOWER($1)
+                        AND is_deleted = false
+                    ORDER BY last_login_at DESC NULLS LAST
+                    LIMIT 1
+                """
+
+                result = await self.db.execute_one(fallback_query, (fallback_email,))
+                self.logger.info(f"DEBUG: Query result by email fallback: {result}")
+
+                if result:
+                    self.logger.warning(
+                        f"Found user by email fallback. Updating clerk_user_id from "
+                        f"{result.get('clerk_user_id')} to {clerk_user_id}"
+                    )
+
+                    # Update the clerk_user_id to match the new one from Clerk
+                    update_query = f"""
+                        UPDATE {config.SCHEMA_NAME}.demo_users
+                        SET clerk_user_id = $1, updated_at = NOW()
+                        WHERE id = $2
+                    """
+                    await self.db.execute(update_query, (clerk_user_id, result["id"]))
+
+                    # Update result dict with new clerk_user_id
+                    result["clerk_user_id"] = clerk_user_id
 
             if not result:
-                self.logger.info("User not found", clerk_user_id=clerk_user_id)
+                self.logger.info(f"User not found for clerk_user_id: {clerk_user_id}")
                 return None
 
             # execute_one returns dict with column names as keys

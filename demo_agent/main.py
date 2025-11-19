@@ -32,6 +32,7 @@ from demo_agent.observability.context import (
 )
 from demo_agent.observability.correlation import CorrelationID
 from demo_agent.observability.metrics import get_metrics_collector
+from demo_agent.scheduler.cleanup_scheduler import init_cleanup_scheduler
 from demo_agent.security.clerk_middleware import ClerkAuthMiddleware
 from demo_agent.security.session_expiry_middleware import SessionExpiryMiddleware
 from demo_agent.services.email_integration import EmailIntegrationService
@@ -94,6 +95,11 @@ async def lifespan(app: FastAPI):
 
         app.state.email_service = EmailIntegrationService()
         logger.info("✅ Email Integration Service initialized")
+
+        # Initialize cleanup scheduler for background tasks
+        # Runs every 1 hour to clean up expired OTP codes and sessions
+        init_cleanup_scheduler(app)
+        logger.info("✅ Cleanup scheduler initialized (runs every 1 hour)")
 
     except Exception as e:
         logger.exception(f"Failed to initialize demo agent: {e}")

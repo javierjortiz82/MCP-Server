@@ -92,6 +92,12 @@ def get_booking_tool_names() -> list[str]:
         "list_customer_bookings",
         "get_services",
         "get_business_hours",
+        # User Management Tools (v2.9 - Authentication & Registration)
+        "check_user_exists",
+        "create_user",
+        "request_otp",
+        "verify_otp",
+        "update_user",
     ]
 
 

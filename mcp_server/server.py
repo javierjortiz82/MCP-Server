@@ -13,6 +13,7 @@ from mcp_handlers import (
     product_handlers,
     prompt_handlers,
     resource_handlers,
+    user_handlers,
 )
 from utils.logger import setup_logging
 
@@ -50,6 +51,7 @@ mcp = FastMCP(
 # Initialize handlers with MCP instance
 product_handlers.init_product_handlers(mcp)
 booking_handlers.init_booking_handlers(mcp)  # Register booking tools
+user_handlers.register_user_tools(mcp)  # Register user management tools
 resource_handlers.init_resource_handlers(mcp)
 prompt_handlers.init_prompt_handlers(mcp)
 

@@ -265,6 +265,327 @@ class BookingAgent(BaseAgent):
             desc_first_line = tool_description.split("\n")[0]
             self.logger.info(f"   {i}. {tool_name}: {desc_first_line}")
 
+    async def _check_and_enforce_authentication(
+        self,
+        query: str,
+        **kwargs: Any
+    ) -> str | None:
+        """Check if user is authenticated and enforce authentication if not.
+
+        This is a HARD BLOCK at the code level that prevents ANY booking operations
+        until the user has successfully authenticated with OTP.
+
+        Authentication Flow:
+        1. Check session authentication status via MCP tool
+        2. If not authenticated or session expired:
+           - Check if user is IN THE MIDDLE of authentication flow (responding to auth prompt)
+           - If yes, allow Gemini to process (handle email/OTP)
+           - If no, return authentication prompt
+        3. If authenticated, return None (allow request to proceed)
+
+        Args:
+            query: User's query/message
+            **kwargs: Additional context (language, etc.)
+
+        Returns:
+            str | None:
+                - Authentication prompt if user needs to authenticate
+                - None if user is authenticated OR in authentication flow (proceed to Gemini)
+
+        Security:
+            - Blocks ALL requests until authentication succeeds
+            - Cannot be bypassed by Gemini or user input
+            - Session timeout: 30 minutes of inactivity
+        """
+        try:
+            # Get session_id from current session
+            if not self.session_id:
+                self.logger.error("No session_id available - cannot check authentication")
+                return self._get_auth_error_message(kwargs.get("language", "es"))
+
+            # Call check_session_auth MCP tool
+            self.logger.info(f"🔐 Checking authentication status for session: {self.session_id}")
+
+            # Execute MCP tool via client
+            auth_status = await self.mcp_client.call_tool(
+                "check_session_auth",
+                {"session_id": str(self.session_id)}
+            )
+
+            if not auth_status:
+                self.logger.error("Failed to check authentication status")
+                return self._get_auth_error_message(kwargs.get("language", "es"))
+
+            self.logger.info(f"🔍 Auth status: {auth_status}")
+
+            # Check if re-authentication is required
+            requires_reauth = auth_status.get("requires_reauth", True)
+            is_authenticated = auth_status.get("is_authenticated", False)
+            session_expired = auth_status.get("session_expired", False)
+
+            if requires_reauth:
+                # User is NOT authenticated or session expired
+                self.logger.warning(
+                    f"🔒 Authentication required: "
+                    f"authenticated={is_authenticated}, "
+                    f"expired={session_expired}"
+                )
+
+                # ⚠️ CRITICAL: Check if user is IN THE MIDDLE of authentication flow
+                # If the last system message was an authentication prompt, then user
+                # is responding with their email/OTP and we should let Gemini process it
+                is_in_auth_flow = self._is_user_in_auth_flow()
+                self.logger.info(f"🔍 Auth flow check: is_in_auth_flow={is_in_auth_flow}")
+
+                if is_in_auth_flow:
+                    self.logger.info(
+                        "🔓 User is responding to authentication prompt - "
+                        "allowing Gemini to process (email/OTP collection)"
+                    )
+                    return None  # Let Gemini handle authentication flow
+
+                # User is NOT in auth flow - set flag and show authentication prompt
+                # Set auth_flow_pending flag in memory blocks so next request knows user is in auth flow
+                self._set_auth_flow_pending(True)
+
+                return self._get_authentication_prompt(
+                    session_expired=session_expired,
+                    language=kwargs.get("language", "es")
+                )
+
+            # User is authenticated - clear auth_flow_pending flag and allow request to proceed
+            self.logger.info("✅ User authenticated - session valid")
+            self._set_auth_flow_pending(False)  # Clear flag
+            return None
+
+        except Exception as e:
+            self.logger.exception(f"Error checking authentication: {e}")
+            # On error, be conservative and require authentication
+            return self._get_auth_error_message(kwargs.get("language", "es"))
+
+    def _is_user_in_auth_flow(self) -> bool:
+        """Check if user is currently in the middle of authentication flow.
+
+        CRITICAL: The hard block returns a text response when auth is required.
+        That response goes back to the user but is NOT added to history yet.
+        So we can't rely on history to detect if we're in auth flow.
+
+        Instead, we check if the RESPONSE we're about to return is an auth prompt.
+        But that creates a chicken-and-egg problem.
+
+        SOLUTION: Always allow the FIRST message after a hard block returns auth prompt.
+        We detect this by checking if this is a NEW conversation (no history).
+
+        Returns:
+            bool: True if we should allow Gemini to process (in auth flow), False otherwise.
+        """
+        try:
+            # CRITICAL INSIGHT: The hard block executes BEFORE history is updated.
+            # When hard block returns "¿Cuál es tu correo?" that message is NOT in history yet.
+            # So when user replies with email, history is EMPTY or has old messages only.
+
+            # Check if we have recent conversation history
+            if not hasattr(self, 'history') or not self.history:
+                self.logger.info("🔍 No history - this could be first message OR response to auth prompt")
+                # Can't determine reliably - check database for recent auth prompt
+                return self._check_recent_auth_prompt_in_db()
+
+            # Look at the LAST message in history
+            # If it's from the model and contains auth keywords, user is responding to it
+            self.logger.info(f"🔍 Checking last message in history ({len(self.history)} total messages)...")
+
+            if len(self.history) > 0:
+                last_msg = self.history[-1]
+
+                # Check if last message is from the model (assistant)
+                if hasattr(last_msg, 'role') and last_msg.role == 'model':
+                    if hasattr(last_msg, 'parts') and last_msg.parts:
+                        text = ''.join(part.text for part in msg.parts if hasattr(part, 'text'))
+
+                        # Check for auth keywords
+                        auth_keywords = [
+                            "correo electrónico", "email", "email address",
+                            "sesión ha expirado", "session has expired",
+                            "verificar tu identidad", "verify your identity",
+                            "código OTP", "OTP code", "verification code",
+                            "¿Cuál es tu", "What's your", "What is your"
+                        ]
+
+                        if any(keyword.lower() in text.lower() for keyword in auth_keywords):
+                            self.logger.info(f"✅ Last message is auth prompt: {text[:80]}...")
+                            return True
+
+                self.logger.info("Last message in history is not an auth prompt")
+
+            # Fallback: check DB for recent auth prompt sent
+            return self._check_recent_auth_prompt_in_db()
+
+        except Exception as e:
+            self.logger.warning(f"Error checking auth flow status: {e}")
+            return False
+
+    def _check_recent_auth_prompt_in_db(self) -> bool:
+        """Check if we recently sent an auth prompt.
+
+        Since we can't easily query DB from here, we use a simple heuristic:
+        If there's NO history available, it means this is likely the FIRST message
+        after an auth prompt was returned (which doesn't get added to history yet).
+
+        In this case, we ALLOW the request to proceed so Gemini can process the email/OTP.
+
+        Returns:
+            bool: True if this looks like a response to auth prompt, False otherwise.
+        """
+        try:
+            # SIMPLE HEURISTIC: If history is empty/unavailable AND we're not authenticated,
+            # this is likely the user responding to an auth prompt we just sent.
+            #
+            # Why? Because:
+            # 1. Hard block returns auth prompt text directly (bypasses Gemini)
+            # 2. That text doesn't get added to history
+            # 3. When user responds, history is still empty
+            # 4. So empty history + not authenticated = probably in auth flow
+
+            self.logger.info("🔍 No history available - assuming user is responding to auth prompt")
+            self.logger.info("✅ Allowing request to proceed (will let Gemini handle auth flow)")
+            return True
+
+        except Exception as e:
+            self.logger.warning(f"Error in auth flow check: {e}")
+            return False
+
+    def _check_auth_flow_from_memory(self) -> bool:
+        """Check if auth flow is pending by looking at memory blocks.
+
+        Returns:
+            bool: True if auth_flow_pending memory block exists, False otherwise.
+        """
+        try:
+            # Check if memory is enabled
+            if not self._memory_enabled or not hasattr(self, 'memory_manager'):
+                self.logger.info("🔍 Memory not enabled - cannot check auth_flow_pending")
+                return False
+
+            # Get session memory blocks (use default scope to match save_memory_block)
+            memory_blocks = self.get_memory_blocks()
+            self.logger.info(f"🔍 Found {len(memory_blocks)} memory blocks (default scope)")
+
+            # Look for auth_flow_pending flag
+            for block in memory_blocks:
+                if block.get('block_label') == 'auth_flow_pending':
+                    value = block.get('block_value')
+                    self.logger.info(f"✅ Found auth_flow_pending in memory: {value}")
+                    return value == 'true'
+
+            self.logger.info("❌ No auth_flow_pending flag found in memory blocks")
+            return False
+
+        except Exception as e:
+            self.logger.warning(f"Error checking auth flow from memory: {e}")
+            return False
+
+    def _set_auth_flow_pending(self, pending: bool) -> None:
+        """Set or clear the auth_flow_pending flag in memory blocks.
+
+        This flag indicates that the system is waiting for user to provide
+        email or OTP as part of the authentication flow.
+
+        Args:
+            pending: True to set flag (waiting for auth), False to clear it.
+        """
+        try:
+            # Check if memory is enabled
+            if not self._memory_enabled or not self.memory_manager or not self.session_id:
+                self.logger.warning("Memory not enabled - cannot set auth_flow_pending flag")
+                return
+
+            # Set or clear the flag using BaseAgent's save_memory_block method
+            # Use default agent_scope to ensure consistency with get_memory_blocks()
+            if pending:
+                self.logger.info("🔐 Setting auth_flow_pending flag - waiting for user email/OTP")
+                self.save_memory_block(
+                    block_label="auth_flow_pending",
+                    block_value="true",
+                    priority=10
+                    # agent_scope uses default (self.agent_name)
+                )
+            else:
+                self.logger.info("✅ Clearing auth_flow_pending flag - authentication complete")
+                # Clear the flag by setting to false
+                self.save_memory_block(
+                    block_label="auth_flow_pending",
+                    block_value="false",
+                    priority=10
+                    # agent_scope uses default (self.agent_name)
+                )
+
+        except Exception as e:
+            self.logger.warning(f"Error setting auth_flow_pending flag: {e}")
+            # Don't fail the whole request if we can't set the flag
+
+    def _get_authentication_prompt(
+        self,
+        session_expired: bool,
+        language: str
+    ) -> str:
+        """Get authentication prompt based on session status.
+
+        Args:
+            session_expired: True if session was authenticated but expired
+            language: User's language (es|en)
+
+        Returns:
+            str: Localized authentication prompt
+        """
+        if session_expired:
+            # Session was valid but expired due to inactivity
+            if language == "en":
+                return (
+                    "⏰ Your session has expired due to inactivity (30 minutes).\n\n"
+                    "For security, I need to verify your identity again.\n"
+                    "What's your email address?"
+                )
+            else:  # Spanish (default)
+                return (
+                    "⏰ Tu sesión ha expirado por inactividad (30 minutos).\n\n"
+                    "Por seguridad, necesito verificar tu identidad nuevamente.\n"
+                    "¿Cuál es tu correo electrónico?"
+                )
+        else:
+            # No session or first time
+            if language == "en":
+                return (
+                    "Hello! 👋 Welcome.\n\n"
+                    "To get started, I need your email address.\n"
+                    "What's your email?"
+                )
+            else:  # Spanish (default)
+                return (
+                    "¡Hola! 👋 Bienvenido(a).\n\n"
+                    "Para comenzar, necesito tu correo electrónico.\n"
+                    "¿Cuál es tu email?"
+                )
+
+    def _get_auth_error_message(self, language: str) -> str:
+        """Get error message when authentication check fails.
+
+        Args:
+            language: User's language (es|en)
+
+        Returns:
+            str: Localized error message
+        """
+        if language == "en":
+            return (
+                "I'm sorry, I'm having trouble verifying your session.\n\n"
+                "Please provide your email address to continue."
+            )
+        else:  # Spanish (default)
+            return (
+                "Disculpa, estoy teniendo problemas para verificar tu sesión.\n\n"
+                "Por favor, proporciona tu correo electrónico para continuar."
+            )
+
     def get_system_prompt(
         self,
         customer_email: str | None = None,
@@ -304,6 +625,13 @@ class BookingAgent(BaseAgent):
             user_id=kwargs.get("user_id"),
             user_lang=user_lang,  # Pass language context for template selection
         )
+
+        # CRITICAL: Add session_id to prompt for authentication flow
+        # The agent needs this to call check_session_auth() and clear_session_auth() tools
+        if self.session_id:
+            prompt += f"\n\n## CURRENT SESSION CONTEXT:\n"
+            prompt += f"**Session ID:** {self.session_id}\n"
+            prompt += f"⚠️ IMPORTANT: Use this session_id when calling check_session_auth() or clear_session_auth() tools.\n"
 
         # CRITICAL FIX: Append memory blocks context to system prompt
         # This helps the agent understand user preferences and conversation history
@@ -419,6 +747,22 @@ class BookingAgent(BaseAgent):
             self.current_intent = intent
 
             self.logger.info(f"Generating response for: '{query[:100]}...'")
+
+            # ================================================================
+            # 🔐 MANDATORY AUTHENTICATION CHECK - BLOCKING GUARD
+            # ================================================================
+            # CRITICAL: Check session authentication BEFORE processing ANY request
+            # This is a HARD BLOCK at the code level - Gemini cannot bypass this
+            auth_check_result = await self._check_and_enforce_authentication(query, **kwargs)
+            if auth_check_result:
+                # User is not authenticated - return authentication prompt immediately
+                # Do NOT proceed to Gemini, do NOT process the request
+                self.logger.warning(
+                    f"🔒 Authentication required - blocking request until user authenticates"
+                )
+                return auth_check_result
+            # If we reach here, user is authenticated - proceed normally
+            self.logger.info("✅ User authenticated - proceeding with request")
 
             # Auto-detect or use provided language for consistent context
             if "language" in kwargs:

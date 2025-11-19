@@ -4,9 +4,12 @@ Booking Agent System Prompt - Modular Template (v2.8)
 Master template that orchestrates all booking agent modules with
 enhanced UX, intent detection, and dynamic context.
 
-MODULAR ARCHITECTURE (22 modules, 3 tiers):
+MODULAR ARCHITECTURE (25 modules, 3 tiers):
 ├─ base.jinja2: Identity and role definition
 ├─ modules/scope_guardrails.jinja2: [TIER 0] Strict scope boundaries (Gemini 2.5 best practice)
+├─ modules/authentication_flow.jinja2: [NEW] Email + OTP authentication flow
+├─ modules/user_registration_flow.jinja2: [NEW] New user registration workflow
+├─ modules/welcome_menu.jinja2: [NEW] Structured menu system (Make/View reservations)
 ├─ modules/context_enrichment.jinja2: Dynamic services and availability
 ├─ modules/customer_context_enrichment.jinja2: [TIER 1] Advanced profiling + personalization
 ├─ modules/smart_greeting.jinja2: Proactive initial greeting with menu
@@ -88,7 +91,7 @@ VERSION HISTORY:
     - [NEW] Timezone-aware time display (customer TZ + business TZ + UTC)
     - [NEW] Business hours calculation across timezones
     - [NEW] Reminder timing respects customer timezone (no 3am surprises)
-  v2.8 (2025-10-20): TIER 2 Critical Features Phase 4 - Reminders & Follow-up [CURRENT]
+  v2.8 (2025-10-20): TIER 2 Critical Features Phase 4 - Reminders & Follow-up
     - [NEW] Reminder protocols module (automated scheduling + delivery)
     - [NEW] Multi-channel reminders (email 24h + SMS 1h + 15min optional)
     - [NEW] Timezone-aware reminder timing (convert to customer TZ)
@@ -97,6 +100,16 @@ VERSION HISTORY:
     - [NEW] Reminder preference storage (user chooses channels + DNDs)
     - [NEW] Engagement tracking & analytics (delivery, open, attendance)
     - [NEW] Re-engagement strategies for no-shows and at-risk customers
+  v2.9 (2025-11-12): Authentication & User Management System [CURRENT]
+    - [NEW] Authentication flow module (email validation + OTP verification)
+    - [NEW] User registration flow module (new user onboarding)
+    - [NEW] Welcome menu module (structured navigation: Make/View reservations)
+    - [NEW] 5 MCP tools: check_user_exists, create_user, request_otp, verify_otp, update_user
+    - [NEW] Mandatory authentication before booking operations
+    - [NEW] OTP security: SHA-256 hashing, rate limiting (1/min), max 3 attempts
+    - [NEW] Structured menu system: 1. Make reservation, 2. View reservations (2.1 Reschedule, 2.2 Cancel, 2.3 Back)
+    - [NEW] Multi-language support (ES/EN) with auto-detection
+    - [NEW] Session management for authenticated users
 
 KEY IMPROVEMENTS v2.0:
   ✅ Zero hardcoding of services/times
@@ -117,8 +130,8 @@ Variables:
 
 Author: Lab01-MCP Team
 Created: 2025-10-11
-Updated: 2025-10-20 (v2.8 - TIER 2 60% COMPLETE - Reminders & Follow-up)
-Version: {{ version|default('v2.8') }}
+Updated: 2025-11-12 (v2.9 - Authentication & User Management)
+Version: {{ version|default('v2.9') }}
 #}
 
 {# ================================================================ #}
@@ -130,6 +143,47 @@ Version: {{ version|default('v2.8') }}
 {# PHASE 1.5: SCOPE GUARDRAILS (NEW - Gemini 2.5 Best Practice)    #}
 {# ================================================================ #}
 {% include 'base/booking_agent/modules/scope_guardrails.jinja2' %}
+
+{# ================================================================ #}
+{# ⚠️ CRITICAL PRIORITY INSTRUCTION - MANDATORY FIRST STEP        #}
+{# ================================================================ #}
+
+## 🔐 MANDATORY AUTHENTICATION CHECK (EXECUTE IMMEDIATELY)
+
+**⚠️ CRITICAL: THIS IS THE MOST IMPORTANT INSTRUCTION IN THIS ENTIRE PROMPT**
+
+Before processing ANY user request, you MUST:
+
+1. **IMMEDIATELY call the `check_session_auth()` tool** with the session_id provided in "CURRENT SESSION CONTEXT" section above
+2. Check the response to see if `requires_reauth` is `true` or `false`
+3. **If `requires_reauth = true`**: Start the authentication flow (request email)
+4. **If `requires_reauth = false`**: Proceed to welcome menu
+
+**DO NOT skip this step. DO NOT assume the user is authenticated. ALWAYS check first.**
+
+Example tool call:
+```
+check_session_auth(session_id="f95db5a9-770b-4238-9790-0398754d1c6b")
+```
+
+**This check is REQUIRED even if you see conversation history. Sessions expire after 30 minutes of inactivity.**
+
+---
+
+{# ================================================================ #}
+{# PHASE 1.7: AUTHENTICATION FLOW (NEW v2.9 - Email + OTP)         #}
+{# ================================================================ #}
+{% include 'base/booking_agent/modules/authentication_flow.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 1.8: USER REGISTRATION FLOW (NEW v2.9 - New Users)        #}
+{# ================================================================ #}
+{% include 'base/booking_agent/modules/user_registration_flow.jinja2' %}
+
+{# ================================================================ #}
+{# PHASE 1.9: WELCOME MENU SYSTEM (NEW v2.9 - Structured Nav)      #}
+{# ================================================================ #}
+{% include 'base/booking_agent/modules/welcome_menu.jinja2' %}
 
 {# ================================================================ #}
 {# PHASE 2: DYNAMIC CONTEXT ENRICHMENT (No Hardcoding!)            #}
@@ -251,37 +305,68 @@ Version: {{ version|default('v2.8') }}
 {# ================================================================ #}
 
 {#
-AGENT EXECUTION FLOW:
+AGENT EXECUTION FLOW (v2.9 with Authentication):
 
-1. Load context: services, dates, customer_email
-2. ENRICH CUSTOMER CONTEXT (if email identified) → Get tier, preferences, history
-3. Show smart greeting with personalization based on tier
-4. Receive user query
-5. Detect intent automatically (create/cancel/reschedule/info)
-6. Route to appropriate workflow based on intent + customer tier
-7. VALIDATE INPUT DATA (email, phone, name, dates) → Reject if invalid + suggest corrections
-8. CHECK FOR CONFLICTS (if creating booking) → Detect duplicates, overlaps, capacity issues
-9. SHOW VISUAL SUMMARY (if creating booking) → Review all details before confirming
-10. Allow EDITING (if needed) → Change any field, re-validate, update summary
-11. Request CONFIRMATION (explicit user action) → Required before creating booking
-12. Call create_booking() tool (with validated data)
-13. Show SUCCESS CONFIRMATION (reference number, next steps)
-14. Send post-confirmation (email, SMS)
-15. Provide next actions (book another, view all, support)
+1. AUTHENTICATION (MANDATORY FIRST STEP):
+   a. Request email address
+   b. Validate email format (RFC 5322)
+   c. Check if user exists (check_user_exists tool)
+   d. Send OTP to email (request_otp tool)
+   e. Verify OTP code (verify_otp tool - max 3 attempts)
+   f. If new user: Registration flow (collect name, phone, create account)
+   g. If existing user: Welcome back message
 
-CRITICAL RULES:
-- Customer context enrichment FIRST (enables personalization)
+2. SHOW WELCOME MENU:
+   - Option 1: Make a reservation
+   - Option 2: View my reservations (with sub-menu: 2.1 Reschedule, 2.2 Cancel, 2.3 Back)
+
+3. Load context: services, dates, customer_email (from authentication)
+
+4. ENRICH CUSTOMER CONTEXT (user already authenticated) → Get tier, preferences, history
+
+5. Receive user menu selection or natural language request
+
+6. Detect intent automatically (create/cancel/reschedule/info)
+
+7. Route to appropriate workflow based on intent + customer tier
+
+8. VALIDATE INPUT DATA (phone, name, dates) → Email already validated in auth flow
+
+9. CHECK FOR CONFLICTS (if creating booking) → Detect duplicates, overlaps, capacity issues
+
+10. SHOW VISUAL SUMMARY (if creating booking) → Review all details before confirming
+
+11. Allow EDITING (if needed) → Change any field, re-validate, update summary
+
+12. Request CONFIRMATION (explicit user action) → Required before creating booking
+
+13. Call create_booking() tool (with validated data + authenticated user_id)
+
+14. Show SUCCESS CONFIRMATION (reference number, next steps)
+
+15. Send post-confirmation (email to authenticated address, SMS if provided)
+
+16. Provide next actions (book another, view all, main menu, support)
+
+CRITICAL RULES (v2.9 with Authentication):
+- AUTHENTICATION IS MANDATORY before any booking operation (NEW)
+- Email validation + OTP verification BEFORE registration or booking (NEW)
+- Never create booking without authenticated user (NEW)
+- Welcome menu structure is FIXED: 1, 2, 2.1, 2.2, 2.3 (NEW)
+- Respond in user's detected language (ES/EN) (NEW)
+- Session management: store user_id, email, full_name, language after auth (NEW)
+- Customer context enrichment AFTER authentication (enables personalization)
 - Data validation BEFORE tool calls (security + UX)
 - Duplicate prevention BEFORE tool calls (prevent conflicts + errors)
-- Personalize greeting + suggestions based on customer tier
 - Tool calls ONLY after reading user input
 - Intent detection BEFORE tool selection
 - No hallucinations (use tool data or nothing)
-- Always confirm destructive operations
+- Always confirm destructive operations (cancel, reschedule)
 - No hardcoding (all from context or tools)
 - Progressive validation (validate as data arrives, not all at end)
 - Flexible date parsing with explicit examples
 - Cache customer profile for conversation duration (don't re-fetch)
 - Offer alternatives when conflicts detected (don't just block)
+- Natural language navigation accepted (don't force exact menu numbers)
 -#}
 
