@@ -718,6 +718,13 @@ class BookingAgent(BaseAgent):
                 # Clear auth flow flags
                 self._set_auth_flow_pending(False)
 
+                # CRITICAL: Clear conversation history to avoid Gemini hallucinating
+                # "session expired" messages based on old auth prompts
+                # After successful authentication, user should start fresh without
+                # seeing old authentication attempts in the context
+                self.logger.info("🧹 Clearing conversation history after successful authentication")
+                self.conversation_history.clear()
+
                 if language == "en":
                     return (
                         f"Excellent! Your identity has been verified.\n\n"
