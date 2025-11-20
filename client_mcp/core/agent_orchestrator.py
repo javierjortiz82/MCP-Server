@@ -437,20 +437,45 @@ class AgentOrchestrator:
 
                 self._session_language_detected = True
 
-            # Build context for router
-            context = {}
-            if self.last_intent:
-                context["last_intent"] = self.last_intent.value
-            if self.last_bot_message:
-                context["last_bot_message"] = self.last_bot_message
+            # CRITICAL: Check if user is in an active booking/auth flow
+            # If they are, skip intent classification and route directly to BookingAgent
+            # This prevents multi-line descriptions (e.g., appointment reasons) from being
+            # incorrectly classified as separate intents
+            is_in_booking_flow = False
+            if self.memory_manager and self.session_id:
+                try:
+                    # Check for auth_flow_pending memory block
+                    session_blocks = self.memory_manager.get_active_memory_blocks(
+                        self.session_id, agent_scope="booking"
+                    )
+                    for block in session_blocks:
+                        if block.get("block_label") == "auth_flow_pending" and block.get("block_value") == "true":
+                            is_in_booking_flow = True
+                            logger.info("🔒 User in active booking/auth flow - skipping intent classification")
+                            break
+                except Exception as e:
+                    logger.debug(f"Could not check booking flow status: {e}")
 
-            # Pass cached session language to router (prevents re-detection of ambiguous queries)
-            intent, detected_language = await self.router.classify_intent(
-                query,
-                context=context if context else None,
-                session_language=self.language  # ← Use cached language, don't re-detect
-            )
-            logger.info(f"Intent classified: {intent.value}")
+            # If in booking flow, skip classification and route directly to booking
+            if is_in_booking_flow:
+                intent = Intent.BOOKING
+                detected_language = self.language
+                logger.info("✅ Routing directly to BookingAgent (active flow detected)")
+            else:
+                # Build context for router
+                context = {}
+                if self.last_intent:
+                    context["last_intent"] = self.last_intent.value
+                if self.last_bot_message:
+                    context["last_bot_message"] = self.last_bot_message
+
+                # Pass cached session language to router (prevents re-detection of ambiguous queries)
+                intent, detected_language = await self.router.classify_intent(
+                    query,
+                    context=context if context else None,
+                    session_language=self.language  # ← Use cached language, don't re-detect
+                )
+                logger.info(f"Intent classified: {intent.value}")
             logger.info(f"🌐 Language (from session cache): {detected_language}")
 
             # CRITICAL FIX: Update orchestrator language if router detected a language switch

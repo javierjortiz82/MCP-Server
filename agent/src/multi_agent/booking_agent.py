@@ -40,6 +40,7 @@ from gemini_agent.config.booking_agent_settings import booking_agent_settings
 from gemini_agent.utils.gemini_response_handler import ResponseStatus
 from google.genai import types
 from multi_agent.prompt_manager import PromptManager
+from multi_agent.response_templates import ResponseTemplates
 
 # Import centralized configuration for session/OTP timeouts
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "mcp_server"))
@@ -212,6 +213,9 @@ class BookingAgent(BaseAgent):
             **generation_params: Override generation parameters.
         """
         super().__init__(api_key, model_name, mcp_tools, **generation_params)
+
+        # Response templates for bilingual messaging (2025-11-19)
+        self.response_templates = ResponseTemplates()
 
         # Function calling support (max iterations configurable via booking_agent_settings)
         self.mcp_client = mcp_client
@@ -596,10 +600,7 @@ class BookingAgent(BaseAgent):
                 if not otp_result or not otp_result.get("success"):
                     error_msg = otp_result.get("error", "Error enviando OTP") if otp_result else "Error desconocido"
                     self.logger.error(f"❌ OTP request failed: {error_msg}")
-                    if language == "en":
-                        return f"I couldn't send the verification code. Error: {error_msg}"
-                    else:
-                        return f"No pude enviar el código de verificación. Error: {error_msg}"
+                    return self.response_templates.get_otp_error_message(language)
 
                 # SUCCESS: OTP sent - SAVE EMAIL TO MEMORY for PHASE 2
                 self.logger.info(f"✅ OTP sent successfully to {email}")
@@ -617,25 +618,11 @@ class BookingAgent(BaseAgent):
                 except Exception as e:
                     self.logger.warning(f"⚠️ Error saving auth_email to memory: {e}")
 
-                if language == "en":
-                    return (
-                        f"Perfect! I've sent a verification code to {email}.\n\n"
-                        f"Please check your email and provide the 6-digit code.\n"
-                        f"The code expires in {expires_in} minutes."
-                    )
-                else:
-                    return (
-                        f"¡Perfecto! He enviado un código de verificación a {email}.\n\n"
-                        f"Por favor, revisa tu email y proporciona el código de 6 dígitos.\n"
-                        f"El código expira en {expires_in} minutos."
-                    )
+                return self.response_templates.get_otp_sent_message(language, email)
 
             except Exception as e:
                 self.logger.exception(f"❌ Error in OTP request: {e}")
-                if language == "en":
-                    return f"Error sending verification code: {str(e)}"
-                else:
-                    return f"Error al enviar código de verificación: {str(e)}"
+                return self.response_templates.get_otp_error_message(language)
 
         # ================================================================
         # PHASE 2: OTP DETECTION → VERIFY OTP
@@ -647,27 +634,16 @@ class BookingAgent(BaseAgent):
             # Validate OTP is exactly 6 digits
             if len(otp_code) != 6:
                 self.logger.warning(f"⚠️ OTP must be exactly 6 digits, got {len(otp_code)}: {otp_code}")
-                if language == "en":
-                    return (
-                        f"The verification code must be exactly 6 digits.\n\n"
-                        f"You provided: {otp_code} ({len(otp_code)} digits)\n\n"
-                        f"Please check your email and provide the 6-digit code."
-                    )
-                else:
-                    return (
-                        f"El código de verificación debe ser exactamente 6 dígitos.\n\n"
-                        f"Proporcionaste: {otp_code} ({len(otp_code)} dígitos)\n\n"
-                        f"Por favor, revisa tu email y proporciona el código de 6 dígitos."
-                    )
+                return self.response_templates.get_message(
+                    "auth", "otp_invalid_length", language,
+                    code=otp_code, length=len(otp_code)
+                )
 
             # Get stored email from memory blocks (set when user provided it)
             stored_email = self._get_memory_block_value("auth_email")
             if not stored_email:
                 self.logger.warning("❌ No stored email in memory - cannot verify OTP")
-                if language == "en":
-                    return "I couldn't find your email in memory. Please start over with your email address."
-                else:
-                    return "No encontré tu email en memoria. Por favor, comienza de nuevo con tu correo."
+                return self.response_templates.get_message("auth", "email_not_in_memory", language)
 
             try:
                 # Call verify_otp() to verify the code
@@ -682,21 +658,33 @@ class BookingAgent(BaseAgent):
                     error_msg = verify_result.get("error", "Invalid code") if verify_result else "Unknown error"
                     self.logger.error(f"❌ OTP verification failed: {error_msg} ({attempts_remaining} attempts left)")
 
-                    if language == "en":
-                        return (
-                            f"The code you provided is incorrect.\n\n"
-                            f"Attempts remaining: {attempts_remaining}\n"
-                            f"Please try again with the code from your email."
-                        )
-                    else:
-                        return (
-                            f"El código que proporcionaste es incorrecto.\n\n"
-                            f"Intentos restantes: {attempts_remaining}\n"
-                            f"Por favor, intenta de nuevo con el código de tu email."
-                        )
+                    return self.response_templates.get_otp_incorrect_message(
+                        language, attempts_remaining
+                    )
 
                 # SUCCESS: OTP verified - now authenticate session
                 self.logger.info(f"✅ OTP verified successfully for {stored_email}")
+
+                # Extract user info from verify_result
+                user_full_name = verify_result.get("full_name", "Usuario")
+                previous_login = verify_result.get("previous_login")
+
+                # Get user_id for session
+                user_id = 1  # Default fallback
+                is_temporary_user = False
+                try:
+                    user_info = await self.mcp_client.call_tool("check_user_exists", {"email": stored_email})
+                    if user_info and user_info.get("user_id"):
+                        user_id = user_info["user_id"]
+                        # Check if this is a temporary user (needs to provide real name)
+                        current_name = user_info.get("full_name", "")
+                        is_temporary_user = current_name in ["Temporary User", "Usuario", "User", ""]
+                        # CRITICAL: Update user_full_name with the REAL name from database
+                        if current_name and not is_temporary_user:
+                            user_full_name = current_name
+                        self.logger.info(f"🔍 User check: name='{current_name}', is_temporary={is_temporary_user}, using_name='{user_full_name}'")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Could not get user_id: {e}")
 
                 # Save authentication to session
                 try:
@@ -705,9 +693,9 @@ class BookingAgent(BaseAgent):
                         "save_session_auth",
                         {
                             "session_id": str(self.session_id),
-                            "user_id": 1,  # TODO: Get from verify_otp result or check_user_exists
+                            "user_id": user_id,
                             "email": stored_email,
-                            "full_name": "User",  # TODO: Get from user profile
+                            "full_name": user_full_name,
                             "language": language
                         }
                     )
@@ -738,40 +726,45 @@ class BookingAgent(BaseAgent):
                 self.logger.info("🧹 Clearing conversation history after successful authentication")
                 self.conversation_history.clear()
 
-                if language == "en":
-                    return (
-                        f"Excellent! Your identity has been verified.\n\n"
-                        f"You're now authenticated and can proceed with your booking."
-                    )
-                else:
-                    return (
-                        f"¡Excelente! Tu identidad ha sido verificada.\n\n"
-                        f"Ya estás autenticado y puedes proceder con tu reserva."
-                    )
+                # Build welcome message with name and last login info
+                # Check if user has a real name (not "Temporary User" placeholder)
+                has_real_name = user_full_name and user_full_name not in ["Temporary User", "Usuario", "User"]
+
+                # If this is a temporary user (first time), ask for their name
+                if is_temporary_user:
+                    self.logger.info(f"👤 New user {stored_email} - requesting name")
+                    # Save a flag to indicate we're waiting for the user's name
+                    try:
+                        self.save_memory_block(
+                            block_label="pending_user_name",
+                            block_value="true",
+                            priority=10,
+                            agent_scope="booking"
+                        )
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ Could not save pending_user_name flag: {e}")
+
+                    return self.response_templates.get_name_request_message(language)
+
+                # User has a real name - show welcome message using templates
+                return self.response_templates.get_welcome_message(
+                    language=language,
+                    full_name=user_full_name,
+                    previous_login=previous_login
+                )
 
             except Exception as e:
                 self.logger.exception(f"❌ Error in OTP verification: {e}")
-                if language == "en":
-                    return f"Error verifying code: {str(e)}"
-                else:
-                    return f"Error al verificar código: {str(e)}"
+                return self.response_templates.get_message(
+                    "auth", "verification_error", language, error=str(e)
+                )
 
         # ================================================================
         # PHASE 0: NO EMAIL OR OTP DETECTED → ASK FOR EMAIL
         # ================================================================
         else:
             self.logger.info("📧 PHASE 0: No email/OTP detected - asking for email")
-
-            if language == "en":
-                return (
-                    "Thank you for your message.\n\n"
-                    "To authenticate, please provide your email address."
-                )
-            else:
-                return (
-                    "Gracias por tu mensaje.\n\n"
-                    "Para autenticarte, por favor proporciona tu correo electrónico."
-                )
+            return self.response_templates.get_message("auth", "auth_continue_email", language)
 
     def _get_otp_collection_prompt(self, query: str = "", language: str = "es") -> str:
         """Get the prompt that guides user through email/OTP authentication.
@@ -800,54 +793,26 @@ class BookingAgent(BaseAgent):
 
         # PHASE 1: No email provided yet → Ask for email
         if not is_email_like:
-            if language == "en":
-                return (
-                    "Thank you for your message.\n\n"
-                    "To continue, I need to verify your email. Please provide your email address."
-                )
-            else:  # Spanish (default)
-                return (
-                    "Gracias por tu mensaje.\n\n"
-                    "Para continuar, necesito verificar tu email. Por favor, proporciona tu correo electrónico."
-                )
+            return self.response_templates.get_message("auth", "prompt_continue_email", language)
 
         # PHASE 2: Email provided → Extract it and ask for OTP
         if is_email_like and not is_otp_like:
             # Email detected - user should receive OTP prompt next
             # Save email to memory for OTP verification
             self.logger.info(f"📧 Email detected in user input: {query_lower}")
-
-            if language == "en":
-                return (
-                    f"Perfect! I've sent a verification code to {query_lower}.\n\n"
-                    "Please check your email and provide the 6-digit code."
-                )
-            else:  # Spanish (default)
-                return (
-                    f"¡Perfecto! He enviado un código de verificación a {query_lower}.\n\n"
-                    "Por favor, revisa tu email y proporciona el código de 6 dígitos."
-                )
+            return self.response_templates.get_message(
+                "auth", "prompt_otp_sent_simple", language, email=query_lower
+            )
 
         # PHASE 3: OTP code provided
         if is_otp_like:
             self.logger.info(f"🔐 OTP code detected in user input: {query_lower}")
-
-            if language == "en":
-                return (
-                    f"Great! Verifying your code {query_lower}...\n\n"
-                    "Please wait while I confirm your identity."
-                )
-            else:  # Spanish (default)
-                return (
-                    f"¡Excelente! Verificando tu código {query_lower}...\n\n"
-                    "Por favor espera mientras confirmo tu identidad."
-                )
+            return self.response_templates.get_message(
+                "auth", "prompt_verifying_code", language, code=query_lower
+            )
 
         # Default fallback
-        if language == "en":
-            return "To continue, please provide your email address."
-        else:
-            return "Para continuar, por favor proporciona tu correo electrónico."
+        return self.response_templates.get_message("auth", "prompt_default_email", language)
 
     def _get_authentication_prompt(
         self,
@@ -868,32 +833,10 @@ class BookingAgent(BaseAgent):
 
         if session_expired:
             # Session was valid but expired due to inactivity
-            if language == "en":
-                return (
-                    f"⏰ Your session has expired due to inactivity ({timeout_display}).\n\n"
-                    "For security, I need to verify your identity again.\n"
-                    "What's your email address?"
-                )
-            else:  # Spanish (default)
-                return (
-                    f"⏰ Tu sesión ha expirado por inactividad ({timeout_display}).\n\n"
-                    "Por seguridad, necesito verificar tu identidad nuevamente.\n"
-                    "¿Cuál es tu correo electrónico?"
-                )
+            return self.response_templates.get_session_expired_message(language)
         else:
             # No session or first time
-            if language == "en":
-                return (
-                    "Hello! 👋 Welcome.\n\n"
-                    "To get started, I need your email address.\n"
-                    "What's your email?"
-                )
-            else:  # Spanish (default)
-                return (
-                    "¡Hola! 👋 Bienvenido(a).\n\n"
-                    "Para comenzar, necesito tu correo electrónico.\n"
-                    "¿Cuál es tu email?"
-                )
+            return self.response_templates.get_message("auth", "request_email", language)
 
     def _get_auth_error_message(self, language: str) -> str:
         """Get error message when authentication check fails.
@@ -904,16 +847,7 @@ class BookingAgent(BaseAgent):
         Returns:
             str: Localized error message
         """
-        if language == "en":
-            return (
-                "I'm sorry, I'm having trouble verifying your session.\n\n"
-                "Please provide your email address to continue."
-            )
-        else:  # Spanish (default)
-            return (
-                "Disculpa, estoy teniendo problemas para verificar tu sesión.\n\n"
-                "Por favor, proporciona tu correo electrónico para continuar."
-            )
+        return self.response_templates.get_message("errors", "auth_check_failed", language)
 
     def get_system_prompt(
         self,
@@ -1076,6 +1010,56 @@ class BookingAgent(BaseAgent):
             self.current_intent = intent
 
             self.logger.info(f"Generating response for: '{query[:100]}...'")
+
+            # ================================================================
+            # 👤 CHECK IF WAITING FOR USER NAME (Post-OTP Flow)
+            # ================================================================
+            # If user just authenticated but hasn't provided their name yet, capture it
+            pending_name = self._get_memory_block_value("pending_user_name")
+            if pending_name == "true":
+                self.logger.info(f"👤 Waiting for user name - capturing from query: '{query}'")
+
+                # Extract name from query (simple approach: use the whole query as name)
+                user_name = query.strip()
+
+                # Validate name is reasonable (2-50 chars, not just numbers/symbols)
+                if 2 <= len(user_name) <= 50 and any(c.isalpha() for c in user_name):
+                    try:
+                        # Get user email from memory
+                        user_email = self._get_memory_block_value("email")
+                        if user_email:
+                            # Update user profile with real name
+                            self.logger.info(f"💾 Updating user {user_email} with name: {user_name}")
+                            update_result = await self.mcp_client.call_tool(
+                                "update_user",
+                                {
+                                    "email": user_email,
+                                    "data": {"full_name": user_name}
+                                }
+                            )
+                            self.logger.info(f"✅ User updated: {update_result}")
+
+                            # Update session memory with new name
+                            self.save_memory_block(
+                                block_label="full_name",
+                                block_value=user_name,
+                                priority=10,
+                                agent_scope="booking"
+                            )
+
+                            # Clear the pending flag
+                            self.save_memory_block(
+                                block_label="pending_user_name",
+                                block_value="false",
+                                priority=10,
+                                agent_scope="booking"
+                            )
+
+                            # Return welcome message with name and booking options
+                            language = kwargs.get("language", "es")
+                            return self.response_templates.get_new_user_welcome(language, user_name)
+                    except Exception as e:
+                        self.logger.error(f"❌ Error updating user name: {e}")
 
             # ================================================================
             # 🔐 MANDATORY AUTHENTICATION CHECK - BLOCKING GUARD
