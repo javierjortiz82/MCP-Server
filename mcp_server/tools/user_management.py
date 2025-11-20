@@ -544,6 +544,8 @@ async def verify_otp(email: str, code: str, purpose: str = "booking_auth") -> di
         dict: Verification result with keys:
             - success (bool): True if OTP is valid
             - email (str): Email address verified
+            - full_name (str|None): User's full name (only on success)
+            - previous_login (str|None): ISO timestamp of last login BEFORE this one (only on success)
             - attempts_remaining (int): Verification attempts remaining
             - error (str|None): Error message if verification failed
 
@@ -553,6 +555,8 @@ async def verify_otp(email: str, code: str, purpose: str = "booking_auth") -> di
         {
             "success": True,
             "email": "user@example.com",
+            "full_name": "Juan Pérez",
+            "previous_login": "2025-11-18T15:30:00Z",
             "attempts_remaining": 3
         }
 
@@ -605,9 +609,45 @@ async def verify_otp(email: str, code: str, purpose: str = "booking_auth") -> di
 
         if is_valid:
             logger.info(f"OTP verified successfully for {email}")
+
+            # Get user info and update last_login_at for successful authentication
+            full_name = None
+            previous_login = None
+            try:
+                # Ensure DB connection
+                await _ensure_db_connected()
+
+                user_service = _get_user_service()
+                user = await user_service.get_user_by_email(email)
+                if user:
+                    full_name = user.full_name or user.display_name or "Usuario"
+                    previous_login = user.last_login_at  # Save BEFORE updating
+                    logger.info(f"📋 User found: {full_name}, previous_login={previous_login}")
+
+                    # Update last_login_at to current time
+                    from datetime import datetime, timezone
+                    db = get_db()
+                    current_time = datetime.now(timezone.utc)
+                    logger.info(f"🔄 Updating last_login_at for {email} to {current_time.isoformat()}")
+
+                    update_query = """
+                        UPDATE test.demo_users
+                        SET last_login_at = %s,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE email = %s
+                    """
+                    result = await db.execute_one(update_query, (current_time, email))
+                    logger.info(f"✅ Updated last_login_at for {email}, result: {result}")
+                else:
+                    logger.warning(f"⚠️ User not found in database: {email}")
+            except Exception as e:
+                logger.exception(f"❌ Failed to update last_login_at for {email}: {e}")
+
             return {
                 "success": True,
                 "email": email,
+                "full_name": full_name,
+                "previous_login": previous_login.isoformat() if previous_login else None,
                 "attempts_remaining": 3  # Reset on success
             }
         else:

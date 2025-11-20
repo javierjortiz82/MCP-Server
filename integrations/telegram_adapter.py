@@ -38,7 +38,8 @@ try:
         ContextTypes,
         filters,
     )
-    from telegram.error import BadRequest
+    from telegram.error import BadRequest, TimedOut, NetworkError
+    from telegram.request import HTTPXRequest
 except ImportError:
     raise ImportError(
         "python-telegram-bot not installed. "
@@ -123,7 +124,15 @@ class TelegramAdapter:
         if not self.token:
             raise RuntimeError("Token not available during initialization")
 
-        self.application = Application.builder().token(self.token).build()
+        # Configurar timeouts aumentados para conexiones lentas/inestables
+        # read_timeout aumentado a 30s para permitir descarga de archivos de voz/imágenes
+        request = HTTPXRequest(
+            connect_timeout=10.0,  # Timeout de conexión: 10s
+            read_timeout=30.0,     # Timeout de lectura: 30s (archivos de voz/imágenes)
+            write_timeout=10.0,    # Timeout de escritura: 10s
+        )
+
+        self.application = Application.builder().token(self.token).request(request).build()
 
         # Inicializar clientes de servicios externos
         self.asr_client = ASRClient()
@@ -410,8 +419,15 @@ class TelegramAdapter:
                 }
             )
 
-            # Eliminar mensaje de procesamiento y enviar respuesta con fallback
-            await processing_msg.delete()
+            # Eliminar mensaje de procesamiento (con manejo de timeout/network errors)
+            try:
+                await processing_msg.delete()
+            except (TimedOut, NetworkError) as e:
+                logger.warning(f"[chat_id={chat_id}] Could not delete processing message (timeout/network): {e}")
+            except Exception as e:
+                logger.warning(f"[chat_id={chat_id}] Could not delete processing message: {e}")
+
+            # Enviar respuesta con fallback para Markdown
             try:
                 await update.message.reply_text(response, parse_mode="Markdown")
             except BadRequest as e:
