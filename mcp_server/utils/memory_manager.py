@@ -466,6 +466,15 @@ class MemoryManager:
         INSERT INTO {self.schema}.agent_memory_blocks
             (session_id, block_label, block_value, priority, agent_scope, ttl_days)
         VALUES (%s, %s, %s, %s, %s, %s)
+        ON CONFLICT (session_id, block_label) DO UPDATE SET
+            block_value = EXCLUDED.block_value,
+            priority = EXCLUDED.priority,
+            agent_scope = EXCLUDED.agent_scope,
+            ttl_days = EXCLUDED.ttl_days,
+            updated_at = NOW(),
+            expires_at = CASE WHEN EXCLUDED.ttl_days IS NOT NULL
+                        THEN NOW() + (EXCLUDED.ttl_days || ' days')::INTERVAL
+                        ELSE NULL END
         RETURNING id
         """
 
@@ -479,7 +488,7 @@ class MemoryManager:
         )
 
         try:
-            result = fetchone(query, params)
+            result = fetchone(query, params, commit=True)  # ← CRITICAL: Must commit=True to persist INSERT
             block_id = result["id"] if result else -1
             logger.info(
                 f"Memory block saved (id={block_id}, label={block_label}, "
@@ -589,7 +598,7 @@ class MemoryManager:
         )
 
         try:
-            result = fetchone(query, params)
+            result = fetchone(query, params, commit=True)  # ← CRITICAL: Must commit=True to persist INSERT
             transfer_id = result["id"] if result else -1
             logger.info(
                 f"Context transfer recorded (id={transfer_id}, {from_agent} → {to_agent}, "
@@ -752,6 +761,16 @@ class MemoryManager:
         INSERT INTO {self.schema}.user_memory_blocks
             (customer_email, block_label, block_value, priority, agent_scope, source_session_ids, ttl_days)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (customer_email, block_label) DO UPDATE SET
+            block_value = EXCLUDED.block_value,
+            priority = EXCLUDED.priority,
+            agent_scope = EXCLUDED.agent_scope,
+            source_session_ids = EXCLUDED.source_session_ids,
+            ttl_days = EXCLUDED.ttl_days,
+            updated_at = NOW(),
+            expires_at = CASE WHEN EXCLUDED.ttl_days IS NOT NULL
+                        THEN NOW() + (EXCLUDED.ttl_days || ' days')::INTERVAL
+                        ELSE NULL END
         RETURNING id
         """
 
@@ -766,7 +785,7 @@ class MemoryManager:
         )
 
         try:
-            result = fetchone(query, params)
+            result = fetchone(query, params, commit=True)  # ← CRITICAL: Must commit=True to persist INSERT
             block_id = result["id"] if result else -1
             logger.info(
                 f"User memory block saved (id={block_id}, email={customer_email}, "
@@ -1005,7 +1024,7 @@ class MemoryManager:
         query = f"SELECT {self.schema}.cleanup_archived_sessions(%s)"
 
         try:
-            result = fetchone(query, (days,))
+            result = fetchone(query, (days,), commit=True)  # ← PostgreSQL function does DELETE, needs commit
             deleted_count = result["cleanup_archived_sessions"] if result else 0
 
             if deleted_count > 0:
@@ -1043,7 +1062,7 @@ class MemoryManager:
         query = f"SELECT {self.schema}.cleanup_anonymous_sessions(%s)"
 
         try:
-            result = fetchone(query, (days,))
+            result = fetchone(query, (days,), commit=True)  # ← PostgreSQL function does DELETE, needs commit
             deleted_count = result["cleanup_anonymous_sessions"] if result else 0
 
             if deleted_count > 0:

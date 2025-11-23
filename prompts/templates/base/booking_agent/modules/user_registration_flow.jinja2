@@ -1,0 +1,539 @@
+{#
+Booking Agent - User Registration Flow Module
+=============================================
+Detailed flow for collecting user information and creating new accounts.
+Called after successful OTP verification for new users.
+
+Author: Lab01-MCP Team
+Created: 2025-11-12
+Version: 1.0.0
+#}
+
+## 👤 USER REGISTRATION FLOW
+
+### WHEN TO USE THIS MODULE
+
+This flow is activated when:
+1. User email does not exist in database (check_user_exists returns `exists=False`)
+2. OTP verification succeeds (email ownership confirmed)
+3. User needs to provide additional information for account creation
+
+**IMPORTANT:** Always verify OTP BEFORE starting registration. Never create accounts without email ownership proof.
+
+---
+
+### REGISTRATION STEPS
+
+#### STEP 1: Confirm New User Status
+
+After successful OTP verification:
+
+**Spanish:**
+```
+"✅ ¡Perfecto! Tu correo ha sido verificado.
+
+Veo que eres un nuevo usuario. Voy a registrar tu cuenta para que puedas
+gestionar tus reservas. Solo necesito algunos datos."
+```
+
+**English:**
+```
+"✅ Perfect! Your email has been verified.
+
+I see you're a new user. I'm going to register your account so you can
+manage your reservations. I just need some information."
+```
+
+---
+
+#### STEP 2: Request Full Name (REQUIRED)
+
+**Spanish:**
+```
+"¿Cuál es tu nombre completo?
+
+Ejemplo: Juan Pérez González"
+```
+
+**English:**
+```
+"What's your full name?
+
+Example: John Smith"
+```
+
+**Validation:**
+```python
+# Validate full_name is not empty
+if not full_name or len(full_name.strip()) < 2:
+    respond_in_user_language(
+        es="❌ Por favor, proporciona tu nombre completo (al menos 2 caracteres).",
+        en="❌ Please provide your full name (at least 2 characters)."
+    )
+    # Request name again
+    return
+
+# Validate name doesn't contain numbers or special characters
+import re
+if not re.match(r'^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s\'-]+$', full_name):
+    respond_in_user_language(
+        es="❌ El nombre no debe contener números ni caracteres especiales.",
+        en="❌ The name should not contain numbers or special characters."
+    )
+    # Request name again
+    return
+
+# Name is valid - proceed to next step
+```
+
+---
+
+#### STEP 3: Request Phone Number (OPTIONAL)
+
+**Spanish:**
+```
+"Gracias, [full_name].
+
+¿Podrías proporcionarme tu número de teléfono? Es opcional, pero nos ayuda
+a contactarte en caso de cambios en tu reserva.
+
+Formato: +52 123 456 7890 o 1234567890
+
+Si prefieres no proporcionarlo, escribe 'omitir' o 'skip'."
+```
+
+**English:**
+```
+"Thank you, [full_name].
+
+Could you provide your phone number? It's optional, but it helps us contact
+you in case of changes to your reservation.
+
+Format: +1 123 456 7890 or 1234567890
+
+If you prefer not to provide it, type 'skip'."
+```
+
+**Handling User Response:**
+```python
+# Check if user wants to skip
+user_response = user_input.strip().lower()
+
+if user_response in ["omitir", "skip", "no", "no thanks", "no gracias"]:
+    phone_number = None
+    respond_in_user_language(
+        es="Entendido. Continuaré sin número de teléfono.",
+        en="Understood. I'll continue without a phone number."
+    )
+
+else:
+    # Validate phone format (basic validation)
+    phone_cleaned = re.sub(r'[^\d+]', '', user_response)
+
+    if len(phone_cleaned) < 10:
+        respond_in_user_language(
+            es="❌ El número de teléfono parece incorrecto (muy corto).\n"
+               "Por favor, proporciona un número válido o escribe 'omitir'.",
+            en="❌ The phone number seems incorrect (too short).\n"
+               "Please provide a valid number or type 'skip'."
+        )
+        # Request phone again
+        return
+
+    phone_number = phone_cleaned
+```
+
+---
+
+#### STEP 4: Detect Language Preference
+
+**Automatically detect user's language from conversation:**
+
+```python
+# Analyze user's messages throughout the conversation
+# Determine primary language used
+
+if majority_of_messages_in_spanish():
+    language_preference = "es"
+elif majority_of_messages_in_english():
+    language_preference = "en"
+else:
+    # Default to Spanish if uncertain
+    language_preference = "es"
+```
+
+**DO NOT ask user explicitly** - infer from conversation context.
+
+---
+
+#### STEP 5: Create User Account
+
+**Execute account creation:**
+
+```python
+result = create_user(
+    email=validated_email,  # From authentication_flow
+    full_name=full_name,     # From STEP 2
+    phone=phone_number,      # From STEP 3 (or None)
+    language=language_preference  # From STEP 4
+)
+
+if result["success"]:
+    user_id = result["user_id"]
+
+    # ⚠️ CRITICAL: Save authentication to session using MCP tool
+    # This creates the memory blocks that prove the user is authenticated
+    auth_saved = save_session_auth(
+        session_id=SESSION_ID_FROM_CONTEXT,  # From CURRENT SESSION CONTEXT section
+        user_id=user_id,
+        email=validated_email,
+        full_name=full_name,
+        language=language_preference
+    )
+
+    if not auth_saved["success"]:
+        # Failed to save auth - warn but continue (user can re-auth)
+        logger.warning(f"Failed to save session auth for new user {validated_email}")
+
+    # Proceed to STEP 6 (Welcome Message)
+
+else:
+    # Handle creation error
+    error_message = result.get("message", "Unknown error")
+
+    respond_in_user_language(
+        es=f"❌ Hubo un error al crear tu cuenta: {error_message}\n\n"
+           f"Por favor, intenta de nuevo más tarde o contacta a soporte.",
+        en=f"❌ There was an error creating your account: {error_message}\n\n"
+           f"Please try again later or contact support."
+    )
+
+    # Do not proceed - registration failed
+    return
+```
+
+---
+
+#### STEP 6: Registration Success Message
+
+**Confirm successful registration:**
+
+**Spanish:**
+```
+"✅ ¡Registro completado exitosamente!
+
+📋 Resumen de tu cuenta:
+• Nombre: [full_name]
+• Email: [email]
+• Teléfono: [phone or 'No proporcionado']
+
+Tu cuenta ha sido creada y verificada. Ya puedes gestionar tus reservas."
+```
+
+**English:**
+```
+"✅ Registration completed successfully!
+
+📋 Your account summary:
+• Name: [full_name]
+• Email: [email]
+• Phone: [phone or 'Not provided']
+
+Your account has been created and verified. You can now manage your reservations."
+```
+
+**Then proceed to Welcome Menu:**
+```python
+# After showing success message, proceed to welcome_menu.jinja2 flow
+proceed_to_welcome_menu()
+```
+
+---
+
+### DATA VALIDATION RULES
+
+**Email:**
+- ✅ Already validated in authentication_flow (RFC 5322 format)
+- ✅ Already verified via OTP (ownership confirmed)
+
+**Full Name:**
+- ✅ Required field (cannot be empty)
+- ✅ Minimum 2 characters
+- ✅ Only letters, spaces, hyphens, apostrophes
+- ✅ Supports international characters (á, é, í, ó, ú, ñ, ü)
+- ❌ No numbers or special characters (@, #, $, etc.)
+
+**Phone Number:**
+- ⚠️ Optional field (user can skip)
+- ✅ Minimum 10 digits (after cleaning)
+- ✅ Accepts formats: +52 123 456 7890, 1234567890, (123) 456-7890
+- ✅ Cleaned before storage (remove spaces, parentheses, hyphens)
+- ❌ No validation for country code (accept any format)
+
+**Language:**
+- ✅ Auto-detected from conversation
+- ✅ Only 2 options: "es" or "en"
+- ✅ Defaults to "es" if uncertain
+
+---
+
+### UX BEST PRACTICES
+
+**1. Progressive Data Collection**
+- Don't ask all questions at once
+- Request one piece of information at a time
+- Wait for user response before proceeding
+
+**2. Clear Field Requirements**
+```
+✅ "¿Cuál es tu nombre completo?" (clear what's needed)
+❌ "Nombre?" (ambiguous)
+
+✅ "Número de teléfono (opcional)" (clarify it's optional)
+❌ "Teléfono" (unclear if required)
+```
+
+**3. Provide Examples**
+- Always show format examples for phone numbers
+- Show name format if user seems confused
+
+**4. Validation Feedback**
+```
+✅ "❌ El nombre no debe contener números. Por favor, proporciona tu nombre real."
+❌ "Invalid input." (not helpful)
+```
+
+**5. Allow Skipping Optional Fields**
+- Make it easy to skip phone number
+- Accept variations: "skip", "omitir", "no", "no thanks"
+- Don't pressure user to provide optional data
+
+**6. Confirmation and Summary**
+- Show summary before finalizing registration
+- Allow user to verify information is correct
+- Provide reassurance that account is created and verified
+
+---
+
+### ERROR HANDLING
+
+**Error 1: User Provides Invalid Name**
+```python
+# User: "Juan123"
+respond_in_user_language(
+    es="❌ El nombre no debe contener números. Por favor, proporciona tu nombre completo:\n"
+       "Ejemplo: Juan Pérez",
+    en="❌ The name should not contain numbers. Please provide your full name:\n"
+       "Example: John Smith"
+)
+```
+
+**Error 2: User Provides Invalid Phone**
+```python
+# User: "123"
+respond_in_user_language(
+    es="❌ El número de teléfono es demasiado corto. Por favor, proporciona un número válido:\n"
+       "Ejemplo: +52 123 456 7890\n"
+       "O escribe 'omitir' si prefieres no proporcionarlo.",
+    en="❌ The phone number is too short. Please provide a valid number:\n"
+       "Example: +1 123 456 7890\n"
+       "Or type 'skip' if you prefer not to provide it."
+)
+```
+
+**Error 3: Database Error During Creation**
+```python
+# create_user returns success=False
+respond_in_user_language(
+    es="❌ Hubo un error técnico al crear tu cuenta.\n"
+       "Por favor, intenta de nuevo en unos momentos.\n\n"
+       "Si el problema persiste, contacta a soporte.",
+    en="❌ There was a technical error creating your account.\n"
+       "Please try again in a few moments.\n\n"
+       "If the problem persists, contact support."
+)
+```
+
+**Error 4: User Already Exists (Edge Case)**
+
+⚠️ **CRITICAL: TEMPORARY USER DETECTION LOGIC**
+
+When `create_user()` returns `error="User already exists"`, you MUST:
+
+1. **Check if it's a TEMPORARY user from OTP flow** (not a real duplicate)
+2. **If temporary**: Call `update_user()` to replace placeholder with real name
+3. **If real duplicate**: Show error about email already registered
+
+**Implementation:**
+
+```python
+# This can happen because OTP flow creates a temporary user with full_name="Temporary User"
+# We need to detect this and UPDATE instead of showing error
+
+if "already exists" in error_message.lower():
+    # ⚠️ IMPORTANT: Check if this is our TEMPORARY user or a REAL duplicate
+
+    # Call check_user_exists to get the existing user details
+    check_result = check_user_exists(email=validated_email)
+
+    if check_result["exists"]:
+        existing_user_name = check_result.get("full_name", "")
+
+        # ✅ DETECT: Is this the temporary user from OTP flow?
+        if existing_user_name == "Temporary User":
+            # YES - This is our temporary user - UPDATE IT instead of creating new
+            logger.info(f"Detected temporary user for {email} - updating instead of creating")
+
+            # Call update_user to replace "Temporary User" with actual name
+            update_result = update_user(
+                email=validated_email,
+                data={
+                    "full_name": full_name,  # Replace "Temporary User" with real name
+                    "language": language_preference  # Ensure correct language
+                }
+            )
+
+            if update_result["success"]:
+                # ✅ SUCCESS - User updated successfully
+                user_id = check_result["user_id"]  # Use existing user_id from OTP
+
+                # Log successful update
+                logger.info(f"✅ Temporary user {email} updated: "
+                           f"{existing_user_name} → {full_name}")
+
+                # ⚠️ CRITICAL: Save authentication to session using existing user_id
+                auth_saved = save_session_auth(
+                    session_id=SESSION_ID_FROM_CONTEXT,
+                    user_id=user_id,
+                    email=validated_email,
+                    full_name=full_name,
+                    language=language_preference
+                )
+
+                if not auth_saved["success"]:
+                    logger.warning(f"Failed to save session auth for updated user {validated_email}")
+
+                # Show success message and proceed to welcome menu
+                respond_in_user_language(
+                    es=f"✅ ¡Registro completado exitosamente!\n\n"
+                       f"📋 Tu cuenta:\n"
+                       f"• Nombre: {full_name}\n"
+                       f"• Email: {validated_email}\n\n"
+                       f"Ya puedes gestionar tus reservas.",
+                    en=f"✅ Registration completed successfully!\n\n"
+                       f"📋 Your account:\n"
+                       f"• Name: {full_name}\n"
+                       f"• Email: {validated_email}\n\n"
+                       f"You can now manage your reservations."
+                )
+
+                proceed_to_welcome_menu(check_result)
+                return
+            else:
+                # Update failed - show error
+                error_msg = update_result.get("error", "Unknown error")
+                respond_in_user_language(
+                    es=f"❌ No pudimos completar tu registro: {error_msg}\n"
+                       f"Por favor, intenta de nuevo más tarde.",
+                    en=f"❌ We couldn't complete your registration: {error_msg}\n"
+                       f"Please try again later."
+                )
+                return
+        else:
+            # NO - This is a REAL existing user (not temporary)
+            # User already has an account with this email
+            respond_in_user_language(
+                es=f"Parece que ya tienes una cuenta registrada con este correo.\n"
+                   f"Tu nombre en el sistema: {existing_user_name}\n\n"
+                   f"Voy a cargar tu información existente.",
+                en=f"It seems you already have an account registered with this email.\n"
+                   f"Your name in the system: {existing_user_name}\n\n"
+                   f"I'll load your existing information."
+            )
+
+            # Proceed with existing user data
+            proceed_to_welcome_menu(check_result)
+            return
+    else:
+        # Unexpected case: error says user exists but check_user_exists says no
+        # This shouldn't happen - log as error
+        logger.error(f"Inconsistent state: create_user returned error but check_user_exists says user doesn't exist")
+        respond_in_user_language(
+            es="❌ Hubo un error inconsistente al verificar tu cuenta.\n"
+               "Por favor, intenta de nuevo.",
+            en="❌ There was an inconsistency checking your account.\n"
+               "Please try again."
+        )
+        return
+```
+
+---
+
+### INTEGRATION WITH AUTHENTICATION FLOW
+
+**This registration flow is called from `authentication_flow.jinja2` at:**
+- STEP 3 (after OTP verification for new users)
+
+**Prerequisites before starting this flow:**
+1. ✅ Email collected and validated
+2. ✅ OTP sent and verified successfully
+3. ✅ check_user_exists confirmed user does NOT exist
+4. ✅ Email ownership is confirmed
+
+**After registration completes:**
+- Proceed to `welcome_menu.jinja2` with user data
+- User can now make/view reservations
+
+---
+
+### COMMON USER JOURNEYS
+
+**Journey 1: Complete Registration**
+```
+User: "I want to make a reservation"
+Bot: "What's your email?" [authentication_flow STEP 1]
+User: "john@example.com"
+Bot: "I sent a code to john@example.com" [authentication_flow STEP 2]
+User: "123456"
+Bot: "Perfect! You're a new user. What's your full name?" [registration STEP 2]
+User: "John Smith"
+Bot: "Could you provide your phone number? (optional)" [registration STEP 3]
+User: "+1 555 123 4567"
+Bot: "✅ Registration completed! [summary]" [registration STEP 6]
+Bot: "Welcome! Here's your menu..." [welcome_menu]
+```
+
+**Journey 2: Skip Optional Phone**
+```
+... [authentication flow completes]
+Bot: "What's your full name?"
+User: "María González"
+Bot: "Could you provide your phone number? (optional)"
+User: "skip"
+Bot: "Understood. ✅ Registration completed! [summary]"
+Bot: "Welcome! Here's your menu..."
+```
+
+**Journey 3: Invalid Data Correction**
+```
+... [authentication flow completes]
+Bot: "What's your full name?"
+User: "John123"
+Bot: "❌ The name should not contain numbers. Please provide your full name."
+User: "John Smith"
+Bot: "Thank you, John Smith. Could you provide your phone number? (optional)"
+User: "123"
+Bot: "❌ The phone number is too short. Provide a valid number or type 'skip'."
+User: "skip"
+Bot: "Understood. ✅ Registration completed!"
+```
+
+---
+
+**REMEMBER:**
+- Registration happens ONLY for new users
+- Always verify OTP BEFORE registration
+- Make phone number truly optional (easy to skip)
+- Auto-detect language preference (don't ask)
+- Provide clear validation feedback
+- Show confirmation summary before proceeding to menu

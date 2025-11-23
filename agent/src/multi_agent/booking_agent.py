@@ -40,49 +40,42 @@ from gemini_agent.config.booking_agent_settings import booking_agent_settings
 from gemini_agent.utils.gemini_response_handler import ResponseStatus
 from google.genai import types
 from multi_agent.prompt_manager import PromptManager
+from multi_agent.response_templates import ResponseTemplates
+
+# Import centralized configuration for session/OTP timeouts
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "mcp_server"))
+from config.otp_session_config import OTPSessionConfig
 
 if TYPE_CHECKING:
     from core.function_call_handler import FunctionCallHandler  # type: ignore[import-not-found]
     from core.mcp_connector import MCPConnector  # type: ignore[import-not-found]
 
 # Gemini 2.5 Function Calling Optimization (Scope Limiting)
-# Autodiscover booking tools from MCP server (single source of truth)
-# This avoids hardcoding tool names and ensures automatic sync when tools change
-
-# Setup MCP server path for imports
-mcp_server_path = Path(__file__).parent.parent.parent.parent / "mcp_server"
-if str(mcp_server_path) not in sys.path:
-    sys.path.insert(0, str(mcp_server_path))
-
-# Try to import autodiscovered booking tools
-# Fallback to hardcoded list if MCP server not available
-try:
-    from mcp_handlers.booking_handlers import get_booking_tool_names  # type: ignore[import-not-found]
-
-    BOOKING_TOOLS_ALLOWED = set(get_booking_tool_names())
-    _logger = __import__("logging").getLogger("booking_agent_init")
-    _logger.info(
-        f"✅ Autodiscovered {len(BOOKING_TOOLS_ALLOWED)} booking tools from MCP server"
-    )
-except ImportError as e:
-    _logger = __import__("logging").getLogger("booking_agent_init")
-    _logger.warning(
-        f"⚠️ Could not autodiscover booking tools from MCP server: {e}. "
-        f"Using fallback hardcoded list."
-    )
-    # Fallback: Hardcoded list (8 booking tools)
-    # This ensures the agent works even if MCP server is not available
-    # But updates to tools must be made in BOTH places (not ideal - prefer autodiscover)
-    BOOKING_TOOLS_ALLOWED = {
-        "create_booking",
-        "cancel_booking",
-        "reschedule_booking",
-        "get_available_slots",
-        "get_booking_by_id",
-        "list_customer_bookings",
-        "get_services",
-        "get_business_hours",
-    }
+# Hardcoded allowed tools for booking operations
+# CRITICAL: Must include ALL tools that BookingAgent may need for OTP/auth flow
+# These are: 8 booking operations + 9 auth/user management = 17 total
+BOOKING_TOOLS_ALLOWED = {
+    # Booking operations (8 tools)
+    "create_booking",
+    "cancel_booking",
+    "reschedule_booking",
+    "get_available_slots",
+    "get_booking_by_id",
+    "list_customer_bookings",
+    "get_services",
+    "get_business_hours",
+    # Authentication & user management (9 tools)
+    # CRITICAL for OTP flow: request_otp, verify_otp, check_session_auth, save_session_auth
+    "check_user_exists",
+    "create_user",
+    "request_otp",
+    "verify_otp",
+    "update_user",
+    "check_session_auth",
+    "save_session_auth",
+    "clear_session_auth",
+    "update_session_activity",
+}
 
 # Import language context for MCP tool execution
 try:
@@ -221,6 +214,9 @@ class BookingAgent(BaseAgent):
         """
         super().__init__(api_key, model_name, mcp_tools, **generation_params)
 
+        # Response templates for bilingual messaging (2025-11-19)
+        self.response_templates = ResponseTemplates()
+
         # Function calling support (max iterations configurable via booking_agent_settings)
         self.mcp_client = mcp_client
         self.function_call_handler = None
@@ -238,8 +234,10 @@ class BookingAgent(BaseAgent):
         """Return agent name for logging.
 
         Required by BaseAgent abstract property.
+        CRITICAL: Must return "booking" (without "_agent" suffix) to match memory scope
+        used in save_memory_block() and database constraints.
         """
-        return "booking_agent"
+        return "booking"
 
     async def initialize(self) -> None:
         """Initialize BookingAgent and log available MCP tools.
@@ -264,6 +262,592 @@ class BookingAgent(BaseAgent):
             tool_description = func_decl.description or "No description"
             desc_first_line = tool_description.split("\n")[0]
             self.logger.info(f"   {i}. {tool_name}: {desc_first_line}")
+
+    async def _check_and_enforce_authentication(
+        self,
+        query: str,
+        **kwargs: Any
+    ) -> str | None:
+        """Check if user is authenticated and enforce authentication if not.
+
+        This is a HARD BLOCK at the code level that prevents ANY booking operations
+        until the user has successfully authenticated with OTP.
+
+        Authentication Flow:
+        1. Check session authentication status via MCP tool
+        2. If not authenticated or session expired:
+           - Check if user is IN THE MIDDLE of authentication flow (responding to auth prompt)
+           - If yes, allow Gemini to process (handle email/OTP)
+           - If no, return authentication prompt
+        3. If authenticated, return None (allow request to proceed)
+
+        Args:
+            query: User's query/message
+            **kwargs: Additional context (language, etc.)
+
+        Returns:
+            str | None:
+                - Authentication prompt if user needs to authenticate
+                - None if user is authenticated OR in authentication flow (proceed to Gemini)
+
+        Security:
+            - Blocks ALL requests until authentication succeeds
+            - Cannot be bypassed by Gemini or user input
+            - Session timeout: 30 minutes of inactivity
+        """
+        try:
+            # Get session_id from current session
+            if not self.session_id:
+                self.logger.error("No session_id available - cannot check authentication")
+                return self._get_auth_error_message(kwargs.get("language", "es"))
+
+            # Call check_session_auth MCP tool
+            self.logger.info(f"🔐 Checking authentication status for session: {self.session_id}")
+
+            # Execute MCP tool via client
+            auth_status = await self.mcp_client.call_tool(
+                "check_session_auth",
+                {"session_id": str(self.session_id)}
+            )
+
+            if not auth_status:
+                self.logger.error("Failed to check authentication status")
+                return self._get_auth_error_message(kwargs.get("language", "es"))
+
+            self.logger.info(f"🔍 Auth status: {auth_status}")
+
+            # Check if re-authentication is required
+            requires_reauth = auth_status.get("requires_reauth", True)
+            is_authenticated = auth_status.get("is_authenticated", False)
+            session_expired = auth_status.get("session_expired", False)
+
+            if requires_reauth:
+                # User is NOT authenticated or session expired
+                self.logger.warning(
+                    f"🔒 Authentication required: "
+                    f"authenticated={is_authenticated}, "
+                    f"expired={session_expired}"
+                )
+
+                # ⚠️ CRITICAL: If session expired, check if auth_flow_pending flag is from CURRENT session
+                # If it's from a PREVIOUS (expired) session, it's STALE and must be cleared.
+                if session_expired:
+                    # Check if the auth_flow_pending was set in THIS session_id or a previous one
+                    auth_session_id = self._get_memory_block_value("auth_flow_pending_session_id")
+                    current_session = str(self.session_id)
+
+                    if auth_session_id and auth_session_id != current_session:
+                        # The flag is from a DIFFERENT (expired) session - it's STALE
+                        self.logger.warning(
+                            f"⚠️ auth_flow_pending flag from session {auth_session_id} "
+                            f"but current is {current_session} - flag is STALE, clearing it"
+                        )
+                        self._set_auth_flow_pending(False)
+                    elif auth_session_id:
+                        # The flag is from THIS session - user is responding to auth prompt
+                        self.logger.info(
+                            f"✅ auth_flow_pending flag is from CURRENT session {current_session} - NOT stale"
+                        )
+
+                # Now check if user is IN THE MIDDLE of authentication flow
+                is_in_auth_flow = self._is_user_in_auth_flow()
+                self.logger.info(f"🔍 Auth flow check: is_in_auth_flow={is_in_auth_flow}")
+
+                if is_in_auth_flow:
+                    self.logger.info(
+                        "🔐 User is in auth flow - intercepting to handle email/OTP"
+                    )
+                    # Instead of just returning a prompt, we need to actually EXECUTE
+                    # the authentication flow: detect email → call request_otp() → detect OTP → call verify_otp()
+                    # This is a HARD BLOCK that directly manages authentication, not via Gemini
+                    return await self._handle_auth_flow(
+                        query=query,
+                        language=kwargs.get("language", "es")
+                    )
+
+                # User is NOT in auth flow - set flag and show authentication prompt
+                # Set auth_flow_pending flag in memory blocks so next request knows user is in auth flow
+                self._set_auth_flow_pending(True)
+                # ALSO save the current session_id so we can detect if flag becomes stale later
+                self._save_auth_flow_session_id(str(self.session_id))
+
+                return self._get_authentication_prompt(
+                    session_expired=session_expired,
+                    language=kwargs.get("language", "es")
+                )
+
+            # User is authenticated - clear auth_flow_pending flag and allow request to proceed
+            self.logger.info("✅ User authenticated - session valid")
+            self._set_auth_flow_pending(False)  # Clear flag
+            return None
+
+        except Exception as e:
+            self.logger.exception(f"Error checking authentication: {e}")
+            # On error, be conservative and require authentication
+            return self._get_auth_error_message(kwargs.get("language", "es"))
+
+    def _is_user_in_auth_flow(self) -> bool:
+        """Check if user is currently in the middle of authentication flow.
+
+        CRITICAL: The hard block returns a text response when auth is required.
+        That response goes back to the user but is NOT added to history yet.
+        So we can't rely on history to detect if we're in auth flow.
+
+        Instead, we check if the RESPONSE we're about to return is an auth prompt.
+        But that creates a chicken-and-egg problem.
+
+        SOLUTION: Always allow the FIRST message after a hard block returns auth prompt.
+        We detect this by checking if this is a NEW conversation (no history).
+
+        Returns:
+            bool: True if we should allow Gemini to process (in auth flow), False otherwise.
+        """
+        try:
+            # CRITICAL INSIGHT: The hard block executes BEFORE history is updated.
+            # When hard block returns "¿Cuál es tu correo?" that message is NOT in history yet.
+            # So when user replies with email, history is EMPTY or has old messages only.
+
+            # Check if we have recent conversation history
+            if not hasattr(self, 'history') or not self.history:
+                self.logger.info("🔍 No history - this could be first message OR response to auth prompt")
+                # Can't determine reliably - check database for recent auth prompt
+                return self._check_recent_auth_prompt_in_db()
+
+            # Look at the LAST message in history
+            # If it's from the model and contains auth keywords, user is responding to it
+            self.logger.info(f"🔍 Checking last message in history ({len(self.history)} total messages)...")
+
+            if len(self.history) > 0:
+                last_msg = self.history[-1]
+
+                # Check if last message is from the model (assistant)
+                if hasattr(last_msg, 'role') and last_msg.role == 'model':
+                    if hasattr(last_msg, 'parts') and last_msg.parts:
+                        text = ''.join(part.text for part in msg.parts if hasattr(part, 'text'))
+
+                        # Check for auth keywords
+                        auth_keywords = [
+                            "correo electrónico", "email", "email address",
+                            "sesión ha expirado", "session has expired",
+                            "verificar tu identidad", "verify your identity",
+                            "código OTP", "OTP code", "verification code",
+                            "¿Cuál es tu", "What's your", "What is your"
+                        ]
+
+                        if any(keyword.lower() in text.lower() for keyword in auth_keywords):
+                            self.logger.info(f"✅ Last message is auth prompt: {text[:80]}...")
+                            return True
+
+                self.logger.info("Last message in history is not an auth prompt")
+
+            # Fallback: check DB for recent auth prompt sent
+            return self._check_recent_auth_prompt_in_db()
+
+        except Exception as e:
+            self.logger.warning(f"Error checking auth flow status: {e}")
+            return False
+
+    def _check_recent_auth_prompt_in_db(self) -> bool:
+        """Check if user is responding to a recent authentication prompt.
+
+        IMPROVED LOGIC: Don't assume user is in auth flow just because history is empty.
+        Instead, check the auth_flow_pending memory block:
+        - If auth_flow_pending=true → User IS responding to auth prompt
+        - If auth_flow_pending=false/missing → User is NOT in auth flow (show new prompt)
+
+        This fixes the issue where users were automatically allowed without seeing the prompt.
+
+        Returns:
+            bool: True if user is responding to auth prompt, False if new auth needed.
+        """
+        try:
+            # IMPROVED: Check auth_flow_pending memory block to determine actual state
+            # This is more reliable than guessing based on history availability
+
+            is_in_auth_flow = self._check_auth_flow_from_memory()
+
+            if is_in_auth_flow:
+                self.logger.info("✅ auth_flow_pending=true found - user is responding to auth prompt")
+                self.logger.info("✅ Allowing request to proceed (will let Gemini handle email/OTP)")
+                return True
+            else:
+                # auth_flow_pending is false or missing
+                # User is NOT in auth flow - should show authentication prompt
+                self.logger.info("❌ auth_flow_pending=false/missing - user needs authentication")
+                self.logger.info("❌ User is NOT responding to auth prompt - will show new prompt")
+                return False
+
+        except Exception as e:
+            self.logger.warning(f"Error checking auth flow from memory: {e}")
+            # On error, be conservative and show auth prompt
+            return False
+
+    def _check_auth_flow_from_memory(self) -> bool:
+        """Check if auth flow is pending by looking at memory blocks.
+
+        Returns:
+            bool: True if auth_flow_pending memory block exists, False otherwise.
+        """
+        try:
+            # Check if memory is enabled
+            if not self._memory_enabled or not hasattr(self, 'memory_manager'):
+                self.logger.info("🔍 Memory not enabled - cannot check auth_flow_pending")
+                return False
+
+            # Debug: Log session_id and memory manager state
+            self.logger.info(f"🔍 DEBUG: session_id={self.session_id}, memory_manager={self.memory_manager is not None}")
+
+            # Get session memory blocks (use default scope to match save_memory_block)
+            memory_blocks = self.get_memory_blocks()
+            self.logger.info(f"🔍 Found {len(memory_blocks)} memory blocks (scope={self.agent_name})")
+            if memory_blocks:
+                self.logger.info(f"🔍 DEBUG: Memory blocks: {[(b.get('block_label'), b.get('block_value')) for b in memory_blocks]}")
+
+            # Look for auth_flow_pending flag
+            for block in memory_blocks:
+                if block.get('block_label') == 'auth_flow_pending':
+                    value = block.get('block_value')
+                    self.logger.info(f"✅ Found auth_flow_pending in memory: {value}")
+                    return value == 'true'
+
+            self.logger.info("❌ No auth_flow_pending flag found in memory blocks")
+            return False
+
+        except Exception as e:
+            self.logger.warning(f"Error checking auth flow from memory: {e}")
+            return False
+
+    def _set_auth_flow_pending(self, pending: bool) -> None:
+        """Set or clear the auth_flow_pending flag in memory blocks.
+
+        This flag indicates that the system is waiting for user to provide
+        email or OTP as part of the authentication flow.
+
+        Args:
+            pending: True to set flag (waiting for auth), False to clear it.
+        """
+        try:
+            # Check if memory is enabled
+            if not self._memory_enabled or not self.memory_manager or not self.session_id:
+                self.logger.warning("Memory not enabled - cannot set auth_flow_pending flag")
+                return
+
+            # Set or clear the flag using BaseAgent's save_memory_block method
+            # CRITICAL: Specify agent_scope="booking" to match get_memory_blocks() default
+            # Without this, save goes to "shared" but get reads from "booking"
+            if pending:
+                self.logger.info("🔐 Setting auth_flow_pending flag - waiting for user email/OTP")
+                self.save_memory_block(
+                    block_label="auth_flow_pending",
+                    block_value="true",
+                    priority=10,
+                    agent_scope="booking"  # CRITICAL: Must match get_memory_blocks() scope
+                )
+            else:
+                self.logger.info("✅ Clearing auth_flow_pending flag - authentication complete")
+                # Clear the flag by setting to false
+                self.save_memory_block(
+                    block_label="auth_flow_pending",
+                    block_value="false",
+                    priority=10,
+                    agent_scope="booking"  # CRITICAL: Must match get_memory_blocks() scope
+                )
+
+        except Exception as e:
+            self.logger.warning(f"Error setting auth_flow_pending flag: {e}")
+            # Don't fail the whole request if we can't set the flag
+
+    async def _handle_auth_flow(self, query: str = "", language: str = "es") -> str:
+        """Handle authentication flow by executing MCP tools directly.
+
+        This HARD BLOCK directly manages the authentication workflow:
+        1. PHASE 1: Detect email → Call request_otp() → Send code to email
+        2. PHASE 2: Detect OTP → Call verify_otp() → Authenticate user
+        3. PHASE 3: Success → Call save_session_auth() → Allow booking
+
+        This bypasses Gemini entirely for authentication - security critical!
+
+        Args:
+            query: User's latest message
+            language: User's language (es|en)
+
+        Returns:
+            str: Response message or error
+        """
+        query_lower = query.lower().strip()
+
+        # PHASE DETECTION
+        is_email_like = "@" in query_lower and "." in query_lower
+        # OTP detection: 4-6 digits OR user might have sent partial input
+        # Accept 4-6 digits as OTP, or if message has only digits (length 1-6)
+        is_otp_like = query_lower.isdigit() and 1 <= len(query_lower) <= 6
+
+        # ================================================================
+        # PHASE 1: EMAIL DETECTION → REQUEST OTP
+        # ================================================================
+        if is_email_like and not is_otp_like:
+            email = query_lower
+            self.logger.info(f"📧 PHASE 1: Email detected: {email}")
+
+            try:
+                # Call request_otp() to send code to email
+                self.logger.info(f"🔐 Calling request_otp() for {email}...")
+                otp_result = await self.mcp_client.call_tool(
+                    "request_otp",
+                    {"email": email, "purpose": "booking_auth"}
+                )
+
+                if not otp_result or not otp_result.get("success"):
+                    error_msg = otp_result.get("error", "Error enviando OTP") if otp_result else "Error desconocido"
+                    self.logger.error(f"❌ OTP request failed: {error_msg}")
+                    return self.response_templates.get_otp_error_message(language)
+
+                # SUCCESS: OTP sent - SAVE EMAIL TO MEMORY for PHASE 2
+                self.logger.info(f"✅ OTP sent successfully to {email}")
+                expires_in = otp_result.get("expires_in_minutes", 10)
+
+                # Save email for later OTP verification
+                try:
+                    self.save_memory_block(
+                        block_label="auth_email",
+                        block_value=email,
+                        priority=10,
+                        agent_scope="booking"
+                    )
+                    self.logger.info(f"💾 Saved auth_email={email} to memory for OTP verification")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Error saving auth_email to memory: {e}")
+
+                return self.response_templates.get_otp_sent_message(language, email)
+
+            except Exception as e:
+                self.logger.exception(f"❌ Error in OTP request: {e}")
+                return self.response_templates.get_otp_error_message(language)
+
+        # ================================================================
+        # PHASE 2: OTP DETECTION → VERIFY OTP
+        # ================================================================
+        elif is_otp_like:
+            otp_code = query_lower
+            self.logger.info(f"🔐 PHASE 2: OTP code detected: {otp_code}")
+
+            # Validate OTP is exactly 6 digits
+            if len(otp_code) != 6:
+                self.logger.warning(f"⚠️ OTP must be exactly 6 digits, got {len(otp_code)}: {otp_code}")
+                return self.response_templates.get_message(
+                    "auth", "otp_invalid_length", language,
+                    code=otp_code, length=len(otp_code)
+                )
+
+            # Get stored email from memory blocks (set when user provided it)
+            stored_email = self._get_memory_block_value("auth_email")
+            if not stored_email:
+                self.logger.warning("❌ No stored email in memory - cannot verify OTP")
+                return self.response_templates.get_message("auth", "email_not_in_memory", language)
+
+            try:
+                # Call verify_otp() to verify the code
+                self.logger.info(f"🔐 Calling verify_otp() for {stored_email} with code {otp_code}...")
+                verify_result = await self.mcp_client.call_tool(
+                    "verify_otp",
+                    {"email": stored_email, "code": otp_code, "purpose": "booking_auth"}
+                )
+
+                if not verify_result or not verify_result.get("success"):
+                    attempts_remaining = verify_result.get("attempts_remaining", 0) if verify_result else 0
+                    error_msg = verify_result.get("error", "Invalid code") if verify_result else "Unknown error"
+                    self.logger.error(f"❌ OTP verification failed: {error_msg} ({attempts_remaining} attempts left)")
+
+                    return self.response_templates.get_otp_incorrect_message(
+                        language, attempts_remaining
+                    )
+
+                # SUCCESS: OTP verified - now authenticate session
+                self.logger.info(f"✅ OTP verified successfully for {stored_email}")
+
+                # Extract user info from verify_result
+                user_full_name = verify_result.get("full_name", "Usuario")
+                previous_login = verify_result.get("previous_login")
+
+                # Get user_id for session
+                user_id = 1  # Default fallback
+                is_temporary_user = False
+                try:
+                    user_info = await self.mcp_client.call_tool("check_user_exists", {"email": stored_email})
+                    if user_info and user_info.get("user_id"):
+                        user_id = user_info["user_id"]
+                        # Check if this is a temporary user (needs to provide real name)
+                        current_name = user_info.get("full_name", "")
+                        is_temporary_user = current_name in ["Temporary User", "Usuario", "User", ""]
+                        # CRITICAL: Update user_full_name with the REAL name from database
+                        if current_name and not is_temporary_user:
+                            user_full_name = current_name
+                        self.logger.info(f"🔍 User check: name='{current_name}', is_temporary={is_temporary_user}, using_name='{user_full_name}'")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Could not get user_id: {e}")
+
+                # Save authentication to session
+                try:
+                    self.logger.info(f"💾 Saving session authentication for {stored_email}...")
+                    auth_result = await self.mcp_client.call_tool(
+                        "save_session_auth",
+                        {
+                            "session_id": str(self.session_id),
+                            "user_id": user_id,
+                            "email": stored_email,
+                            "full_name": user_full_name,
+                            "language": language
+                        }
+                    )
+                    self.logger.info(f"✅ Session authentication saved: {auth_result}")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Error saving session auth: {e}")
+
+                # Clear auth flow flags
+                self._set_auth_flow_pending(False)
+
+                # UPDATE SESSION ACTIVITY to prevent immediate re-expiration
+                # After successful authentication, reset the inactivity timer
+                # so the session doesn't expire 1 minute later while user is still active
+                try:
+                    self.logger.info("⏱️ Updating session activity after authentication...")
+                    activity_result = await self.mcp_client.call_tool(
+                        "update_session_activity",
+                        {"session_id": str(self.session_id)}
+                    )
+                    self.logger.info(f"✅ Session activity updated: {activity_result}")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Error updating session activity: {e}")
+
+                # CRITICAL: Clear conversation history to avoid Gemini hallucinating
+                # "session expired" messages based on old auth prompts
+                # After successful authentication, user should start fresh without
+                # seeing old authentication attempts in the context
+                self.logger.info("🧹 Clearing conversation history after successful authentication")
+                self.conversation_history.clear()
+
+                # Build welcome message with name and last login info
+                # Check if user has a real name (not "Temporary User" placeholder)
+                has_real_name = user_full_name and user_full_name not in ["Temporary User", "Usuario", "User"]
+
+                # If this is a temporary user (first time), ask for their name
+                if is_temporary_user:
+                    self.logger.info(f"👤 New user {stored_email} - requesting name")
+                    # Save a flag to indicate we're waiting for the user's name
+                    try:
+                        self.save_memory_block(
+                            block_label="pending_user_name",
+                            block_value="true",
+                            priority=10,
+                            agent_scope="booking"
+                        )
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ Could not save pending_user_name flag: {e}")
+
+                    return self.response_templates.get_name_request_message(language)
+
+                # User has a real name - show welcome message using templates
+                return self.response_templates.get_welcome_message(
+                    language=language,
+                    full_name=user_full_name,
+                    previous_login=previous_login
+                )
+
+            except Exception as e:
+                self.logger.exception(f"❌ Error in OTP verification: {e}")
+                return self.response_templates.get_message(
+                    "auth", "verification_error", language, error=str(e)
+                )
+
+        # ================================================================
+        # PHASE 0: NO EMAIL OR OTP DETECTED → ASK FOR EMAIL
+        # ================================================================
+        else:
+            self.logger.info("📧 PHASE 0: No email/OTP detected - asking for email")
+            return self.response_templates.get_message("auth", "auth_continue_email", language)
+
+    def _get_otp_collection_prompt(self, query: str = "", language: str = "es") -> str:
+        """Get the prompt that guides user through email/OTP authentication.
+
+        This is the CONTINUATION of authentication flow when user is IN auth_flow.
+        Intelligently detects where user is in the flow:
+        - PHASE 1: User hasn't provided email yet → Ask for email
+        - PHASE 2: User provided email → Ask for OTP
+        - PHASE 3: User provided OTP → Process verification
+
+        Args:
+            query: User's latest message (to detect email/OTP)
+            language: User's language (es|en)
+
+        Returns:
+            str: Localized prompt OR MCP tool call result
+        """
+        # PHASE DETECTION: Check if user message looks like email or OTP code
+        query_lower = query.lower().strip()
+
+        # Check if message looks like an email address (contains @ and .)
+        is_email_like = "@" in query_lower and "." in query_lower
+
+        # Check if message looks like an OTP code (4-6 digits)
+        is_otp_like = query_lower.isdigit() and 4 <= len(query_lower) <= 6
+
+        # PHASE 1: No email provided yet → Ask for email
+        if not is_email_like:
+            return self.response_templates.get_message("auth", "prompt_continue_email", language)
+
+        # PHASE 2: Email provided → Extract it and ask for OTP
+        if is_email_like and not is_otp_like:
+            # Email detected - user should receive OTP prompt next
+            # Save email to memory for OTP verification
+            self.logger.info(f"📧 Email detected in user input: {query_lower}")
+            return self.response_templates.get_message(
+                "auth", "prompt_otp_sent_simple", language, email=query_lower
+            )
+
+        # PHASE 3: OTP code provided
+        if is_otp_like:
+            self.logger.info(f"🔐 OTP code detected in user input: {query_lower}")
+            return self.response_templates.get_message(
+                "auth", "prompt_verifying_code", language, code=query_lower
+            )
+
+        # Default fallback
+        return self.response_templates.get_message("auth", "prompt_default_email", language)
+
+    def _get_authentication_prompt(
+        self,
+        session_expired: bool,
+        language: str
+    ) -> str:
+        """Get authentication prompt based on session status.
+
+        Args:
+            session_expired: True if session was authenticated but expired
+            language: User's language (es|en)
+
+        Returns:
+            str: Localized authentication prompt
+        """
+        # Get timeout value from centralized configuration
+        timeout_display = OTPSessionConfig.get_session_timeout_display(language)
+
+        if session_expired:
+            # Session was valid but expired due to inactivity
+            return self.response_templates.get_session_expired_message(language)
+        else:
+            # No session or first time
+            return self.response_templates.get_message("auth", "request_email", language)
+
+    def _get_auth_error_message(self, language: str) -> str:
+        """Get error message when authentication check fails.
+
+        Args:
+            language: User's language (es|en)
+
+        Returns:
+            str: Localized error message
+        """
+        return self.response_templates.get_message("errors", "auth_check_failed", language)
 
     def get_system_prompt(
         self,
@@ -304,6 +888,13 @@ class BookingAgent(BaseAgent):
             user_id=kwargs.get("user_id"),
             user_lang=user_lang,  # Pass language context for template selection
         )
+
+        # CRITICAL: Add session_id to prompt for authentication flow
+        # The agent needs this to call check_session_auth() and clear_session_auth() tools
+        if self.session_id:
+            prompt += f"\n\n## CURRENT SESSION CONTEXT:\n"
+            prompt += f"**Session ID:** {self.session_id}\n"
+            prompt += f"⚠️ IMPORTANT: Use this session_id when calling check_session_auth() or clear_session_auth() tools.\n"
 
         # CRITICAL FIX: Append memory blocks context to system prompt
         # This helps the agent understand user preferences and conversation history
@@ -419,6 +1010,87 @@ class BookingAgent(BaseAgent):
             self.current_intent = intent
 
             self.logger.info(f"Generating response for: '{query[:100]}...'")
+
+            # ================================================================
+            # 👤 CHECK IF WAITING FOR USER NAME (Post-OTP Flow)
+            # ================================================================
+            # If user just authenticated but hasn't provided their name yet, capture it
+            pending_name = self._get_memory_block_value("pending_user_name")
+            if pending_name == "true":
+                self.logger.info(f"👤 Waiting for user name - capturing from query: '{query}'")
+
+                # Extract name from query (simple approach: use the whole query as name)
+                user_name = query.strip()
+
+                # Validate name is reasonable (2-50 chars, not just numbers/symbols)
+                if 2 <= len(user_name) <= 50 and any(c.isalpha() for c in user_name):
+                    try:
+                        # Get user email from memory
+                        user_email = self._get_memory_block_value("email")
+                        if user_email:
+                            # Update user profile with real name
+                            self.logger.info(f"💾 Updating user {user_email} with name: {user_name}")
+                            update_result = await self.mcp_client.call_tool(
+                                "update_user",
+                                {
+                                    "email": user_email,
+                                    "data": {"full_name": user_name}
+                                }
+                            )
+                            self.logger.info(f"✅ User updated: {update_result}")
+
+                            # Update session memory with new name
+                            self.save_memory_block(
+                                block_label="full_name",
+                                block_value=user_name,
+                                priority=10,
+                                agent_scope="booking"
+                            )
+
+                            # Clear the pending flag
+                            self.save_memory_block(
+                                block_label="pending_user_name",
+                                block_value="false",
+                                priority=10,
+                                agent_scope="booking"
+                            )
+
+                            # Return welcome message with name and booking options
+                            language = kwargs.get("language", "es")
+                            return self.response_templates.get_new_user_welcome(language, user_name)
+                    except Exception as e:
+                        self.logger.error(f"❌ Error updating user name: {e}")
+
+            # ================================================================
+            # 🔐 MANDATORY AUTHENTICATION CHECK - BLOCKING GUARD
+            # ================================================================
+            # CRITICAL: Check session authentication BEFORE processing ANY request
+            # This is a HARD BLOCK at the code level - Gemini cannot bypass this
+            auth_check_result = await self._check_and_enforce_authentication(query, **kwargs)
+            if auth_check_result:
+                # User is not authenticated - return authentication prompt immediately
+                # Do NOT proceed to Gemini, do NOT process the request
+                self.logger.warning(
+                    f"🔒 Authentication required - blocking request until user authenticates"
+                )
+                return auth_check_result
+            # If we reach here, user is authenticated - proceed normally
+            self.logger.info("✅ User authenticated - proceeding with request")
+
+            # UPDATE SESSION ACTIVITY ON EVERY REQUEST
+            # CRITICAL: Reset inactivity timer on each user action
+            # This ensures session stays alive as long as user is actively sending messages
+            # Only expires if user is INACTIVE for SESSION_IDLE_TIMEOUT_MINUTES
+            try:
+                self.logger.info("⏱️ Updating session activity for authenticated user...")
+                activity_result = await self.mcp_client.call_tool(
+                    "update_session_activity",
+                    {"session_id": str(self.session_id)}
+                )
+                self.logger.debug(f"✅ Session activity updated: {activity_result}")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Error updating session activity: {e}")
+                # Don't fail the request if activity update fails - continue processing
 
             # Auto-detect or use provided language for consistent context
             if "language" in kwargs:
@@ -1046,6 +1718,58 @@ class BookingAgent(BaseAgent):
         else:
             # Other errors (EMPTY_RESPONSE, NO_CANDIDATES, etc.)
             return await self._create_fallback_response(iteration=2)
+
+    def _get_memory_block_value(self, block_label: str) -> str | None:
+        """Get a value from memory blocks by label.
+
+        Args:
+            block_label: The label of the memory block to retrieve.
+
+        Returns:
+            The value of the memory block, or None if not found.
+        """
+        try:
+            if not self._memory_enabled or not self.memory_manager or not self.session_id:
+                return None
+
+            # Get active memory blocks scoped to booking agent
+            memory_blocks = self.memory_manager.get_active_memory_blocks(
+                session_id=str(self.session_id),
+                agent_scope="booking"
+            )
+
+            # Find the block with matching label
+            for block in memory_blocks:
+                if block.get("block_label") == block_label:
+                    return block.get("block_value")
+
+            return None
+        except Exception as e:
+            self.logger.warning(f"Error getting memory block {block_label}: {e}")
+            return None
+
+    def _save_auth_flow_session_id(self, session_id: str) -> None:
+        """Save the current session_id alongside auth_flow_pending flag.
+
+        This allows us to detect later if the auth_flow_pending flag is from
+        a PREVIOUS (expired) session or the CURRENT session.
+
+        Args:
+            session_id: The current session ID to save.
+        """
+        try:
+            if not self._memory_enabled or not self.memory_manager or not self.session_id:
+                return
+
+            self.logger.info(f"💾 Saving auth_flow_pending_session_id={session_id}")
+            self.save_memory_block(
+                block_label="auth_flow_pending_session_id",
+                block_value=session_id,
+                priority=10,
+                agent_scope="booking"
+            )
+        except Exception as e:
+            self.logger.warning(f"Error saving auth_flow_pending_session_id: {e}")
 
     def __repr__(self) -> str:
         """String representation of BookingAgent."""

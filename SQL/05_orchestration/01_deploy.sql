@@ -67,6 +67,7 @@
 \i '../01_ddl/memory/01_conversation.sql'
 \i '../01_ddl/memory/02_agent_memory.sql'
 \i '../01_ddl/memory/03_user_memory.sql'
+\i '../01_ddl/memory/04_add_unique_constraint.sql'
 \echo ''
 
 -- ============================================================================
@@ -103,6 +104,10 @@
 \i '../01_ddl/demo/06_clerk_migration.sql'
 \i '../01_ddl/demo/07_fix_clerk_constraints.sql'
 \i '../01_ddl/demo/08_user_based_chat_history.sql'
+
+-- Apply demo migrations (idempotent - safe to run multiple times)
+\echo '    Applying demo migrations...'
+\i '../02_migrations/demo/003_add_user_timezone.sql'
 \echo ''
 
 -- ============================================================================

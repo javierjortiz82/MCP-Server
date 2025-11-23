@@ -32,7 +32,9 @@ from demo_agent.observability.context import (
 )
 from demo_agent.observability.correlation import CorrelationID
 from demo_agent.observability.metrics import get_metrics_collector
+from demo_agent.scheduler.cleanup_scheduler import init_cleanup_scheduler
 from demo_agent.security.clerk_middleware import ClerkAuthMiddleware
+from demo_agent.security.session_expiry_middleware import SessionExpiryMiddleware
 from demo_agent.services.email_integration import EmailIntegrationService
 from demo_agent.services.otp_service import OTPService
 from demo_agent.services.user_service import UserService
@@ -93,6 +95,11 @@ async def lifespan(app: FastAPI):
 
         app.state.email_service = EmailIntegrationService()
         logger.info("✅ Email Integration Service initialized")
+
+        # Initialize cleanup scheduler for background tasks
+        # Runs every 1 hour to clean up expired OTP codes and sessions
+        init_cleanup_scheduler(app)
+        logger.info("✅ Cleanup scheduler initialized (runs every 1 hour)")
 
     except Exception as e:
         logger.exception(f"Failed to initialize demo agent: {e}")
@@ -255,6 +262,21 @@ def create_app() -> FastAPI:
     # Clerk Authentication Middleware
     # IMPORTANT: Added AFTER CORSMiddleware so it executes BEFORE CORS
     app.add_middleware(ClerkAuthMiddleware)
+    logger.info("✅ Clerk authentication middleware registered")
+
+    # Session Expiration Middleware (NEW - SECURITY)
+    # SECURITY: Validates session expiration on protected routes
+    # Implements OWASP three-tier session expiration logic:
+    # 1. Idle timeout: Expires if inactive
+    # 2. TTL (Time-To-Live): Expires after total duration
+    # 3. Absolute timeout: Never expires longer than max lifetime
+    app.add_middleware(SessionExpiryMiddleware)
+    logger.info(
+        f"✅ Session expiration middleware registered "
+        f"(TTL={config.SESSION_TTL_MINUTES}m, "
+        f"Idle={config.SESSION_IDLE_TIMEOUT_MINUTES}m, "
+        f"Absolute={config.SESSION_ABSOLUTE_TIMEOUT_MINUTES}m)"
+    )
 
     logger.info(f"✅ CORS configured: {len(cors_origins)} allowed origins")
     logger.debug(f"   Origins: {cors_origins}")

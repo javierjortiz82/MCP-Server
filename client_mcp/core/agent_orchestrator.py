@@ -186,12 +186,14 @@ class AgentOrchestrator:
                 mode="multi_agent" if self.routing_enabled else "single_agent"
             )
 
-    async def initialize(self, customer_email: str | None = None) -> None:
+    async def initialize(self, customer_email: str | None = None, db_session_id: str | None = None) -> None:
         """Initialize orchestrator and agents based on feature flag.
 
         Args:
             customer_email: Optional customer email for persistent memory sessions.
                           If provided, enables memory for all agents.
+            db_session_id: Optional database session UUID. If provided, reuses existing session
+                         instead of creating/looking up based on customer_email.
 
         Raises:
             RuntimeError: If initialization fails.
@@ -205,7 +207,12 @@ class AgentOrchestrator:
                     self.customer_email = customer_email
 
                     # Get existing session or create new one
-                    self.session_id = self.memory_manager.get_or_create_session(customer_email=customer_email)
+                    # CRITICAL: If db_session_id is provided, use it directly instead of looking up by email
+                    if db_session_id:
+                        logger.info(f"✅ Using provided database session: {db_session_id}")
+                        self.session_id = db_session_id
+                    else:
+                        self.session_id = self.memory_manager.get_or_create_session(customer_email=customer_email)
                     logger.info(f"✅ Memory session active: {self.session_id}")
 
                     # Try to load session language from previous conversation first
@@ -402,7 +409,7 @@ class AgentOrchestrator:
         try:
             # PHASE 1: Detect language on first query and cache it
             if not self._session_language_detected:
-                from gemini_agent.utils.language_detector import detect_user_language
+                from gemini_agent.utils.language_detector import detect_language_async
 
                 # Try to retrieve language from existing session first (persistence)
                 retrieved_language = None
@@ -417,7 +424,7 @@ class AgentOrchestrator:
 
                 # If not found in session, detect from first query
                 if not retrieved_language:
-                    self.language = detect_user_language(query)
+                    self.language = await detect_language_async(query)
                     logger.info(f"🌐 Language detected on first query: {self.language.upper()}")
 
                     # PHASE 2: Save language to database for persistence
@@ -430,20 +437,45 @@ class AgentOrchestrator:
 
                 self._session_language_detected = True
 
-            # Build context for router
-            context = {}
-            if self.last_intent:
-                context["last_intent"] = self.last_intent.value
-            if self.last_bot_message:
-                context["last_bot_message"] = self.last_bot_message
+            # CRITICAL: Check if user is in an active booking/auth flow
+            # If they are, skip intent classification and route directly to BookingAgent
+            # This prevents multi-line descriptions (e.g., appointment reasons) from being
+            # incorrectly classified as separate intents
+            is_in_booking_flow = False
+            if self.memory_manager and self.session_id:
+                try:
+                    # Check for auth_flow_pending memory block
+                    session_blocks = self.memory_manager.get_active_memory_blocks(
+                        self.session_id, agent_scope="booking"
+                    )
+                    for block in session_blocks:
+                        if block.get("block_label") == "auth_flow_pending" and block.get("block_value") == "true":
+                            is_in_booking_flow = True
+                            logger.info("🔒 User in active booking/auth flow - skipping intent classification")
+                            break
+                except Exception as e:
+                    logger.debug(f"Could not check booking flow status: {e}")
 
-            # Pass cached session language to router (prevents re-detection of ambiguous queries)
-            intent, detected_language = await self.router.classify_intent(
-                query,
-                context=context if context else None,
-                session_language=self.language  # ← Use cached language, don't re-detect
-            )
-            logger.info(f"Intent classified: {intent.value}")
+            # If in booking flow, skip classification and route directly to booking
+            if is_in_booking_flow:
+                intent = Intent.BOOKING
+                detected_language = self.language
+                logger.info("✅ Routing directly to BookingAgent (active flow detected)")
+            else:
+                # Build context for router
+                context = {}
+                if self.last_intent:
+                    context["last_intent"] = self.last_intent.value
+                if self.last_bot_message:
+                    context["last_bot_message"] = self.last_bot_message
+
+                # Pass cached session language to router (prevents re-detection of ambiguous queries)
+                intent, detected_language = await self.router.classify_intent(
+                    query,
+                    context=context if context else None,
+                    session_language=self.language  # ← Use cached language, don't re-detect
+                )
+                logger.info(f"Intent classified: {intent.value}")
             logger.info(f"🌐 Language (from session cache): {detected_language}")
 
             # CRITICAL FIX: Update orchestrator language if router detected a language switch
@@ -482,12 +514,8 @@ class AgentOrchestrator:
                 # For longer queries, fallback to general agent
                 logger.warning("⚠️ Falling back to general agent due to classification error")
                 intent = Intent.GENERAL
-                # Try to detect language from query as fallback
-                try:
-                    from gemini_agent.utils.language_detector import detect_user_language
-                    detected_language = detect_user_language(query)
-                except Exception:
-                    detected_language = self.language  # Use session language as fallback
+                # Use session language as fallback (avoid nested language detection in error context)
+                detected_language = self.language
 
         # Step 2: Route to specialized agent and save response
         try:

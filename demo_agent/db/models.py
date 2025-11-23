@@ -274,6 +274,79 @@ class DemoSession(Base):
         elapsed_seconds = (now - self.last_activity_at).total_seconds()
         return elapsed_seconds < (timeout_minutes * 60)
 
+    def is_expired(self, ttl_minutes: int, idle_timeout_minutes: int, absolute_timeout_minutes: int) -> bool:
+        """Check if session has expired based on multiple timeout criteria.
+
+        Implements three-tier expiration logic (OWASP standard):
+        1. Idle timeout: Expires if inactive for idle_timeout_minutes
+        2. TTL (Time-To-Live): Expires if active for ttl_minutes total
+        3. Absolute timeout: Expires regardless of activity after absolute_timeout_minutes
+
+        Args:
+            ttl_minutes: Total session lifetime in minutes
+            idle_timeout_minutes: Inactivity timeout in minutes
+            absolute_timeout_minutes: Absolute max lifetime in minutes
+
+        Returns:
+            bool: True if any expiration criterion is met
+        """
+        now = datetime.now(timezone.utc)
+
+        # Check idle timeout (inactivity)
+        if self.last_activity_at:
+            idle_seconds = (now - self.last_activity_at).total_seconds()
+            if idle_seconds >= (idle_timeout_minutes * 60):
+                return True  # Expired due to inactivity
+
+        # Check TTL (time since creation, with activity reset)
+        if self.created_at:
+            ttl_seconds = (now - self.created_at).total_seconds()
+            if ttl_seconds >= (ttl_minutes * 60):
+                return True  # Expired due to TTL
+
+        # Check absolute timeout (never expires before this, regardless of activity)
+        if self.created_at:
+            absolute_seconds = (now - self.created_at).total_seconds()
+            if absolute_seconds >= (absolute_timeout_minutes * 60):
+                return True  # Expired due to absolute timeout
+
+        return False
+
+    def get_expiration_reason(self, ttl_minutes: int, idle_timeout_minutes: int, absolute_timeout_minutes: int) -> str | None:
+        """Get human-readable reason for session expiration.
+
+        Returns:
+            str: Expiration reason ('idle_timeout', 'ttl', 'absolute_timeout') or None if not expired
+        """
+        now = datetime.now(timezone.utc)
+
+        # Check idle timeout first (most common)
+        if self.last_activity_at:
+            idle_seconds = (now - self.last_activity_at).total_seconds()
+            if idle_seconds >= (idle_timeout_minutes * 60):
+                return "idle_timeout"
+
+        # Check TTL
+        if self.created_at:
+            ttl_seconds = (now - self.created_at).total_seconds()
+            if ttl_seconds >= (ttl_minutes * 60):
+                return "ttl"
+
+        # Check absolute timeout
+        if self.created_at:
+            absolute_seconds = (now - self.created_at).total_seconds()
+            if absolute_seconds >= (absolute_timeout_minutes * 60):
+                return "absolute_timeout"
+
+        return None
+
+    def update_activity(self) -> None:
+        """Update session's last activity timestamp to current time.
+
+        Called on each request to reset idle timeout counter.
+        """
+        self.last_activity_at = datetime.now(timezone.utc)
+
     def avg_tokens_per_request(self) -> float:
         """Calculate average tokens consumed per request.
 

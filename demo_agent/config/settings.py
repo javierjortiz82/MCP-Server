@@ -132,6 +132,28 @@ class DemoConfig(BaseSettings):
     )
 
     # ========================================================================
+    # Session Management Configuration
+    # ========================================================================
+    SESSION_TTL_MINUTES: int = Field(
+        default=30,
+        ge=5,
+        le=1440,
+        description="Session time-to-live in minutes (5-1440 recommended, 30 default)",
+    )
+    SESSION_IDLE_TIMEOUT_MINUTES: int = Field(
+        default=15,
+        ge=1,
+        le=720,
+        description="Inactivity timeout in minutes before requiring re-authentication",
+    )
+    SESSION_ABSOLUTE_TIMEOUT_MINUTES: int = Field(
+        default=480,
+        ge=60,
+        le=1440,
+        description="Absolute session lifetime in minutes regardless of activity (8 hours default)",
+    )
+
+    # ========================================================================
     # Server Configuration
     # ========================================================================
     DEMO_AGENT_HOST: str = Field(
