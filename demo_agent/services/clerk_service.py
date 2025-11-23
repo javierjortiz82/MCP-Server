@@ -430,6 +430,77 @@ class ClerkService:
             self.logger.error("Failed to fetch user by Clerk ID", error=str(e))
             return None
 
+    async def fetch_user_from_clerk_api(self, clerk_user_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch user data from Clerk API by user ID.
+
+        Used when JWT token doesn't include email claim.
+        Calls Clerk Backend API to get full user profile.
+
+        Args:
+            clerk_user_id: Clerk user ID (e.g., "user_2abc...")
+
+        Returns:
+            Optional[Dict]: User data with email, name, etc. None if not found.
+
+        API Reference: https://clerk.com/docs/reference/backend-api/tag/Users#operation/GetUser
+        """
+        try:
+            self.logger.info(f"Fetching user from Clerk API: {clerk_user_id}")
+
+            response = await self.http_client.get(f"/users/{clerk_user_id}")
+
+            if response.status_code == 404:
+                self.logger.warning(f"User not found in Clerk API: {clerk_user_id}")
+                return None
+
+            if response.status_code != 200:
+                self.logger.error(
+                    f"Clerk API error",
+                    status_code=response.status_code,
+                    response=response.text[:200]
+                )
+                return None
+
+            data = response.json()
+
+            # Extract primary email from email_addresses array
+            email_addresses = data.get("email_addresses", [])
+            primary_email = None
+            for addr in email_addresses:
+                if addr.get("id") == data.get("primary_email_address_id"):
+                    primary_email = addr.get("email_address")
+                    break
+            # Fallback to first email if no primary found
+            if not primary_email and email_addresses:
+                primary_email = email_addresses[0].get("email_address")
+
+            # Construct full name
+            first_name = data.get("first_name", "")
+            last_name = data.get("last_name", "")
+            full_name = f"{first_name} {last_name}".strip()
+
+            user_data = {
+                "clerk_user_id": data.get("id"),
+                "email": primary_email,
+                "full_name": full_name or (primary_email.split("@")[0] if primary_email else None),
+                "first_name": first_name,
+                "last_name": last_name,
+                "profile_image_url": data.get("profile_image_url"),
+                "created_at": data.get("created_at"),
+            }
+
+            self.logger.info(
+                f"User fetched from Clerk API",
+                clerk_user_id=clerk_user_id,
+                email=primary_email
+            )
+
+            return user_data
+
+        except Exception as e:
+            self.logger.error(f"Failed to fetch user from Clerk API", error=str(e))
+            return None
+
     async def check_migration_required(self, email: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
         """Check if a user needs to migrate to Clerk.
 

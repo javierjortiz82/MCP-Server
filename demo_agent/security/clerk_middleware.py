@@ -184,6 +184,18 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
             self.metrics.increment_counter("clerk_auth_missing_sub")
             return self._unauthorized_response("Invalid token: missing user ID")
 
+        # If email not in JWT claims, fetch from Clerk API
+        # This handles cases where JWT template doesn't include email claim
+        if not email:
+            self.logger.info(
+                "Email not in JWT claims, fetching from Clerk API",
+                clerk_user_id=clerk_user_id
+            )
+            clerk_user_data = await self.clerk_service.fetch_user_from_clerk_api(clerk_user_id)
+            if clerk_user_data:
+                email = clerk_user_data.get("email")
+                self.logger.info(f"Email fetched from Clerk API: {email}")
+
         # Fetch user from database (optional - may not exist yet)
         # Pass email as fallback in case clerk_user_id changed
         db_user = await self.clerk_service.get_user_by_clerk_id(

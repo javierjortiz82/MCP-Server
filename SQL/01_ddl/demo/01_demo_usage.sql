@@ -39,6 +39,12 @@ CREATE TABLE IF NOT EXISTS :SCHEMA_NAME.demo_usage (
         -- When the block expires (usually 24h from quota exhaustion)
         -- NULL if not blocked
 
+    -- User timezone for accurate blocked_until display
+    user_timezone VARCHAR(64) NOT NULL DEFAULT 'UTC',
+        -- IANA timezone identifier (e.g., America/Costa_Rica, Europe/London)
+        -- Used to calculate and display blocked_until in user's local timezone
+        -- Detected from client browser via Intl.DateTimeFormat()
+
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
         -- When this user key was first seen
