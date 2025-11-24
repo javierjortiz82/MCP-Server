@@ -137,6 +137,11 @@ def create_app() -> FastAPI:
     # Middleware Configuration (Order matters: first added = last executed)
     # ========================================================================
 
+    # Clerk Authentication Middleware
+    # IMPORTANT: Added FIRST so CORSMiddleware can process auth error responses
+    app.add_middleware(ClerkAuthMiddleware)
+    logger.info("✅ Clerk authentication middleware registered")
+
     # Request Size Limit (Phase 4 - LOW Priority)
     # SECURITY (CWE-400 fix): Prevent DoS via oversized request payloads
     app.add_middleware(
@@ -258,11 +263,6 @@ def create_app() -> FastAPI:
         deprecated_endpoints={},  # No deprecated endpoints yet
     )
     logger.info("API version headers middleware registered")
-
-    # Clerk Authentication Middleware
-    # IMPORTANT: Added AFTER CORSMiddleware so it executes BEFORE CORS
-    app.add_middleware(ClerkAuthMiddleware)
-    logger.info("✅ Clerk authentication middleware registered")
 
     # Session Expiration Middleware (NEW - SECURITY)
     # SECURITY: Validates session expiration on protected routes

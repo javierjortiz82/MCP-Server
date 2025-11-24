@@ -243,6 +243,21 @@ run_deployment() {
     fi
     success "Trigger functions and new tables preprocessed successfully"
 
+    # 4. Preprocess demo system files with functions (especially clerk_migration)
+    info "Preprocessing demo system files with schema-dependent functions..."
+    for sql_file in \
+        /tmp/sql_deploy/01_ddl/demo/06_clerk_migration.sql; do
+        if [ -f "$sql_file" ]; then
+            echo "  Processing: $(basename $sql_file)..."
+            docker exec mcp-postgres sed -i "s/:SCHEMA_NAME/$SCHEMA_NAME/g" "$sql_file"
+        fi
+    done
+    if [ $? -ne 0 ]; then
+        error "Failed to preprocess demo system files"
+        return 1
+    fi
+    success "Demo system files preprocessed successfully"
+
     # Execute deployment from within container where \i directives work
     if docker exec -w /tmp/sql_deploy/05_orchestration mcp-postgres \
         psql -U mcp_user -d mcpdb -v "SCHEMA_NAME=$SCHEMA_NAME" -f 01_deploy.sql; then
