@@ -2,12 +2,17 @@
 
 Cliente HTTP para el servicio de transcripción de voz a texto.
 
-Service endpoint: http://localhost:8002/transcribe
+Service endpoint: http://localhost:8085/transcribe
 Method: POST (Multipart Form-Data)
+
+Note:
+    Migrated from port 8002 to 8085 (2025-11-23).
+    The new service uses Google Cloud Speech-to-Text with enhanced
+    audio processing capabilities.
 
 Author: Lab01-MCP Team
 Created: 2025-11-11
-Version: 1.0.0
+Version: 1.1.0
 """
 
 from __future__ import annotations
@@ -72,13 +77,13 @@ class ASRClient:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8002",
+        base_url: str = "http://localhost:8085",
         timeout: float = 30.0
     ):
         """Inicializa el cliente ASR.
 
         Args:
-            base_url: URL base del servicio ASR
+            base_url: URL base del servicio ASR (default: http://localhost:8085)
             timeout: Timeout en segundos para requests
         """
         self.base_url = base_url.rstrip('/')
@@ -172,9 +177,10 @@ class ASRClient:
                     confidence=data_obj.get("confidence")
                 )
 
+                conf_str = f"{asr_response.confidence:.2f}" if asr_response.confidence is not None else "N/A"
                 logger.info(
                     f"[ASR] ✅ Success - Transcription: '{asr_response.transcription}' "
-                    f"(confidence: {asr_response.confidence:.2f})"
+                    f"(confidence: {conf_str})"
                 )
 
                 return asr_response

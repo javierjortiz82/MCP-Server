@@ -93,7 +93,7 @@ def check_services():
         return False
 
     services = [
-        ("Voice-ASR", "http://localhost:8002/health"),
+        ("Voice-ASR", "http://localhost:8085/health"),
         ("Sentiment", "http://localhost:8003/health"),
         ("OCR-Multilang", "http://localhost:8004/health")
     ]
