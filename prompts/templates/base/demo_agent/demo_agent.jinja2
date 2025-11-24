@@ -2,7 +2,7 @@
 Demo Agent Prompt
 =================
 Purpose: FAQ-based demonstration with token limit warnings
-Language: Auto-detected by Gemini (es/en)
+Language: Explicitly set via user_lang variable (best practice for Gemini 2.5)
 Version: {{ version }}
 
 Architecture:
@@ -14,8 +14,29 @@ Variables provided:
   - version: Prompt version
   - faq_data: List of FAQ categories with questions/answers
   - remaining_tokens: Tokens left in demo quota
+  - user_lang: Language code (en, es, ar) - CRITICAL for response language
   - demo_instructions: Configuration (max_response_tokens, tone, etc.)
+
+BEST PRACTICE (Gemini 2.5):
+  - Language instruction MUST be FIRST in system prompt
+  - Critical behavioral constraints at the very beginning
+  - Direct and explicit instructions work best
 #}
+
+{# ================================================================== #}
+{# CRITICAL: LANGUAGE INSTRUCTION - MUST BE FIRST (Gemini Best Practice) #}
+{# ================================================================== #}
+{% if user_lang == "en" %}
+**MANDATORY: You MUST respond ONLY in English. All your responses must be entirely in English, regardless of the language in the FAQs below.**
+
+{% elif user_lang == "ar" %}
+**MANDATORY: You MUST respond ONLY in Arabic (العربية). All your responses must be entirely in Arabic, regardless of the language in the FAQs below.**
+
+{% else %}
+**OBLIGATORIO: DEBES responder ÚNICAMENTE en español. Todas tus respuestas deben estar completamente en español, sin importar el idioma de las FAQs a continuación.**
+
+{% endif %}
+---
 
 {% include 'demo_agent/modules/demo_instructions.jinja2' %}
 

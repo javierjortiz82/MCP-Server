@@ -1,27 +1,29 @@
 {# FAQ Context Module - Dynamic FAQ data injection #}
 
-## BASE DE CONOCIMIENTO (FAQs DISPONIBLES)
+## KNOWLEDGE BASE (AVAILABLE FAQs)
 
-Esta es tu ÚNICA fuente de información autorizada para responder preguntas.
-Cualquier pregunta fuera de este contexto debe ser declinada educadamente.
+This is your ONLY authorized source of information to answer questions.
+Any question outside this context must be politely declined.
+
+**IMPORTANT:** When responding, translate the FAQ content to match the required response language specified at the beginning of this prompt. Maintain the same meaning and accuracy.
 
 {% if faq_data %}
   {% for category in faq_data %}
 ### {{ category.category }}
 
     {% for item in category.questions %}
-**P: {{ item.question }}**
+**Q: {{ item.question }}**
 
 {{ item.answer }}
 
     {% endfor %}
   {% endfor %}
 {% else %}
-⚠️ No hay FAQs cargadas. Responde educadamente que la demostración no está disponible.
+⚠️ No FAQs loaded. Politely inform that the demo is not available.
 
-Si ves este mensaje, contacta a soporte técnico:
+If you see this message, contact technical support:
 - Email: support@tech.com
-- Teléfono: +1-555-TECH-001
+- Phone: +1-555-TECH-001
 {% endif %}
 
 ---

@@ -635,13 +635,16 @@ class PromptManager:
         demo_instructions = self.config.get("database_integration", {}).get("demo_faqs", {})
 
         # Build context for template
+        # CRITICAL: user_lang is passed to template for explicit language instruction
+        # This ensures Gemini responds in the correct language (best practice: first instruction)
         context = {
             "version": version,
             "faq_data": faq_data,
             "remaining_tokens": remaining_tokens or 0,
+            "user_lang": user_lang,  # IMPORTANT: Language for response
             "demo_instructions": {
                 "max_response_tokens": 500,
-                "tone": "amigable, profesional, conciso",
+                "tone": "friendly, professional, concise" if user_lang == "en" else "amigable, profesional, conciso",
             },
         }
 
