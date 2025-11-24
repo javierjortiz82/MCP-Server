@@ -118,8 +118,8 @@ services:
 
   demo-agent:
     build:
-      context: ../demo_agent
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: demo_agent/Dockerfile
     container_name: demo-agent
     restart: unless-stopped
     # Load service-specific configuration from demo_agent/.env

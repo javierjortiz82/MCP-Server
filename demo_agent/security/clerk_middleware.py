@@ -131,6 +131,9 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
             request.state.is_authenticated = False
             return await call_next(request)
 
+        # Extract Origin header for CORS
+        origin = request.headers.get("Origin")
+
         # Extract Authorization header
         auth_header = request.headers.get("Authorization")
 
@@ -141,7 +144,7 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
                 method=request.method
             )
             self.metrics.increment_counter("clerk_auth_missing_header")
-            return self._unauthorized_response("Missing Authorization header")
+            return self._unauthorized_response("Missing Authorization header", origin)
 
         # Validate Bearer token format
         if not auth_header.startswith("Bearer "):
@@ -151,7 +154,8 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
             )
             self.metrics.increment_counter("clerk_auth_invalid_format")
             return self._unauthorized_response(
-                "Invalid Authorization header format. Expected: Bearer <token>"
+                "Invalid Authorization header format. Expected: Bearer <token>",
+                origin
             )
 
         # Extract token
@@ -160,7 +164,7 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
         if not token:
             self.logger.warning("Empty Bearer token")
             self.metrics.increment_counter("clerk_auth_empty_token")
-            return self._unauthorized_response("Empty Bearer token")
+            return self._unauthorized_response("Empty Bearer token", origin)
 
         # Verify token with Clerk
         claims, error = await self.clerk_service.verify_token(token)
@@ -172,7 +176,7 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
                 path=path
             )
             self.metrics.increment_counter("clerk_auth_verification_failed")
-            return self._unauthorized_response(f"Authentication failed: {error}")
+            return self._unauthorized_response(f"Authentication failed: {error}", origin)
 
         # Extract user info from claims
         clerk_user_id = claims.get("sub")  # Clerk user ID
@@ -182,7 +186,7 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
         if not clerk_user_id:
             self.logger.error("Token missing 'sub' claim", claims=claims)
             self.metrics.increment_counter("clerk_auth_missing_sub")
-            return self._unauthorized_response("Invalid token: missing user ID")
+            return self._unauthorized_response("Invalid token: missing user ID", origin)
 
         # If email not in JWT claims, fetch from Clerk API
         # This handles cases where JWT template doesn't include email claim
@@ -203,13 +207,56 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
             fallback_email=email
         )
 
+        # JIT (Just-In-Time) Provisioning: Create user if authenticated in Clerk but not in DB
+        # This handles users who registered before webhook was configured
+        if not db_user and email:
+            self.logger.info(
+                "User authenticated in Clerk but not in database, creating user (JIT provisioning)",
+                clerk_user_id=clerk_user_id,
+                email=email
+            )
+
+            # Extract name from claims or use email as fallback
+            full_name = claims.get("name", email.split("@")[0])
+
+            # Create clerk_metadata from JWT claims
+            clerk_metadata = {
+                "public_metadata": claims.get("public_metadata", {}),
+                "profile_image_url": claims.get("image_url"),
+                "email_verified": email_verified,
+            }
+
+            # Sync user to database
+            user_id, is_new, error = await self.clerk_service.sync_user_from_clerk(
+                clerk_user_id=clerk_user_id,
+                email=email,
+                full_name=full_name,
+                clerk_metadata=clerk_metadata,
+            )
+
+            if error:
+                self.logger.error(
+                    "Failed to create user via JIT provisioning",
+                    error=error,
+                    clerk_user_id=clerk_user_id
+                )
+                # Continue without DB user - user can still access
+            else:
+                self.logger.info(
+                    "User created successfully via JIT provisioning",
+                    user_id=user_id,
+                    email=email
+                )
+                # Fetch the newly created user
+                db_user = await self.clerk_service.get_user_by_clerk_id(clerk_user_id)
+
         # Attach user info to request state
         request.state.user = {
             "clerk_user_id": clerk_user_id,
             "email": email,
             "email_verified": email_verified,
             "db_user_id": db_user["id"] if db_user else None,
-            "full_name": db_user["full_name"] if db_user else claims.get("name"),
+            "full_name": db_user["full_name"] if db_user else claims.get("name", email.split("@")[0]),
             "is_active": db_user["is_active"] if db_user else True,
             "clerk_metadata": db_user.get("clerk_metadata", {}) if db_user else {},
             "preferred_language": db_user.get("preferred_language", "es") if db_user else "es",
@@ -235,20 +282,64 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
             )
             self.metrics.increment_counter("clerk_auth_inactive_user")
             return self._forbidden_response(
-                "Account is inactive. Contact support for assistance."
+                "Account is inactive. Contact support for assistance.",
+                origin
             )
 
         # Proceed to next handler
         return await call_next(request)
 
-    def _unauthorized_response(self, detail: str) -> JSONResponse:
+    def _get_cors_headers(self, origin: str | None = None) -> dict:
+        """Get CORS headers for error responses.
+
+        This ensures error responses include proper CORS headers
+        when middleware returns early (before CORSMiddleware processes response).
+
+        Args:
+            origin: Request origin header value
+
+        Returns:
+            dict: CORS headers to include in response
+        """
+        headers = {}
+
+        # Strip whitespace from allowed origins list
+        allowed_origins = [o.strip() for o in config.CORS_ALLOW_ORIGINS.split(",")]
+
+        self.logger.debug(
+            "Checking CORS headers",
+            origin=origin,
+            allowed_origins=allowed_origins
+        )
+
+        # Only add CORS headers if origin is in allowed list
+        if origin and origin in allowed_origins:
+            headers["Access-Control-Allow-Origin"] = origin.strip()
+            headers["Access-Control-Allow-Credentials"] = str(config.CORS_ALLOW_CREDENTIALS).lower()
+            headers["Vary"] = "Origin"
+            self.logger.debug("CORS headers added", headers=headers)
+        else:
+            self.logger.warning(
+                "Origin not in allowed list - CORS headers not added",
+                origin=origin,
+                origin_present=origin is not None,
+                allowed_origins=allowed_origins
+            )
+
+        return headers
+
+    def _unauthorized_response(self, detail: str, origin: str | None = None) -> JSONResponse:
         """Generate 401 Unauthorized response.
 
         Args:
             detail: Error message describing why auth failed
+            origin: Request origin header (for CORS headers)
 
         Returns:
             JSONResponse: 401 response with error details
+
+        Note: CORS headers are handled by FastAPI's CORSMiddleware.
+        We don't add them manually here to ensure consistency across all responses.
         """
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -261,14 +352,18 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    def _forbidden_response(self, detail: str) -> JSONResponse:
+    def _forbidden_response(self, detail: str, origin: str | None = None) -> JSONResponse:
         """Generate 403 Forbidden response.
 
         Args:
             detail: Error message describing why access is forbidden
+            origin: Request origin header (for CORS headers)
 
         Returns:
             JSONResponse: 403 response with error details
+
+        Note: CORS headers are handled by FastAPI's CORSMiddleware.
+        We don't add them manually here to ensure consistency across all responses.
         """
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
