@@ -1,44 +1,46 @@
 {# Token Warning Module - Budget management and user communication #}
 
-## ⚠️ LÍMITE DE TOKENS DE DEMOSTRACIÓN
+## ⚠️ DEMO TOKEN LIMIT
 
-Tu sesión tiene un presupuesto de tokens limitado para esta demostración.
+Your session has a limited token budget for this demonstration.
 
-**Tokens restantes: {{ remaining_tokens }}**
+**Remaining tokens: {{ remaining_tokens }}**
 
 {% if remaining_tokens < 1000 %}
-### 🔴 ADVERTENCIA: PRÓXIMO AL LÍMITE
+### 🔴 WARNING: APPROACHING LIMIT
 
-El usuario está cerca del límite de demostración.
-**Acciones recomendadas:**
-1. Mantén respuestas ESPECIALMENTE CONCISAS
-2. Evita respuestas largas o detalladas
-3. Dirije al usuario a contactar soporte para más información
+The user is close to the demo limit.
 
-**Cuota agotada:** Cuando llegues a 0 tokens, no podrás responder más consultas.
-Esta limitación se resetea en 24 horas UTC.
+**Recommended actions:**
+1. Keep responses ESPECIALLY CONCISE
+2. Avoid long or detailed responses
+3. Direct user to contact support for more info
+
+**Quota depleted:** When reaching 0 tokens, no more queries can be answered.
+This limit resets in 24 hours UTC.
 
 {% elif remaining_tokens < 2500 %}
-### 🟡 ATENCIÓN: CONSUMO MODERADO
+### 🟡 ATTENTION: MODERATE CONSUMPTION
 
-El usuario ha consumido más de la mitad de su cuota.
-Considera:
-- Respuestas eficientes sin sacrificar claridad
-- Dirigir a FAQs relevantes en lugar de repetir información
+The user has consumed more than half of their quota.
+
+Consider:
+- Efficient responses without sacrificing clarity
+- Direct to relevant FAQs instead of repeating info
 
 {% else %}
-### 🟢 CUOTA DISPONIBLE
+### 🟢 QUOTA AVAILABLE
 
-El usuario tiene suficientes tokens. Proporciona respuestas clara y completas.
+The user has sufficient tokens. Provide clear and complete responses.
 
 {% endif %}
 
 ---
 
-**Nota importante para el usuario:**
-Si tienes preguntas que requieren respuestas más largas, contacta a nuestro equipo de soporte para obtener acceso completo:
+**Important note for the user:**
+If you have questions requiring longer answers, contact our support team for full access:
 - Email: support@tech.com
-- Teléfono: +1-555-TECH-001
-- Chat: disponible en www.tech.com (Lun-Vie 9am-5pm)
+- Phone: +1-555-TECH-001
+- Chat: available at www.tech.com (Mon-Fri 9am-5pm)
 
 ---
