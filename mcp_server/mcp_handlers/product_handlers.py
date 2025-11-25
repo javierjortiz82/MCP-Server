@@ -393,6 +393,49 @@ def register_tools():
 
             await mcp_progress(
                 ctx,
+                2,
+                3,
+                "product.fuzzy_search.progress_fuzzy_complete",
+                result_count=len(results),
+            )
+
+            # FALLBACK: If fuzzy search found nothing or has low confidence, try semantic search
+            # This handles cross-language queries (e.g., "Chair" → "Silla")
+            # Activate fallback if: (1) no results OR (2) results with low similarity (< 0.5)
+            low_confidence_results = results and results[0].get('max_similarity', 1.0) < 0.5
+
+            # Debug: log the similarity score
+            if results:
+                logger.info(f"fuzzy_search_smart result: {len(results)} products, max_similarity={results[0].get('max_similarity', 'N/A')}, search_tier={results[0].get('search_tier', 'unknown')}, will_trigger_fallback={low_confidence_results}")
+
+            if not results or low_confidence_results:
+                await mcp_info(
+                    ctx,
+                    "product.fuzzy_search.info_trying_semantic_fallback",
+                    query=query,
+                )
+                try:
+                    semantic_results = search_tool.search_products(query, k=limit)
+                    if semantic_results:
+                        # Mark results as coming from semantic fallback
+                        for r in semantic_results:
+                            r["search_tier"] = "semantic_fallback"
+                        results = semantic_results
+                        await mcp_info(
+                            ctx,
+                            "product.fuzzy_search.info_semantic_fallback_succeeded",
+                            result_count=len(results),
+                        )
+                except Exception as e:
+                    # Log but don't fail - semantic search is optional fallback
+                    await mcp_debug(
+                        ctx,
+                        "product.fuzzy_search.error_semantic_fallback",
+                        error=str(e),
+                    )
+
+            await mcp_progress(
+                ctx,
                 3,
                 3,
                 "product.fuzzy_search.progress_complete",

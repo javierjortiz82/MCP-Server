@@ -492,11 +492,12 @@ class TelegramAdapter:
                 return
 
             duration = time.time() - start_time
+            confidence_str = f"{ocr_response.confidence:.2f}" if ocr_response.confidence is not None else "N/A"
             logger.info(
-                f"[chat_id={chat_id}] OCR Success | "
-                f"Confidence: {ocr_response.confidence:.2f} | "
+                f"[chat_id={chat_id}] Analyze Success | "
+                f"Confidence: {confidence_str} | "
                 f"Duration: {duration:.2f}s | "
-                f"Text length: {len(ocr_response.text)} chars"
+                f"Result length: {len(ocr_response.text or '')} chars"
             )
 
             # Procesar texto extraído
@@ -590,11 +591,12 @@ class TelegramAdapter:
                 return
 
             duration = time.time() - start_time
+            confidence_str = f"{ocr_response.confidence:.2f}" if ocr_response.confidence is not None else "N/A"
             logger.info(
-                f"[chat_id={chat_id}] OCR Success | "
-                f"Confidence: {ocr_response.confidence:.2f} | "
+                f"[chat_id={chat_id}] Analyze Success | "
+                f"Confidence: {confidence_str} | "
                 f"Duration: {duration:.2f}s | "
-                f"Text length: {len(ocr_response.text)} chars"
+                f"Result length: {len(ocr_response.text or '')} chars"
             )
 
             # Procesar texto extraído
