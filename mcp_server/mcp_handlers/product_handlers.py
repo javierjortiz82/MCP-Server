@@ -404,10 +404,6 @@ def register_tools():
             # Activate fallback if: (1) no results OR (2) results with low similarity (< 0.5)
             low_confidence_results = results and results[0].get('max_similarity', 1.0) < 0.5
 
-            # Debug: log the similarity score
-            if results:
-                logger.info(f"fuzzy_search_smart result: {len(results)} products, max_similarity={results[0].get('max_similarity', 'N/A')}, search_tier={results[0].get('search_tier', 'unknown')}, will_trigger_fallback={low_confidence_results}")
-
             if not results or low_confidence_results:
                 await mcp_info(
                     ctx,
@@ -442,16 +438,20 @@ def register_tools():
                 result_count=len(results),
             )
 
-            # Log search tier information
+            # Log search tier information and final debug details
             if results and len(results) > 0:
                 tier = results[0].get("search_tier", "unknown")
+                max_sim = results[0].get("max_similarity", "N/A")
                 await mcp_info(
                     ctx,
                     "product.fuzzy_search.info_succeeded",
                     tier=tier,
                 )
+                # Debug: log final result count and similarity
+                logger.info(f"fuzzy_search_smart result: {len(results)} products, max_similarity={max_sim}, search_tier={tier}")
             else:
                 await mcp_info(ctx, "product.fuzzy_search.info_no_results")
+                logger.info("fuzzy_search_smart result: 0 products (no matches found)")
 
             # MCP protocol issue: returning a list directly only sends first item
             # Wrap in object to ensure all items are transmitted
