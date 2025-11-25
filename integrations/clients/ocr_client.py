@@ -1,9 +1,9 @@
-"""OCRClient - Cliente para OCR-Multilang Service.
+"""OCRClient - Cliente para OCR Service.
 
 Cliente HTTP para el servicio de extracción de texto desde imágenes y documentos.
 
-Service endpoint: http://localhost:8004/extract
-Method: POST (application/x-www-form-urlencoded)
+Service endpoint: http://localhost:8004/ocr
+Method: POST (application/json)
 
 Author: Lab01-MCP Team
 Created: 2025-11-11
@@ -130,30 +130,44 @@ class OCRClient:
         # Codificar archivo en base64
         file_data_b64 = base64.b64encode(file_bytes).decode("utf-8")
 
-        # Preparar datos para form-urlencoded
-        form_data = {
+        # Adaptar client_id al formato requerido: "user_id:chat_id"
+        # Si ya tiene ":", lo dejamos; si no, usamos "telegram:client_id"
+        if ":" not in client_id:
+            formatted_client_id = f"telegram:{client_id}"
+        else:
+            formatted_client_id = client_id
+
+        # Preparar payload JSON para el nuevo servicio OCR
+        payload = {
             "file_data": file_data_b64,
             "file_type": file_type.lower(),
-            "client_id": client_id,
-            "quality": quality
+            "client_id": formatted_client_id,
+            "quality": quality,
+            "enable_preprocessing": True,
+            "return_confidence": True
         }
 
+        # Convertir language_hints de string "en,es" a lista ["en", "es"]
         if language_hints:
-            form_data["language_hints"] = language_hints
+            if isinstance(language_hints, str):
+                payload["language_hints"] = [lang.strip() for lang in language_hints.split(",")]
+            else:
+                payload["language_hints"] = language_hints
 
         headers = {
-            "Accept": "application/json"
+            "Accept": "application/json",
+            "Content-Type": "application/json"
         }
 
         try:
             logger.info(
-                f"[OCR] Extracting text from {file_type} for client_id={client_id}, "
+                f"[OCR] Extracting text from {file_type} for client_id={formatted_client_id}, "
                 f"quality={quality}"
             )
 
             response = await self.http_client.post(
-                f"{self.base_url}/extract",
-                data=form_data,
+                f"{self.base_url}/ocr",
+                json=payload,
                 headers=headers
             )
 
