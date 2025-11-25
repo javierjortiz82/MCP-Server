@@ -151,6 +151,10 @@ class ResponseProcessor:
         Returns:
             Text with debug info appended
         """
+        # Early return if debug info is disabled
+        if not settings.SHOW_TOOL_DEBUG_INFO:
+            return text
+
         if not self.tool_executor:
             return text
 
