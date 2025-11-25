@@ -28,9 +28,12 @@
     "progress_tier2": "Tier 2: Word similarity search",
     "progress_tier25": "Tier 2.5: Token-based search",
     "progress_tier3": "Tier 3: Relaxed threshold fallback",
+    "progress_fuzzy_complete": "Fuzzy search completed with {result_count} results",
     "progress_complete": "Search completed with {result_count} results",
     "info_succeeded": "Smart fuzzy search succeeded at tier: {tier}",
     "info_no_results": "Smart fuzzy search found no results",
+    "info_trying_semantic_fallback": "Fuzzy results have low confidence, trying semantic search for: '{query}'",
+    "info_semantic_fallback_succeeded": "Semantic fallback search found {result_count} results",
     "error_general": "Error in smart fuzzy search: {error}"
   },
   "ingest": {

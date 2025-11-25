@@ -28,9 +28,12 @@
     "progress_tier2": "Nivel 2: Búsqueda de similitud de palabras",
     "progress_tier25": "Nivel 2.5: Búsqueda basada en tokens",
     "progress_tier3": "Nivel 3: Fallback con umbral relajado",
+    "progress_fuzzy_complete": "Búsqueda difusa completada con {result_count} resultados",
     "progress_complete": "Búsqueda completada con {result_count} resultados",
     "info_succeeded": "Búsqueda difusa inteligente exitosa en nivel: {tier}",
     "info_no_results": "Búsqueda difusa inteligente sin resultados",
+    "info_trying_semantic_fallback": "Los resultados de búsqueda difusa tienen baja confianza, intentando búsqueda semántica para: '{query}'",
+    "info_semantic_fallback_succeeded": "Búsqueda de fallback semántico encontró {result_count} resultados",
     "error_general": "Error en búsqueda difusa inteligente: {error}"
   },
   "ingest": {
