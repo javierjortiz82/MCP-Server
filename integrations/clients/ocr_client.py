@@ -1,8 +1,9 @@
-"""OCRClient - Cliente para OCR Service.
+"""OCRClient - Cliente para Image Analysis Service.
 
-Cliente HTTP para el servicio de extracción de texto desde imágenes y documentos.
+Cliente HTTP para el servicio de análisis de imágenes y documentos.
+Soporta OCR automático y detección de objetos.
 
-Service endpoint: http://localhost:8004/ocr
+Service endpoint: http://localhost:8004/analyze
 Method: POST (application/json)
 
 Author: Lab01-MCP Team
@@ -137,14 +138,17 @@ class OCRClient:
         else:
             formatted_client_id = client_id
 
-        # Preparar payload JSON para el nuevo servicio OCR
+        # Preparar payload JSON para el servicio de análisis
         payload = {
             "file_data": file_data_b64,
             "file_type": file_type.lower(),
             "client_id": formatted_client_id,
+            "mode": "auto",  # auto, ocr, detection, both
             "quality": quality,
             "enable_preprocessing": True,
-            "return_confidence": True
+            "classification_threshold": 0.8,
+            "max_detection_results": 10,
+            "min_detection_confidence": 0.5
         }
 
         # Convertir language_hints de string "en,es" a lista ["en", "es"]
@@ -161,12 +165,12 @@ class OCRClient:
 
         try:
             logger.info(
-                f"[OCR] Extracting text from {file_type} for client_id={formatted_client_id}, "
-                f"quality={quality}"
+                f"[Analyze] Processing {file_type} for client_id={formatted_client_id}, "
+                f"mode=auto, quality={quality}"
             )
 
             response = await self.http_client.post(
-                f"{self.base_url}/ocr",
+                f"{self.base_url}/analyze",
                 json=payload,
                 headers=headers
             )
@@ -174,90 +178,72 @@ class OCRClient:
             response.raise_for_status()
             result = response.json()
 
-            # Parsear respuesta según formato del servidor
-            # El servidor OCR tiene 3 formatos posibles:
+            # Parsear respuesta de AnalyzeResponse
+            # Campos: result, classification, ocr_result, detection_result, processing_time, etc.
 
-            # Caso 1: Éxito (formato real del servidor - tiene "text" sin "error")
-            if "text" in result and "error" not in result:
-                ocr_response = OCRResponse(
-                    success=True,
-                    text=result.get("text"),
-                    confidence=result.get("confidence")
-                )
-
-                text_preview = ocr_response.text[:100] if ocr_response.text else ""
-                logger.info(
-                    f"[OCR] ✅ Success - Extracted {len(ocr_response.text or '')} chars "
-                    f"(confidence: {ocr_response.confidence:.2f}) - Preview: '{text_preview}...'"
-                )
-
-                return ocr_response
-
-            # Caso 2: Error (formato real del servidor - tiene campo "error")
-            elif "error" in result:
-                # El servidor envía "message" con el error legible
+            # Caso 1: Error explícito
+            if "error" in result:
                 error_message = result.get("message", result.get("error", "Unknown error"))
-
                 ocr_response = OCRResponse(
                     success=False,
                     error=error_message
                 )
-
-                logger.warning(
-                    f"[OCR] ❌ Failed - Error: {ocr_response.error} "
-                    f"(code: {result.get('error', 'N/A')})"
-                )
-
+                logger.warning(f"[Analyze] ❌ Failed - Error: {ocr_response.error}")
                 return ocr_response
 
-            # Caso 3: Formato documentado (por compatibilidad futura)
-            elif "success" in result:
-                if result.get("success"):
-                    ocr_response = OCRResponse(
-                        success=True,
-                        text=result.get("text"),
-                        confidence=result.get("confidence")
-                    )
+            # Caso 2: Respuesta exitosa de AnalyzeResponse
+            # El campo "result" contiene el texto unificado (OCR o descripción de objeto)
+            text = result.get("result") or ""
+            confidence = None
 
-                    text_preview = ocr_response.text[:100] if ocr_response.text else ""
-                    logger.info(
-                        f"[OCR] ✅ Success (documented format) - Extracted {len(ocr_response.text or '')} chars "
-                        f"(confidence: {ocr_response.confidence:.2f}) - Preview: '{text_preview}...'"
-                    )
+            # Extraer confidence de ocr_result si existe
+            ocr_result = result.get("ocr_result")
+            if ocr_result:
+                confidence = ocr_result.get("confidence")
+                # Si result está vacío pero hay texto en ocr_result, usarlo
+                if not text and ocr_result.get("text"):
+                    text = ocr_result.get("text")
 
-                    return ocr_response
-                else:
-                    ocr_response = OCRResponse(
-                        success=False,
-                        error=result.get("error", "Unknown error")
-                    )
+            # Si no hay ocr_result, intentar de detection_result
+            detection_result = result.get("detection_result")
+            if detection_result:
+                objects = detection_result.get("objects", [])
+                if objects:
+                    # Usar el score del primer objeto detectado
+                    if confidence is None:
+                        confidence = objects[0].get("score")
+                    # Si result está vacío pero hay objetos detectados, usar el nombre
+                    if not text:
+                        text = objects[0].get("name", "")
 
-                    logger.warning(f"[OCR] ❌ Failed (documented format) - Error: {ocr_response.error}")
+            # Obtener clasificación para logging
+            classification = result.get("classification", {})
+            classification_type = classification.get("classification", "unknown")
 
-                    return ocr_response
+            ocr_response = OCRResponse(
+                success=True,
+                text=text,
+                confidence=confidence
+            )
 
-            # Caso 4: Formato desconocido
-            else:
-                logger.error(
-                    f"[OCR] ⚠️ Unknown response format from OCR service. "
-                    f"Response keys: {list(result.keys())}"
-                )
+            text_preview = text[:100] if text else ""
+            confidence_str = f"{confidence:.2f}" if confidence is not None else "N/A"
+            logger.info(
+                f"[Analyze] ✅ Success ({classification_type}) - "
+                f"Result: {len(text or '')} chars (confidence: {confidence_str}) - "
+                f"Preview: '{text_preview}...'"
+            )
 
-                ocr_response = OCRResponse(
-                    success=False,
-                    error="Invalid response format from OCR service"
-                )
-
-                return ocr_response
+            return ocr_response
 
         except httpx.HTTPError as e:
-            logger.error(f"[OCR] HTTP Error: {e}")
+            logger.error(f"[Analyze] HTTP Error: {e}")
             return OCRResponse(
                 success=False,
                 error=f"HTTP error: {str(e)}"
             )
         except Exception as e:
-            logger.error(f"[OCR] Unexpected error: {e}")
+            logger.error(f"[Analyze] Unexpected error: {e}")
             return OCRResponse(
                 success=False,
                 error=f"Unexpected error: {str(e)}"
@@ -345,5 +331,5 @@ class OCRClient:
             result = response.json()
             return result.get("status") == "healthy"
         except Exception as e:
-            logger.error(f"[OCR] Health check failed: {e}")
+            logger.error(f"[Analyze] Health check failed: {e}")
             return False
