@@ -120,6 +120,11 @@ class Settings(BaseSettings):
         description="Enable debug mode",
     )
 
+    SHOW_TOOL_DEBUG_INFO: bool = Field(
+        default=False,
+        description="Show tool execution debug info in responses (🔧 DEBUG INFO)",
+    )
+
     ENABLE_LOGGING: bool = Field(
         default=True,
         description="Enable logging",
