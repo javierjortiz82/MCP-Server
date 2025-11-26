@@ -7,7 +7,10 @@ Created: 2025-11-10
 Version: 1.0.0
 """
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from demo_agent.config.settings import config
 from demo_agent.db.connection import get_db

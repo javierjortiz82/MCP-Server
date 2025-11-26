@@ -10,6 +10,7 @@ Version: 1.0.0
 import json
 import time
 from datetime import datetime, timezone
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -471,9 +472,9 @@ async def demo_query(request_data: DemoRequest, request: Request) -> DemoRespons
 
 @router.get("/status")
 async def demo_status(
+    request: Request,
     user_id: int | None = Query(None, description="User ID (required for OTP users, optional for Clerk OAuth users)"),
-    request: Request | None = None
-) -> dict[str, Any]:
+) -> dict[str, Any] | JSONResponse:
     """Get authenticated user's current quota status.
 
     Requires Clerk authentication. Extracts user_id from JWT token.
@@ -551,7 +552,7 @@ async def demo_status(
         # Get quota status
         status = await demo_agent.get_user_status(user_key)
         logger.info(f"demo_status: Returning status = {status}")
-        return status
+        return status  # type: ignore[no-any-return]
 
     except HTTPException:
         logger.error("demo_status: HTTPException raised")
@@ -563,10 +564,10 @@ async def demo_status(
 
 @router.get("/history")
 async def get_demo_history(
+    request: Request,
     limit: int = Query(100, description="Maximum number of messages to return"),
     user_id: int | None = Query(None, description="User ID (required for OTP users, optional for Clerk OAuth users)"),
-    request: Request | None = None,
-) -> dict[str, Any]:
+) -> dict[str, Any] | JSONResponse:
     """Retrieve user's complete conversation history (all devices, all sessions).
 
     Requires Clerk authentication. Returns all messages for the authenticated user.
@@ -711,12 +712,12 @@ async def get_demo_history(
 
 @router.post("/verify-captcha", tags=["Security"])
 async def verify_captcha(
+    request: Request,
     token: str = Query(..., description="reCAPTCHA v3 response token"),
     user_id: str | None = Query(None, description="Authenticated user ID"),
     session_id: str | None = Query(None, description="Anonymous session ID"),
     remote_ip: str | None = Query(None, description="Client IP address"),
-    request: Request | None = None,
-) -> dict[str, Any]:
+) -> dict[str, Any] | JSONResponse:
     """Verify reCAPTCHA v3 token.
 
     Query Parameters:

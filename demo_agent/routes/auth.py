@@ -7,7 +7,10 @@ Created: 2025-11-10
 Version: 1.0.0
 """
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from demo_agent import auth_endpoints
 from demo_agent.logger import logger
@@ -26,7 +29,7 @@ from demo_agent.services.clerk_service import get_clerk_service
 router = APIRouter(prefix="/v1/auth", tags=["Authentication"])
 
 
-def get_services(request: Request) -> tuple[Any, Any]:
+def get_services(request: Request) -> tuple[Any, Any, Any]:
     """Get service instances from app state.
 
     Args:
