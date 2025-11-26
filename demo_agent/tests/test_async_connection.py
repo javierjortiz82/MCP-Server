@@ -7,14 +7,15 @@ Created: 2025-11-03
 Version: 1.0.0
 """
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from demo_agent.db.connection import (
     AsyncDatabaseConnection,
+    close_db,
     get_db,
     init_db,
-    close_db,
 )
 
 

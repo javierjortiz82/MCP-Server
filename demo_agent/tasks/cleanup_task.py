@@ -16,11 +16,10 @@ Version: 1.0.0
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import create_engine, and_, or_
-from sqlalchemy.orm import sessionmaker
-
 from demo_agent.config.settings import config
 from demo_agent.db.models import Base
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 # Setup logger
 logger = logging.getLogger(__name__)

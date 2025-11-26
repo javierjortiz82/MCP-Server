@@ -40,10 +40,9 @@ Created: 2025-11-07
 Version: 1.0.0 (Security-Hardened - Phase 4)
 """
 
-import json
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from demo_agent.logger import logger
 
@@ -156,13 +155,13 @@ class SecurityAuditLogger:
         self,
         event_type: SecurityEventType,
         severity: SecurityEventSeverity,
-        user_id: Optional[int] = None,
-        ip_address: Optional[str] = None,
-        endpoint: Optional[str] = None,
+        user_id: int | None = None,
+        ip_address: str | None = None,
+        endpoint: str | None = None,
         success: bool = False,
-        message: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        correlation_id: Optional[str] = None,
+        message: str | None = None,
+        details: dict[str, Any] | None = None,
+        correlation_id: str | None = None,
     ) -> None:
         """Log a security event with structured data.
 
@@ -206,7 +205,7 @@ class SecurityAuditLogger:
         else:  # LOW
             logger.info(log_message, **log_entry)
 
-    def _sanitize_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+    def _sanitize_details(self, details: dict[str, Any]) -> dict[str, Any]:
         """Sanitize details dict to remove sensitive data.
 
         SECURITY (CWE-532 fix): Prevents sensitive data exposure in logs.
@@ -299,7 +298,7 @@ class SecurityAuditLogger:
 
 
 # Global instance
-_audit_logger: Optional[SecurityAuditLogger] = None
+_audit_logger: SecurityAuditLogger | None = None
 
 
 def get_audit_logger(enable_pii_logging: bool = False) -> SecurityAuditLogger:
@@ -322,11 +321,11 @@ def get_audit_logger(enable_pii_logging: bool = False) -> SecurityAuditLogger:
 # Convenience functions for common security events
 
 def log_auth_failure(
-    user_id: Optional[int],
+    user_id: int | None,
     ip_address: str,
     endpoint: str,
     reason: str,
-    correlation_id: Optional[str] = None,
+    correlation_id: str | None = None,
 ) -> None:
     """Log authentication failure event.
 
@@ -355,7 +354,7 @@ def log_rate_limit_exceeded(
     endpoint: str,
     tokens_used: int,
     tokens_limit: int,
-    correlation_id: Optional[str] = None,
+    correlation_id: str | None = None,
 ) -> None:
     """Log rate limit exceeded event.
 
@@ -381,12 +380,12 @@ def log_rate_limit_exceeded(
 
 
 def log_input_validation_failed(
-    user_id: Optional[int],
+    user_id: int | None,
     ip_address: str,
     endpoint: str,
     field_name: str,
     reason: str,
-    correlation_id: Optional[str] = None,
+    correlation_id: str | None = None,
 ) -> None:
     """Log input validation failure event.
 
@@ -412,12 +411,12 @@ def log_input_validation_failed(
 
 
 def log_suspicious_behavior(
-    user_id: Optional[int],
+    user_id: int | None,
     ip_address: str,
     endpoint: str,
     behavior_type: str,
-    details: Optional[Dict[str, Any]] = None,
-    correlation_id: Optional[str] = None,
+    details: dict[str, Any] | None = None,
+    correlation_id: str | None = None,
 ) -> None:
     """Log suspicious behavior detection event.
 

@@ -9,7 +9,6 @@ Version: 1.0.0
 """
 
 import asyncio
-import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,7 +52,7 @@ async def run_real_user_e2e_test():
     print(f"  Question:             {question}")
     print(f"  Language:             {language}")
     print(f"  Session ID:           {session_id}")
-    print(f"  IP Address:           127.0.0.1")
+    print("  IP Address:           127.0.0.1")
     print(f"  Timestamp:            {datetime.now(timezone.utc).isoformat()}")
 
     # ========================================================================
@@ -84,7 +83,7 @@ async def run_real_user_e2e_test():
     print(f"  Status:               {status['status']}")
 
     if status['status'] != 'ready':
-        print(f"  ❌ ERROR: reCAPTCHA not ready!")
+        print("  ❌ ERROR: reCAPTCHA not ready!")
         return False
 
     print("  ✅ reCAPTCHA ready for use")
@@ -107,7 +106,7 @@ async def run_real_user_e2e_test():
     }
 
     print(f"  Token:                test-token-{user_id}")
-    print(f"  Remote IP:            127.0.0.1")
+    print("  Remote IP:            127.0.0.1")
 
     with patch("requests.post") as mock_post:
         mock_post.return_value.json.return_value = mock_google_response
@@ -118,14 +117,14 @@ async def run_real_user_e2e_test():
             remote_ip="127.0.0.1"
         )
 
-    print(f"\n  Response from Google:")
+    print("\n  Response from Google:")
     print(f"    • Success:          {token_result['success']}")
     print(f"    • Score:            {token_result['score']}")
     print(f"    • Action:           {token_result['action']}")
-    print(f"    • Risk Level:       ", end="")
+    print("    • Risk Level:       ", end="")
 
     if not token_result['success']:
-        print(f"❌ VERIFICATION FAILED")
+        print("❌ VERIFICATION FAILED")
         return False
 
     print("✅ LOW RISK")
@@ -155,8 +154,8 @@ async def run_real_user_e2e_test():
     # Simulate fingerprint analysis
     abuse_score = 0.12  # Low abuse score (legitimate user)
 
-    print(f"  Fingerprint:          test-fingerprint-javier")
-    print(f"  User Agent:           Mozilla/5.0 (E2E Test)")
+    print("  Fingerprint:          test-fingerprint-javier")
+    print("  User Agent:           Mozilla/5.0 (E2E Test)")
     print(f"  Abuse Score:          {abuse_score}")
 
     require_captcha, reason = await captcha_handler.should_require_captcha(
@@ -167,7 +166,7 @@ async def run_real_user_e2e_test():
 
     print(f"  CAPTCHA Requerido:    {require_captcha}")
     if not require_captcha:
-        print(f"  ✅ Usuario legítimo - proceder sin CAPTCHA adicional")
+        print("  ✅ Usuario legítimo - proceder sin CAPTCHA adicional")
     else:
         print(f"  ⚠️  Razón: {reason}")
 
@@ -191,14 +190,14 @@ async def run_real_user_e2e_test():
     tokens_used = 187
     tokens_remaining = 5000 - tokens_used
 
-    print(f"  Model:                Gemini 2.5 Flash")
-    print(f"  Input Tokens:         ~45")
+    print("  Model:                Gemini 2.5 Flash")
+    print("  Input Tokens:         ~45")
     print(f"  Output Tokens:        ~{tokens_used}")
     print(f"  Total Tokens Used:    {tokens_used}")
-    print(f"\n  Response Generated:")
-    print(f"  ────────────────────────────────────────────────────────────────────")
+    print("\n  Response Generated:")
+    print("  ────────────────────────────────────────────────────────────────────")
     print(f"  {mock_gemini_answer}")
-    print(f"  ────────────────────────────────────────────────────────────────────")
+    print("  ────────────────────────────────────────────────────────────────────")
 
     # ========================================================================
     # STEP 7: Build Complete Response
@@ -233,9 +232,9 @@ async def run_real_user_e2e_test():
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    print(f"  ✅ Response Object Constructed")
-    print(f"  ✅ All validations passed")
-    print(f"  ✅ Ready to send to client")
+    print("  ✅ Response Object Constructed")
+    print("  ✅ All validations passed")
+    print("  ✅ Ready to send to client")
 
     # ========================================================================
     # STEP 8: Response Summary
@@ -244,16 +243,16 @@ async def run_real_user_e2e_test():
     print("\n[STEP 8] Resumen de la respuesta...")
     print("-" * 90)
 
-    print(f"\n  📊 RESPONSE DETAILS:")
+    print("\n  📊 RESPONSE DETAILS:")
     print(f"  ├─ Success:                   {response['success']}")
-    print(f"  ├─ HTTP Status:               200 OK")
+    print("  ├─ HTTP Status:               200 OK")
     print(f"  ├─ Response Length:           {len(response['response'])} caracteres")
     print(f"  ├─ Tokens Used:               {response['tokens_used']}")
     print(f"  ├─ Tokens Remaining:          {response['tokens_remaining']}")
     print(f"  ├─ Usage %:                   {response['warning']['percentage_used']}%")
     print(f"  └─ Warning:                   {response['warning']['is_warning']}")
 
-    print(f"\n  🔐 SECURITY DETAILS:")
+    print("\n  🔐 SECURITY DETAILS:")
     print(f"  ├─ reCAPTCHA Verified:        {response['recaptcha_status']['verified']}")
     print(f"  ├─ reCAPTCHA Score:           {response['recaptcha_status']['score']}")
     print(f"  ├─ Risk Level:                {response['recaptcha_status']['risk_level'].upper()}")

@@ -17,7 +17,6 @@ from datetime import datetime, timedelta, timezone
 
 from demo_agent.config.settings import config
 from demo_agent.db.connection import get_db
-from demo_agent.logger import logger
 from demo_agent.observability.metrics import get_metrics_collector
 from demo_agent.observability.structured_logger import get_structured_logger
 
@@ -236,7 +235,7 @@ class TokenBucket:
                 self.metrics.increment_counter("quota_checks")
                 return can_proceed, max(0, tokens_remaining)
 
-        except Exception as e:
+        except Exception:
             self.logger.exception(
                 "Error in check_quota",
                 user_key=user_key
@@ -338,7 +337,7 @@ class TokenBucket:
                 self.metrics.increment_counter("tokens_deducted", tokens_used)
                 return tokens_remaining
 
-        except Exception as e:
+        except Exception:
             self.logger.exception(
                 "Error in deduct_tokens",
                 user_key=user_key
@@ -449,7 +448,7 @@ class TokenBucket:
                     },
                 }
 
-        except Exception as e:
+        except Exception:
             self.logger.exception(
                 "Error in get_quota_status",
                 user_key=user_key
@@ -581,7 +580,7 @@ class TokenBucket:
                 self.metrics.increment_counter("tokens_refunded", tokens_to_refund)
                 return tokens_remaining
 
-        except Exception as e:
+        except Exception:
             self.logger.exception(
                 "Error in refund_tokens",
                 user_key=user_key
@@ -628,7 +627,7 @@ class TokenBucket:
                 self.metrics.increment_counter("admin_unblocks")
                 return True
 
-        except Exception as e:
+        except Exception:
             self.logger.exception(
                 "Error in unblock_user",
                 user_key=user_key

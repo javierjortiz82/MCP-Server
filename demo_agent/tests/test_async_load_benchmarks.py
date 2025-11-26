@@ -21,16 +21,15 @@ import asyncio
 import statistics
 import time
 import uuid
-from typing import List, Tuple
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+
 from demo_agent.models.user import UserRegisterRequest
 from demo_agent.rate_limiter.token_bucket import TokenBucket
 from demo_agent.services.otp_service import OTPService
 from demo_agent.services.user_service import UserService
-
 
 # ============================================================================
 # Benchmarking Utilities
@@ -40,7 +39,7 @@ from demo_agent.services.user_service import UserService
 class BenchmarkResult:
     """Store and analyze benchmark results."""
 
-    def __init__(self, name: str, durations: List[float]):
+    def __init__(self, name: str, durations: list[float]):
         """Initialize benchmark result."""
         self.name = name
         self.durations = sorted(durations)
@@ -596,7 +595,6 @@ async def test_latency_consistency_otp_service(otp_service):
 @pytest.mark.asyncio
 async def test_concurrent_operations_no_memory_leak(token_bucket):
     """Test that concurrent operations don't leak resources."""
-    import sys
 
     async def quota_check(user_id: int):
         user_key = f"user_{user_id}"

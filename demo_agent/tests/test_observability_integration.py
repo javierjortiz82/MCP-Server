@@ -17,10 +17,9 @@ Version: 1.0.0
 
 import asyncio
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-import pytest_asyncio
 
 from demo_agent.observability.context import (
     clear_request_context,
@@ -32,8 +31,6 @@ from demo_agent.observability.metrics import (
     get_metrics_collector,
     reset_metrics_collector,
 )
-from demo_agent.observability.structured_logger import get_structured_logger
-
 
 # ============================================================================
 # TokenBucket Service Observability Tests

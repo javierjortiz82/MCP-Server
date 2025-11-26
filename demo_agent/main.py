@@ -32,12 +32,6 @@ from demo_agent.observability.context import (
 )
 from demo_agent.observability.correlation import CorrelationID
 from demo_agent.observability.metrics import get_metrics_collector
-from demo_agent.scheduler.cleanup_scheduler import init_cleanup_scheduler
-from demo_agent.security.clerk_middleware import ClerkAuthMiddleware
-from demo_agent.security.session_expiry_middleware import SessionExpiryMiddleware
-from demo_agent.services.email_integration import EmailIntegrationService
-from demo_agent.services.otp_service import OTPService
-from demo_agent.services.user_service import UserService
 
 # Import modular routers
 from demo_agent.routes import (
@@ -47,7 +41,12 @@ from demo_agent.routes import (
     health_router,
     webhooks_router,
 )
-
+from demo_agent.scheduler.cleanup_scheduler import init_cleanup_scheduler
+from demo_agent.security.clerk_middleware import ClerkAuthMiddleware
+from demo_agent.security.session_expiry_middleware import SessionExpiryMiddleware
+from demo_agent.services.email_integration import EmailIntegrationService
+from demo_agent.services.otp_service import OTPService
+from demo_agent.services.user_service import UserService
 
 # ============================================================================
 # Lifespan Events
@@ -330,7 +329,7 @@ def create_app() -> FastAPI:
             metrics.increment_counter("http_requests_successful")
             return response
 
-        except Exception as e:
+        except Exception:
             logger.exception("Error in request", extra={"correlation_id": correlation_id})
             metrics.increment_counter("http_requests_errors")
             raise

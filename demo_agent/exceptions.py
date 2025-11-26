@@ -12,7 +12,7 @@ Author: Lab01-MCP Team
 Created: 2025-11-03
 """
 
-from typing import Any, Optional
+from typing import Any
 
 
 class DemoAgentError(Exception):
@@ -21,8 +21,8 @@ class DemoAgentError(Exception):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        context: Optional[dict[str, Any]] = None,
+        error_code: str | None = None,
+        context: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.message = message
@@ -44,7 +44,7 @@ class AuthenticationError(DemoAgentError):
         self,
         message: str,
         error_code: str = "AUTH_ERR",
-        context: Optional[dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message, error_code, context)
 
@@ -56,7 +56,7 @@ class RateLimitError(DemoAgentError):
         self,
         message: str,
         error_code: str = "RATELIMIT_ERR",
-        context: Optional[dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message, error_code, context)
 
@@ -68,7 +68,7 @@ class QuotaExceededError(DemoAgentError):
         self,
         message: str,
         error_code: str = "QUOTA_ERR",
-        context: Optional[dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message, error_code, context)
 
@@ -80,7 +80,7 @@ class CaptchaError(DemoAgentError):
         self,
         message: str,
         error_code: str = "CAPTCHA_ERR",
-        context: Optional[dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message, error_code, context)
 
@@ -92,6 +92,6 @@ class ValidationError(DemoAgentError):
         self,
         message: str,
         error_code: str = "VAL_ERR",
-        context: Optional[dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message, error_code, context)

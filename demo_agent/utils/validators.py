@@ -10,8 +10,6 @@ Version: 1.0.0 (Security-Hardened)
 
 import re
 import uuid
-from typing import Optional
-
 
 # SECURITY (CWE-1333 fix): ReDoS-safe email pattern
 # This pattern is carefully designed to avoid catastrophic backtracking:
@@ -33,7 +31,7 @@ MAX_LOCAL_PART_LENGTH = 64  # RFC 5321
 MAX_DOMAIN_LENGTH = 253  # RFC 1035
 
 
-def validate_email_safe(email: str) -> tuple[bool, Optional[str]]:
+def validate_email_safe(email: str) -> tuple[bool, str | None]:
     """Validate email address with ReDoS protection.
 
     SECURITY (CWE-1333 fix): ReDoS-resistant email validation that:
@@ -171,7 +169,7 @@ def sanitize_email(email: str) -> str:
     return email
 
 
-def validate_otp_code_safe(otp: str) -> tuple[bool, Optional[str]]:
+def validate_otp_code_safe(otp: str) -> tuple[bool, str | None]:
     """Validate OTP code with security checks.
 
     SECURITY: Validates OTP is exactly 6 digits without allowing
@@ -211,7 +209,7 @@ def validate_otp_code_safe(otp: str) -> tuple[bool, Optional[str]]:
     return True, None
 
 
-def validate_session_id(session_id: str) -> tuple[bool, Optional[str]]:
+def validate_session_id(session_id: str) -> tuple[bool, str | None]:
     """Validate session ID is a properly formatted UUID.
 
     SECURITY (CWE-384 mitigation): Prevents session fixation by ensuring
@@ -251,7 +249,7 @@ def validate_session_id(session_id: str) -> tuple[bool, Optional[str]]:
         return False, "Invalid session ID format"
 
 
-def validate_password_strength(password: str) -> tuple[bool, Optional[str]]:
+def validate_password_strength(password: str) -> tuple[bool, str | None]:
     """Validate password meets security requirements.
 
     SECURITY: Enforces strong password policy:

@@ -7,11 +7,11 @@ Tests:
 """
 
 import asyncio
-import sys
 import json
+import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
-import os
 
 # Load environment variables from .env file first
 env_path = Path(__file__).parent / ".env"
@@ -22,8 +22,8 @@ if env_path.exists():
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from demo_agent.security.captcha_handler import CaptchaHandler
 from demo_agent.config.settings import config
+from demo_agent.security.captcha_handler import CaptchaHandler
 
 
 async def test_captcha_handler():

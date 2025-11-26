@@ -13,8 +13,7 @@ Version: 1.0.0 (Security-Hardened)
 
 import html
 import re
-from typing import Any, Dict, Optional
-
+from typing import Any
 
 # Maximum lengths for various fields (DoS prevention)
 MAX_INPUT_LENGTH = 10000  # User queries
@@ -140,7 +139,7 @@ def sanitize_error_message(error: Exception, include_details: bool = False) -> s
     return sanitize_html(error_str)
 
 
-def sanitize_response_data(data: Dict[str, Any]) -> Dict[str, Any]:
+def sanitize_response_data(data: dict[str, Any]) -> dict[str, Any]:
     """Sanitize API response data to prevent XSS and information disclosure.
 
     SECURITY: Recursively sanitizes all string values in response objects

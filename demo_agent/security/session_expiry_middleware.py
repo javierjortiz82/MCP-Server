@@ -16,18 +16,18 @@ Created: 2025-11-18
 Version: 1.0.0
 """
 
-from typing import Callable, Set
+from collections.abc import Callable
 
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session as DbSession
+from sqlalchemy.orm import sessionmaker
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from demo_agent.config.settings import config
 from demo_agent.db.models import DemoSession
 from demo_agent.logger import logger
 from demo_agent.services.session_service import SessionService
-from starlette.middleware.base import BaseHTTPMiddleware
 
 
 class SessionExpiryMiddleware(BaseHTTPMiddleware):
@@ -47,7 +47,7 @@ class SessionExpiryMiddleware(BaseHTTPMiddleware):
     """
 
     # Public routes exempt from session validation
-    PUBLIC_PATHS: Set[str] = {
+    PUBLIC_PATHS: set[str] = {
         "/health",
         "/metrics",
         "/docs",
@@ -133,7 +133,7 @@ class SessionExpiryMiddleware(BaseHTTPMiddleware):
             if SessionService.is_session_expired(session):
                 expiry_reason = SessionService.get_expiration_reason(session)
                 logger.warning(
-                    f"Session expired",
+                    "Session expired",
                     session_id=session_id,
                     reason=expiry_reason,
                     path=path
@@ -155,7 +155,7 @@ class SessionExpiryMiddleware(BaseHTTPMiddleware):
             request.state.session_id = session_id
 
             logger.debug(
-                f"Session validated and activity updated",
+                "Session validated and activity updated",
                 session_id=session_id,
                 path=path
             )

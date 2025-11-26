@@ -10,7 +10,7 @@ Version: 1.0.0
 
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from demo_agent.observability.context import get_request_context
 from demo_agent.observability.correlation import CorrelationID
@@ -122,7 +122,7 @@ class StructuredLogger:
         self.logger = logging.getLogger(name)
         self.name = name
 
-    def _add_context(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    def _add_context(self, kwargs: dict[str, Any]) -> dict[str, Any]:
         """Add request context to log kwargs.
 
         Args:
@@ -213,7 +213,7 @@ class StructuredLogger:
 
 
 # Global structured logger instances
-_loggers: Dict[str, StructuredLogger] = {}
+_loggers: dict[str, StructuredLogger] = {}
 
 
 def get_structured_logger(name: str) -> StructuredLogger:

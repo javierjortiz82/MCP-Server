@@ -11,10 +11,9 @@ Version: 1.0.0
 
 import contextvars
 import uuid
-from typing import Optional
 
 # Context variable for storing correlation ID
-_correlation_id_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+_correlation_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "correlation_id", default=None
 )
 
@@ -47,7 +46,7 @@ class CorrelationID:
         _correlation_id_var.set(correlation_id)
 
     @staticmethod
-    def get() -> Optional[str]:
+    def get() -> str | None:
         """Get correlation ID from current context.
 
         Returns:

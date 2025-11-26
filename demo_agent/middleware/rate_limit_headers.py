@@ -26,14 +26,11 @@ Version: 1.0.0 (Security-Hardened - Phase 4)
 """
 
 from datetime import datetime, timezone
-from typing import Optional
 
+from demo_agent.logger import logger
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-
-from demo_agent.config.settings import config
-from demo_agent.logger import logger
 
 
 class RateLimitHeadersMiddleware(BaseHTTPMiddleware):

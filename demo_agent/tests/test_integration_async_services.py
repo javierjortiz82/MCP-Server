@@ -19,13 +19,13 @@ Version: 1.0.0
 
 import asyncio
 import uuid
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from demo_agent.models.user import UserRegisterRequest
 
+from demo_agent.models.user import UserRegisterRequest
 
 # ============================================================================
 # Test Utilities

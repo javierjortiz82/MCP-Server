@@ -12,7 +12,7 @@ import time
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from demo_agent.logger import logger
 
@@ -33,9 +33,9 @@ class Metric:
     value: float
     unit: str = "ms"
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    tags: Dict[str, str] = field(default_factory=dict)
+    tags: dict[str, str] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert metric to dictionary.
 
         Returns:
@@ -76,13 +76,13 @@ class MetricsCollector:
 
     def __init__(self):
         """Initialize metrics collector."""
-        self.metrics: List[Metric] = []
-        self.counters: Dict[str, int] = {}
-        self.gauges: Dict[str, float] = {}
+        self.metrics: list[Metric] = []
+        self.counters: dict[str, int] = {}
+        self.gauges: dict[str, float] = {}
         logger.info("MetricsCollector initialized")
 
     @contextmanager
-    def record_latency(self, metric_name: str, tags: Optional[Dict[str, str]] = None):
+    def record_latency(self, metric_name: str, tags: dict[str, str] | None = None):
         """Context manager to record operation latency (sync).
 
         Args:
@@ -113,7 +113,7 @@ class MetricsCollector:
 
     @asynccontextmanager
     async def record_latency_async(
-        self, metric_name: str, tags: Optional[Dict[str, str]] = None
+        self, metric_name: str, tags: dict[str, str] | None = None
     ):
         """Context manager to record operation latency (async).
 
@@ -199,7 +199,7 @@ class MetricsCollector:
         """
         return self.counters.get(counter_name, default)
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get metrics summary.
 
         Returns:
@@ -269,7 +269,7 @@ class MetricsCollector:
         self.gauges.clear()
         logger.debug("All metrics cleared")
 
-    def get_metrics_by_name(self, metric_name: str) -> List[Metric]:
+    def get_metrics_by_name(self, metric_name: str) -> list[Metric]:
         """Get all metrics with specific name.
 
         Args:
@@ -282,7 +282,7 @@ class MetricsCollector:
 
 
 # Global metrics collector instance
-_metrics_collector: Optional[MetricsCollector] = None
+_metrics_collector: MetricsCollector | None = None
 
 
 def get_metrics_collector() -> MetricsCollector:

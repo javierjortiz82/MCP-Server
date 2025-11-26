@@ -14,14 +14,13 @@ Created: 2025-11-03
 Version: 1.0.0
 """
 
-from typing import Callable, Set
+from collections.abc import Callable
 
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from demo_agent.config.settings import config
-from demo_agent.logger import logger
 from demo_agent.observability.metrics import get_metrics_collector
 from demo_agent.observability.structured_logger import get_structured_logger
 from demo_agent.services.clerk_service import get_clerk_service
@@ -62,7 +61,7 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
     """
 
     # Public routes that don't require authentication
-    PUBLIC_PATHS: Set[str] = {
+    PUBLIC_PATHS: set[str] = {
         "/health",
         "/metrics",
         "/docs",

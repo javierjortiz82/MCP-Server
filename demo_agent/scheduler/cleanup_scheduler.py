@@ -12,7 +12,6 @@ Version: 1.0.0
 """
 
 import logging
-from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -26,7 +25,7 @@ logger = logging.getLogger(__name__)
 class CleanupScheduler:
     """Manages periodic cleanup tasks using APScheduler."""
 
-    _instance: Optional[BackgroundScheduler] = None
+    _instance: BackgroundScheduler | None = None
     _is_running: bool = False
 
     @classmethod
@@ -102,7 +101,7 @@ class CleanupScheduler:
             logger.error(f"Error shutting down cleanup scheduler: {str(e)}")
 
     @classmethod
-    def get_scheduler(cls) -> Optional[BackgroundScheduler]:
+    def get_scheduler(cls) -> BackgroundScheduler | None:
         """Get the current scheduler instance.
 
         Returns:
@@ -215,9 +214,9 @@ def init_cleanup_scheduler(app=None) -> None:
         scheduler = CleanupScheduler.initialize(cleanup_interval_hours=1)
 
         logger.info(
-            f"🕐 Cleanup scheduler initialized with interval: 1 hour"
+            "🕐 Cleanup scheduler initialized with interval: 1 hour"
         )
-        logger.info(f"   Configuration:")
+        logger.info("   Configuration:")
         logger.info(f"   - SESSION_TTL_MINUTES: {config.SESSION_TTL_MINUTES}")
         logger.info(f"   - SESSION_IDLE_TIMEOUT_MINUTES: {config.SESSION_IDLE_TIMEOUT_MINUTES}")
         logger.info(f"   - SESSION_ABSOLUTE_TIMEOUT_MINUTES: {config.SESSION_ABSOLUTE_TIMEOUT_MINUTES}")

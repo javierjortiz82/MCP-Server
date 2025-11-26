@@ -19,13 +19,12 @@ Version: 1.1.0
 """
 
 import json
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import Header, HTTPException, Request, status
 from svix.webhooks import Webhook, WebhookVerificationError
 
 from demo_agent.config.settings import config
-from demo_agent.logger import logger
 from demo_agent.observability.metrics import get_metrics_collector
 from demo_agent.observability.structured_logger import get_structured_logger
 from demo_agent.services.clerk_service import get_clerk_service
@@ -100,7 +99,7 @@ class ClerkWebhookHandler:
         svix_id: str = Header(None, alias="svix-id"),
         svix_timestamp: str = Header(None, alias="svix-timestamp"),
         svix_signature: str = Header(None, alias="svix-signature"),
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Main webhook handler endpoint.
 
         Args:
@@ -207,7 +206,7 @@ class ClerkWebhookHandler:
                 detail=f"Error processing event: {str(e)}"
             )
 
-    async def _handle_user_created(self, data: Dict[str, Any]) -> None:
+    async def _handle_user_created(self, data: dict[str, Any]) -> None:
         """Handle user.created event.
 
         Creates new user record in PostgreSQL.
@@ -272,7 +271,7 @@ class ClerkWebhookHandler:
             self.logger.error("Error handling user.created event", error=str(e))
             raise
 
-    async def _handle_user_updated(self, data: Dict[str, Any]) -> None:
+    async def _handle_user_updated(self, data: dict[str, Any]) -> None:
         """Handle user.updated event.
 
         Updates existing user record in PostgreSQL.
@@ -326,7 +325,7 @@ class ClerkWebhookHandler:
             self.logger.error("Error handling user.updated event", error=str(e))
             raise
 
-    async def _handle_user_deleted(self, data: Dict[str, Any]) -> None:
+    async def _handle_user_deleted(self, data: dict[str, Any]) -> None:
         """Handle user.deleted event.
 
         Soft deletes user in PostgreSQL (sets is_deleted=true).
@@ -360,7 +359,7 @@ class ClerkWebhookHandler:
             self.logger.error("Error handling user.deleted event", error=str(e))
             raise
 
-    async def _handle_session_created(self, data: Dict[str, Any]) -> None:
+    async def _handle_session_created(self, data: dict[str, Any]) -> None:
         """Handle session.created event.
 
         Updates user's session ID and last_login timestamp.

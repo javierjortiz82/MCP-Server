@@ -20,13 +20,12 @@ Version: 2.0.0
 """
 
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_address, ip_network
-from typing import List, Optional, Union
+from typing import Union
 
 from fastapi import Request
 
 from demo_agent.config.settings import config
 from demo_agent.logger import logger
-
 
 IPAddressType = Union[IPv4Address, IPv6Address]
 IPNetworkType = Union[IPv4Network, IPv6Network]
@@ -63,7 +62,7 @@ class ClientIPExtractor:
 
     def __init__(
         self,
-        trusted_proxies: Optional[List[str]] = None,
+        trusted_proxies: list[str] | None = None,
         enable_proxy_headers: bool = True,
         proxy_depth: int = 1,
         use_cloudflare: bool = False,
@@ -89,7 +88,7 @@ class ClientIPExtractor:
             else:
                 trusted_proxies = []
 
-        self.trusted_proxies: List[IPNetworkType] = self._parse_trusted_proxies(
+        self.trusted_proxies: list[IPNetworkType] = self._parse_trusted_proxies(
             trusted_proxies
         )
 
@@ -101,8 +100,8 @@ class ClientIPExtractor:
         )
 
     def _parse_trusted_proxies(
-        self, proxy_list: List[str]
-    ) -> List[IPNetworkType]:
+        self, proxy_list: list[str]
+    ) -> list[IPNetworkType]:
         """Parse list of IP addresses and CIDR ranges into network objects.
 
         Args:
@@ -111,7 +110,7 @@ class ClientIPExtractor:
         Returns:
             List of IPv4Network or IPv6Network objects.
         """
-        networks: List[IPNetworkType] = []
+        networks: list[IPNetworkType] = []
 
         for proxy in proxy_list:
             try:
@@ -149,7 +148,7 @@ class ClientIPExtractor:
             logger.warning(f"Invalid IP address format: {ip_str}")
             return False
 
-    def get_client_ip(self, request: Request) -> Optional[str]:
+    def get_client_ip(self, request: Request) -> str | None:
         """Extract client IP address from request with security validation.
 
         Extraction order (when proxy headers enabled and proxy is trusted):
@@ -234,7 +233,7 @@ class ClientIPExtractor:
         logger.debug(f"No valid forwarded headers, using direct IP: {direct_ip}")
         return direct_ip
 
-    def _sanitize_header_value(self, header_value: str) -> Optional[str]:
+    def _sanitize_header_value(self, header_value: str) -> str | None:
         """Sanitize HTTP header value to prevent header injection attacks.
 
         SECURITY (CWE-113 fix): Validates header values don't contain
@@ -288,7 +287,7 @@ class ClientIPExtractor:
 
     def _extract_from_forwarded_for(
         self, forwarded_for: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """Extract client IP from X-Forwarded-For header.
 
         X-Forwarded-For format: client, proxy1, proxy2, ...
@@ -362,7 +361,7 @@ class ClientIPExtractor:
 # Singleton Instance (loaded from config)
 # ============================================================================
 
-_client_ip_extractor: Optional[ClientIPExtractor] = None
+_client_ip_extractor: ClientIPExtractor | None = None
 
 
 def get_client_ip_extractor() -> ClientIPExtractor:
@@ -385,7 +384,7 @@ def get_client_ip_extractor() -> ClientIPExtractor:
     return _client_ip_extractor
 
 
-def extract_client_ip(request: Request) -> Optional[str]:
+def extract_client_ip(request: Request) -> str | None:
     """Convenience function to extract client IP from request.
 
     This is the recommended way to get client IP in endpoints.

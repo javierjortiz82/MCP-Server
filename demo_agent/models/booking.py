@@ -8,7 +8,6 @@ Created: 2025-11-09
 """
 
 from datetime import date, time
-from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 

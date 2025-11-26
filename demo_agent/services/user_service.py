@@ -10,19 +10,17 @@ Created: 2025-10-31
 Version: 1.1.0 (Async)
 """
 
-import bcrypt
 from datetime import datetime, timezone
-from typing import Tuple
+
+import bcrypt
 
 from demo_agent.config.settings import config
 from demo_agent.db.connection import get_db
-from demo_agent.logger import logger
 from demo_agent.models.user import (
     AuthProvider,
     OAuthRegisterRequest,
     UserDB,
     UserRegisterRequest,
-    UserResponse,
 )
 from demo_agent.observability.metrics import get_metrics_collector
 from demo_agent.observability.structured_logger import get_structured_logger
@@ -53,7 +51,7 @@ class UserService:
         self,
         data: UserRegisterRequest,
         ip_address: str | None = None,
-    ) -> Tuple[UserDB | None, str | None]:
+    ) -> tuple[UserDB | None, str | None]:
         """Register new user with email/password authentication.
 
         Args:
@@ -162,7 +160,7 @@ class UserService:
             self.metrics.increment_counter("registrations_email_successful")
             return user, None
 
-        except Exception as e:
+        except Exception:
             self.logger.exception(
                 "Error in register_email_user",
                 email=data.email
@@ -174,7 +172,7 @@ class UserService:
         self,
         data: OAuthRegisterRequest,
         ip_address: str | None = None,
-    ) -> Tuple[UserDB | None, str | None]:
+    ) -> tuple[UserDB | None, str | None]:
         """Register new user with OAuth provider (Google, Apple).
 
         Args:
@@ -289,7 +287,7 @@ class UserService:
             self.metrics.increment_counter("registrations_oauth_successful")
             return user, None
 
-        except Exception as e:
+        except Exception:
             self.logger.exception(
                 "Error in register_oauth_user",
                 email=data.email,
@@ -330,7 +328,7 @@ class UserService:
             self.metrics.increment_counter("user_lookup_email_not_found")
             return None
 
-        except Exception as e:
+        except Exception:
             self.logger.exception("Error in get_user_by_email", email=email)
             self.metrics.increment_counter("user_lookup_email_errors")
             return None
@@ -373,7 +371,7 @@ class UserService:
             self.metrics.increment_counter("user_lookup_oauth_not_found")
             return None
 
-        except Exception as e:
+        except Exception:
             self.logger.exception(
                 "Error in get_user_by_oauth",
                 provider=auth_provider.value
@@ -426,7 +424,7 @@ class UserService:
             self.metrics.increment_counter("user_activations_already_active")
             return False
 
-        except Exception as e:
+        except Exception:
             self.logger.exception("Error in activate_user", user_id=user_id)
             self.metrics.increment_counter("user_activation_errors")
             return False
@@ -469,7 +467,7 @@ class UserService:
 
             return is_valid
 
-        except Exception as e:
+        except Exception:
             self.logger.exception("Error in verify_password", user_id=user.id)
             self.metrics.increment_counter("password_verify_errors")
             return False
@@ -505,7 +503,7 @@ class UserService:
             self.metrics.increment_counter("user_logins_recorded")
             return True
 
-        except Exception as e:
+        except Exception:
             self.logger.exception("Error in update_last_login", user_id=user_id)
             self.metrics.increment_counter("user_login_update_errors")
             return False

@@ -11,8 +11,6 @@ Version: 1.0.0
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -45,7 +43,7 @@ class SessionService:
         )
 
     @staticmethod
-    def get_expiration_reason(session: DemoSession) -> Optional[str]:
+    def get_expiration_reason(session: DemoSession) -> str | None:
         """Get human-readable reason for session expiration.
 
         Args:

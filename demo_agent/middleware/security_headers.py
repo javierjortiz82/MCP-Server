@@ -11,11 +11,10 @@ Created: 2025-11-07
 Version: 1.0.0 (Security-Hardened)
 """
 
+from demo_agent.logger import logger
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-
-from demo_agent.logger import logger
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

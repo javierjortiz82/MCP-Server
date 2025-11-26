@@ -21,14 +21,11 @@ Version: 1.0.0
 """
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from fastapi.testclient import TestClient
 
-from demo_agent.models.requests import DemoRequest, Metadata
+from demo_agent.models.requests import DemoRequest
 from demo_agent.models.responses import DemoResponse, TokenWarning
-
 
 # ============================================================================
 # Test Fixtures

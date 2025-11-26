@@ -24,14 +24,12 @@ Created: 2025-11-07
 Version: 1.0.0 (Security-Hardened - Phase 4)
 """
 
-from typing import Dict, Optional
 
+from demo_agent.logger import logger
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-
-from demo_agent.logger import logger
 
 
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
@@ -55,7 +53,7 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 
     # Default size limits (in bytes)
     DEFAULT_MAX_SIZE = 50 * 1024  # 50 KB
-    ENDPOINT_LIMITS: Dict[str, int] = {
+    ENDPOINT_LIMITS: dict[str, int] = {
         "/v1/demo": 10 * 1024,  # 10 KB - user queries
         "/v1/webhooks/clerk": 100 * 1024,  # 100 KB - Clerk webhooks
         "/v1/auth/register": 10 * 1024,  # 10 KB - registration
@@ -66,8 +64,8 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         app: ASGIApp,
-        max_size: Optional[int] = None,
-        endpoint_limits: Optional[Dict[str, int]] = None,
+        max_size: int | None = None,
+        endpoint_limits: dict[str, int] | None = None,
     ):
         """Initialize request size limit middleware.
 
@@ -213,8 +211,8 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 
 
 def create_request_size_limit_middleware(
-    max_size: Optional[int] = None,
-    endpoint_limits: Optional[Dict[str, int]] = None
+    max_size: int | None = None,
+    endpoint_limits: dict[str, int] | None = None
 ) -> RequestSizeLimitMiddleware:
     """Factory function to create request size limit middleware.
 

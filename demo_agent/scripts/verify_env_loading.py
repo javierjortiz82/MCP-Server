@@ -15,6 +15,7 @@ Created: 2025-11-03
 import os
 import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Add parent to path
@@ -35,11 +36,11 @@ env_path = Path(__file__).parent.parent / ".env"
 print(f"  Looking for .env at: {env_path}")
 
 if env_path.exists():
-    print(f"  ✅ .env file found")
+    print("  ✅ .env file found")
     print(f"  Size: {env_path.stat().st_size} bytes")
 
     # Read .env content
-    with open(env_path, 'r') as f:
+    with open(env_path) as f:
         env_content = f.read()
 
     # Count variables
@@ -59,7 +60,7 @@ print("\n[STEP 2] Loading .env file with python-dotenv...")
 print("-" * 90)
 
 load_dotenv(env_path, verbose=True)
-print(f"  ✅ .env file loaded manually")
+print("  ✅ .env file loaded manually")
 
 # ========================================================================
 # STEP 3: Check environment variables
@@ -98,7 +99,7 @@ from demo_agent.config.settings import DemoConfig
 
 config = DemoConfig()
 
-print(f"  ✅ DemoConfig loaded successfully")
+print("  ✅ DemoConfig loaded successfully")
 
 # ========================================================================
 # STEP 5: Verify config values
@@ -153,13 +154,13 @@ print("\n[STEP 7] Final verification...")
 print("-" * 90)
 
 if all_match:
-    print(f"  ✅ ALL ENVIRONMENT VARIABLES MATCH CONFIG VALUES")
-    print(f"  ✅ .env file is being used correctly")
-    print(f"  ✅ DemoConfig is loading from environment")
+    print("  ✅ ALL ENVIRONMENT VARIABLES MATCH CONFIG VALUES")
+    print("  ✅ .env file is being used correctly")
+    print("  ✅ DemoConfig is loading from environment")
 else:
-    print(f"  ❌ MISMATCH DETECTED")
-    print(f"  ❌ Environment variables don't match config values")
-    print(f"  ❌ Check if docker-compose is overriding values")
+    print("  ❌ MISMATCH DETECTED")
+    print("  ❌ Environment variables don't match config values")
+    print("  ❌ Check if docker-compose is overriding values")
 
 # ========================================================================
 # STEP 8: Docker-specific checks
@@ -177,11 +178,11 @@ print(f"  DOCKER_CONTAINER env: {running_in_container}")
 print(f"  Hostname: {hostname}")
 
 if is_docker or running_in_container:
-    print(f"  🐳 DETECTED: Running inside Docker container")
-    print(f"  ℹ️  Variables loaded via docker-compose env_file directive")
+    print("  🐳 DETECTED: Running inside Docker container")
+    print("  ℹ️  Variables loaded via docker-compose env_file directive")
 else:
-    print(f"  💻 DETECTED: Running on local machine")
-    print(f"  ℹ️  Variables loaded via python-dotenv")
+    print("  💻 DETECTED: Running on local machine")
+    print("  ℹ️  Variables loaded via python-dotenv")
 
 # ========================================================================
 # Summary

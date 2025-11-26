@@ -16,10 +16,9 @@ import logging.handlers
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from demo_agent.config.settings import config
-
 
 # Sensitive data patterns for sanitization (CWE-532 mitigation)
 SENSITIVE_PATTERNS = {

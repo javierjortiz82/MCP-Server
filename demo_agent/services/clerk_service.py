@@ -15,7 +15,7 @@ Version: 1.0.0
 
 import json
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import httpx
 import jwt
@@ -23,7 +23,6 @@ from jwt import PyJWKClient
 
 from demo_agent.config.settings import config
 from demo_agent.db.connection import get_db
-from demo_agent.logger import logger
 from demo_agent.observability.metrics import get_metrics_collector
 from demo_agent.observability.structured_logger import get_structured_logger
 
@@ -110,7 +109,7 @@ class ClerkService:
         # Current workaround: Use config.CLERK_FRONTEND_API or default domain
         return config.CLERK_FRONTEND_API if hasattr(config, "CLERK_FRONTEND_API") else "clerk.accounts.dev"
 
-    async def verify_token(self, token: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    async def verify_token(self, token: str) -> tuple[dict[str, Any] | None, str | None]:
         """Verify Clerk JWT session token.
 
         Args:
@@ -247,9 +246,9 @@ class ClerkService:
         clerk_user_id: str,
         email: str,
         full_name: str,
-        clerk_metadata: Dict[str, Any],
-        clerk_session_id: Optional[str] = None,
-    ) -> Tuple[Optional[int], bool, Optional[str]]:
+        clerk_metadata: dict[str, Any],
+        clerk_session_id: str | None = None,
+    ) -> tuple[int | None, bool, str | None]:
         """Synchronize user from Clerk to PostgreSQL.
 
         Called by webhook handlers when Clerk user is created/updated.
@@ -323,8 +322,8 @@ class ClerkService:
     async def get_user_by_clerk_id(
         self,
         clerk_user_id: str,
-        fallback_email: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+        fallback_email: str | None = None
+    ) -> dict[str, Any] | None:
         """Get user from database by Clerk user ID with email fallback.
 
         Args:
@@ -430,7 +429,7 @@ class ClerkService:
             self.logger.error("Failed to fetch user by Clerk ID", error=str(e))
             return None
 
-    async def fetch_user_from_clerk_api(self, clerk_user_id: str) -> Optional[Dict[str, Any]]:
+    async def fetch_user_from_clerk_api(self, clerk_user_id: str) -> dict[str, Any] | None:
         """Fetch user data from Clerk API by user ID.
 
         Used when JWT token doesn't include email claim.
@@ -455,7 +454,7 @@ class ClerkService:
 
             if response.status_code != 200:
                 self.logger.error(
-                    f"Clerk API error",
+                    "Clerk API error",
                     status_code=response.status_code,
                     response=response.text[:200]
                 )
@@ -490,7 +489,7 @@ class ClerkService:
             }
 
             self.logger.info(
-                f"User fetched from Clerk API",
+                "User fetched from Clerk API",
                 clerk_user_id=clerk_user_id,
                 email=primary_email
             )
@@ -498,10 +497,10 @@ class ClerkService:
             return user_data
 
         except Exception as e:
-            self.logger.error(f"Failed to fetch user from Clerk API", error=str(e))
+            self.logger.error("Failed to fetch user from Clerk API", error=str(e))
             return None
 
-    async def check_migration_required(self, email: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    async def check_migration_required(self, email: str) -> tuple[bool, dict[str, Any] | None]:
         """Check if a user needs to migrate to Clerk.
 
         Args:
@@ -635,7 +634,7 @@ class ClerkService:
             self.metrics.increment_counter("clerk_user_delete_error")
             return False
 
-    async def get_clerk_user_metadata(self, clerk_user_id: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    async def get_clerk_user_metadata(self, clerk_user_id: str) -> tuple[dict[str, Any] | None, str | None]:
         """Fetch user metadata from Clerk API.
 
         Args:
@@ -683,7 +682,7 @@ class ClerkService:
 
 
 # Singleton instance
-_clerk_service: Optional[ClerkService] = None
+_clerk_service: ClerkService | None = None
 
 
 def get_clerk_service() -> ClerkService:

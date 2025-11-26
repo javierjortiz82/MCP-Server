@@ -18,7 +18,6 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from typing import Any, List, Tuple
 
 # ============================================================================
 # Color codes for terminal output
@@ -65,7 +64,7 @@ def print_info(text: str) -> None:
 # ============================================================================
 
 
-def check_demo_agent_files() -> Tuple[bool, List[str]]:
+def check_demo_agent_files() -> tuple[bool, list[str]]:
     """Check if all demo_agent module files exist."""
     print_header("1. Checking Demo Agent Files")
 
@@ -103,7 +102,7 @@ def check_demo_agent_files() -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
-def check_prompt_manager_integration() -> Tuple[bool, List[str]]:
+def check_prompt_manager_integration() -> tuple[bool, list[str]]:
     """Check if PromptManager integration is in place."""
     print_header("2. Checking PromptManager Integration")
 
@@ -142,7 +141,7 @@ def check_prompt_manager_integration() -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
-def check_database_schema_files() -> Tuple[bool, List[str]]:
+def check_database_schema_files() -> tuple[bool, list[str]]:
     """Check if database migration files exist."""
     print_header("3. Checking Database Schema Files")
 
@@ -182,7 +181,7 @@ def check_database_schema_files() -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
-def check_docker_configuration() -> Tuple[bool, List[str]]:
+def check_docker_configuration() -> tuple[bool, list[str]]:
     """Check if Docker configuration is in place."""
     print_header("4. Checking Docker Configuration")
 
@@ -223,7 +222,7 @@ def check_docker_configuration() -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
-def check_configuration_files() -> Tuple[bool, List[str]]:
+def check_configuration_files() -> tuple[bool, list[str]]:
     """Check if configuration files are in place."""
     print_header("5. Checking Configuration Files")
 
@@ -278,7 +277,7 @@ def check_configuration_files() -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
-def check_template_files() -> Tuple[bool, List[str]]:
+def check_template_files() -> tuple[bool, list[str]]:
     """Check if Jinja2 template files exist."""
     print_header("6. Checking Template Files")
 
@@ -300,7 +299,7 @@ def check_template_files() -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
-def check_code_quality() -> Tuple[bool, List[str]]:
+def check_code_quality() -> tuple[bool, list[str]]:
     """Check if code quality artifacts exist."""
     print_header("7. Checking Code Quality Artifacts")
 
@@ -337,7 +336,7 @@ def check_code_quality() -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
-def check_documentation() -> Tuple[bool, List[str]]:
+def check_documentation() -> tuple[bool, list[str]]:
     """Check if documentation files exist."""
     print_header("8. Checking Documentation")
 

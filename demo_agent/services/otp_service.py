@@ -22,7 +22,6 @@ Version: 1.1.0 (Async)
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
 
 from demo_agent.config.settings import config
 from demo_agent.db.connection import get_db
@@ -123,7 +122,7 @@ class OTPService:
 
     async def can_request_otp(
         self, email: str, purpose: OTPPurpose = OTPPurpose.EMAIL_VERIFICATION
-    ) -> Tuple[bool, int]:
+    ) -> tuple[bool, int]:
         """Check if user can request new OTP (rate limiting).
 
         Args:
@@ -185,7 +184,7 @@ class OTPService:
 
                 return can_request, 0
 
-        except Exception as e:
+        except Exception:
             self.logger.exception("Error in can_request_otp", email=email)
             self.metrics.increment_counter("otp_rate_limit_errors")
             # Fail open: allow request but log error
@@ -198,7 +197,7 @@ class OTPService:
         purpose: OTPPurpose = OTPPurpose.EMAIL_VERIFICATION,
         ip_address: str | None = None,
         user_agent: str | None = None,
-    ) -> Tuple[str | None, OTPDB | None, str | None]:
+    ) -> tuple[str | None, OTPDB | None, str | None]:
         """Create new OTP code for user.
 
         Args:
@@ -318,7 +317,7 @@ class OTPService:
             # Return plain-text code (for email) and record
             return otp_code, otp_record, None
 
-        except Exception as e:
+        except Exception:
             self.logger.exception(
                 "Error in create_otp",
                 email=email,
@@ -332,7 +331,7 @@ class OTPService:
         email: str,
         otp_code: str,
         purpose: OTPPurpose = OTPPurpose.EMAIL_VERIFICATION,
-    ) -> Tuple[bool, int | None, str]:
+    ) -> tuple[bool, int | None, str]:
         """Verify OTP code for email.
 
         Args:

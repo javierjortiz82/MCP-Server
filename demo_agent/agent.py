@@ -14,14 +14,13 @@ from agent.src.multi_agent.prompt_manager import PromptManager
 from demo_agent.config.settings import config
 from demo_agent.db.connection import get_db
 from demo_agent.gemini_client import GeminiClient
-from demo_agent.logger import logger
 from demo_agent.models.responses import TokenWarning
+from demo_agent.observability.metrics import get_metrics_collector
+from demo_agent.observability.structured_logger import get_structured_logger
 from demo_agent.rate_limiter.token_bucket import TokenBucket
 from demo_agent.security.captcha_handler import CaptchaHandler
 from demo_agent.security.fingerprint import FingerprintAnalyzer
 from demo_agent.security.ip_limiter import IPLimiter
-from demo_agent.observability.metrics import get_metrics_collector
-from demo_agent.observability.structured_logger import get_structured_logger
 
 
 class DemoAgent:
@@ -361,7 +360,7 @@ class DemoAgent:
 
             return response_text, tokens_used, warning, None
 
-        except Exception as e:
+        except Exception:
             self.logger.exception("Error processing query", user_key=user_key)
             self.metrics.increment_counter("agent_queries_errors")
             await self._log_audit(
@@ -441,7 +440,7 @@ class DemoAgent:
             )
             self.metrics.increment_counter("audit_logs_recorded")
 
-        except Exception as e:
+        except Exception:
             self.logger.error(
                 "Failed to log audit",
                 user_key=user_key
@@ -466,7 +465,7 @@ class DemoAgent:
             )
             self.metrics.increment_counter("user_status_queries")
             return status
-        except Exception as e:
+        except Exception:
             self.logger.exception("Error getting user status", user_key=user_key)
             self.metrics.increment_counter("user_status_errors")
             return {

@@ -7,7 +7,7 @@ Created: 2025-11-03
 Version: 1.0.0
 """
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 

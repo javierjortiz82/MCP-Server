@@ -23,8 +23,6 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from demo_agent.agent import DemoAgent
-from demo_agent.config.settings import config
-from demo_agent.models.responses import TokenWarning
 
 
 @pytest.fixture

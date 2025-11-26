@@ -15,12 +15,12 @@ Version: 1.0.0
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from demo_agent.security.ip_limiter import IPLimiter
 
+from demo_agent.security.ip_limiter import IPLimiter
 
 # ============================================================================
 # Fixtures

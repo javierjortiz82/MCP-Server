@@ -16,10 +16,9 @@ Version: 1.0.0
 
 import asyncio
 import time
-from datetime import datetime, timezone
 
 import pytest
-import pytest_asyncio
+
 from demo_agent.observability.context import (
     RequestContext,
     clear_request_context,
@@ -32,7 +31,6 @@ from demo_agent.observability.correlation import (
     generate_correlation_id,
 )
 from demo_agent.observability.metrics import (
-    MetricsCollector,
     get_metrics_collector,
     reset_metrics_collector,
 )
@@ -40,7 +38,6 @@ from demo_agent.observability.structured_logger import (
     StructuredLogger,
     get_structured_logger,
 )
-
 
 # ============================================================================
 # Correlation ID Tests

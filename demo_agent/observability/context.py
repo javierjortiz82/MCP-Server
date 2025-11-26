@@ -11,7 +11,7 @@ Version: 1.0.0
 import contextvars
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from demo_agent.observability.correlation import CorrelationID
 
@@ -40,15 +40,15 @@ class RequestContext:
     """
 
     correlation_id: str
-    user_key: Optional[str] = None
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
-    method: Optional[str] = None
-    path: Optional[str] = None
+    user_key: str | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
+    method: str | None = None
+    path: str | None = None
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    extra: Dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert context to dictionary for logging.
 
         Returns:
@@ -110,7 +110,7 @@ def set_request_context(context: RequestContext) -> None:
     CorrelationID.set(context.correlation_id)
 
 
-def get_request_context() -> Optional[RequestContext]:
+def get_request_context() -> RequestContext | None:
     """Get request context from current async context.
 
     Returns:
@@ -125,12 +125,12 @@ def get_request_context() -> Optional[RequestContext]:
 
 
 def create_request_context(
-    correlation_id: Optional[str] = None,
-    user_key: Optional[str] = None,
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
-    method: Optional[str] = None,
-    path: Optional[str] = None,
+    correlation_id: str | None = None,
+    user_key: str | None = None,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+    method: str | None = None,
+    path: str | None = None,
 ) -> RequestContext:
     """Create and set request context.
 

@@ -14,11 +14,10 @@ Version: 1.0.0
 """
 
 import asyncio
-import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))

@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load environment
@@ -11,9 +12,10 @@ if env_path.exists():
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import asyncio
+
 from demo_agent.db.connection import get_db
 from demo_agent.services.user_service import UserService
-import asyncio
 
 
 async def setup_test_users():

@@ -14,10 +14,10 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 # SECURITY: Import ReDoS-safe validators
 from demo_agent.utils.validators import (
+    sanitize_email,
     validate_email_safe,
     validate_otp_code_safe,
     validate_password_strength,
-    sanitize_email,
 )
 
 

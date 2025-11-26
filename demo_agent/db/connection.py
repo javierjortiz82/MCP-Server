@@ -13,9 +13,10 @@ Created: 2025-11-03
 Version: 2.0.0 (Async)
 """
 
-import asyncpg
 import re
 from typing import Any
+
+import asyncpg
 
 from demo_agent.config.settings import config
 from demo_agent.logger import logger

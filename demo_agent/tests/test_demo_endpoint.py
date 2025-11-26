@@ -6,10 +6,10 @@ Tests the /v1/demo endpoint with:
 3. Missing token (should be denied if CAPTCHA required)
 """
 
-import asyncio
-import sys
 import json
+import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -21,10 +21,10 @@ if env_path.exists():
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import after path setup
-import httpx
-from demo_agent.api.routes import router
 from fastapi import FastAPI
 from starlette.testclient import TestClient
+
+from demo_agent.api.routes import router
 
 
 def create_test_app():

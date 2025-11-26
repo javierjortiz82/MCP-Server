@@ -8,7 +8,6 @@ Version: 1.0.0
 """
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
 
 from demo_agent import auth_endpoints
 from demo_agent.logger import logger
@@ -21,8 +20,8 @@ from demo_agent.models.user import (
     VerifyOTPRequest,
     VerifyOTPResponse,
 )
-from demo_agent.services.clerk_service import get_clerk_service
 from demo_agent.security.clerk_middleware import require_auth
+from demo_agent.services.clerk_service import get_clerk_service
 
 router = APIRouter(prefix="/v1/auth", tags=["Authentication"])
 

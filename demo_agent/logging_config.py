@@ -17,9 +17,8 @@ import logging
 import logging.handlers
 import sys
 from pathlib import Path
-from typing import Optional
 
-_ROOT_LOGGER: Optional[logging.Logger] = None
+_ROOT_LOGGER: logging.Logger | None = None
 _LOG_DIR = Path(__file__).parent / "logs"
 _LOG_FORMAT_DETAILED = (
     "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s"
@@ -36,7 +35,7 @@ _MODULE_LEVELS = {
 
 
 def setup_logging(
-    log_dir: Optional[Path] = None,
+    log_dir: Path | None = None,
     log_level: str = "INFO",
     file_level: str = "DEBUG",
     console_level: str = "INFO",
@@ -96,7 +95,7 @@ def setup_logging(
     _ROOT_LOGGER = root_logger
 
 
-def get_logger(name: str, log_level: Optional[str] = None) -> logging.Logger:
+def get_logger(name: str, log_level: str | None = None) -> logging.Logger:
     """Get a configured logger instance for a module."""
     logger = logging.getLogger(name)
 

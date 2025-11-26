@@ -14,7 +14,6 @@ Created: 2025-11-18
 Version: 1.0.0
 """
 
-import asyncio
 import time
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -24,7 +23,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from demo_agent.config.settings import config
-from demo_agent.db.models import Base, DemoSession
+from demo_agent.db.models import DemoSession
 from demo_agent.services.session_service import SessionService
 
 
@@ -267,14 +266,14 @@ class TestSessionExpirationScenarios:
         SessionService.update_session_activity(db_session, session, tokens_used=100)
         assert session.total_requests == 1
         assert session.total_tokens_used == 100
-        print(f"✓ Session activity tracked: 1 request, 100 tokens")
+        print("✓ Session activity tracked: 1 request, 100 tokens")
 
         # Step 4: Simulate more activity
         time.sleep(0.1)
         SessionService.update_session_activity(db_session, session, tokens_used=150)
         assert session.total_requests == 2
         assert session.total_tokens_used == 250
-        print(f"✓ Session activity updated: 2 requests, 250 tokens total")
+        print("✓ Session activity updated: 2 requests, 250 tokens total")
 
         # Step 5: Simulate idle timeout
         idle_timeout = config.SESSION_IDLE_TIMEOUT_MINUTES
@@ -296,10 +295,10 @@ class TestSessionExpirationScenarios:
             DemoSession.session_id == session_id
         ).first()
         assert deleted_session is None
-        print(f"✓ Expired session invalidated and deleted")
+        print("✓ Expired session invalidated and deleted")
 
         # Step 9: User must re-authenticate with OTP
-        print(f"✓ User must re-authenticate with OTP to create new session")
+        print("✓ User must re-authenticate with OTP to create new session")
 
         print("\n✅ E2E Session Lifecycle Test Passed!")
 

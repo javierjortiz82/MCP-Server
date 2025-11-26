@@ -26,13 +26,11 @@ Version: 1.0.0 (Security-Hardened - Phase 4)
 """
 
 from datetime import datetime
-from typing import Dict, Optional
 
+from demo_agent.logger import logger
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-
-from demo_agent.logger import logger
 
 
 class APIVersionMiddleware(BaseHTTPMiddleware):
@@ -60,16 +58,16 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
     MIN_CLIENT_VERSION = "1.0.0"
 
     # Deprecated endpoints with sunset dates
-    DEPRECATED_ENDPOINTS: Dict[str, str] = {
+    DEPRECATED_ENDPOINTS: dict[str, str] = {
         # Example: "/v1/old-endpoint": "2025-12-31"
     }
 
     def __init__(
         self,
         app: ASGIApp,
-        api_version: Optional[str] = None,
-        min_client_version: Optional[str] = None,
-        deprecated_endpoints: Optional[Dict[str, str]] = None,
+        api_version: str | None = None,
+        min_client_version: str | None = None,
+        deprecated_endpoints: dict[str, str] | None = None,
     ):
         """Initialize API version middleware.
 
@@ -91,7 +89,7 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
             f"deprecated_count={len(self.deprecated_endpoints)}"
         )
 
-    def is_endpoint_deprecated(self, path: str) -> tuple[bool, Optional[str]]:
+    def is_endpoint_deprecated(self, path: str) -> tuple[bool, str | None]:
         """Check if endpoint is deprecated and get sunset date.
 
         Args:
@@ -169,8 +167,8 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
                     )
                 else:
                     warning_msg = (
-                        f'299 - "This endpoint is deprecated and scheduled for removal. '
-                        f'Please migrate to the new API immediately."'
+                        '299 - "This endpoint is deprecated and scheduled for removal. '
+                        'Please migrate to the new API immediately."'
                     )
 
                 response.headers["Warning"] = warning_msg
@@ -207,7 +205,7 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
 
         return response
 
-    def _days_until_sunset(self, sunset_date: str) -> Optional[int]:
+    def _days_until_sunset(self, sunset_date: str) -> int | None:
         """Calculate days remaining until sunset date.
 
         Args:
@@ -257,9 +255,9 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
 
 
 def create_api_version_middleware(
-    api_version: Optional[str] = None,
-    min_client_version: Optional[str] = None,
-    deprecated_endpoints: Optional[Dict[str, str]] = None,
+    api_version: str | None = None,
+    min_client_version: str | None = None,
+    deprecated_endpoints: dict[str, str] | None = None,
 ) -> APIVersionMiddleware:
     """Factory function to create API version middleware.
 
