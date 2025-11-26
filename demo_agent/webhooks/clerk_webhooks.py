@@ -150,7 +150,7 @@ class ClerkWebhookHandler:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid webhook signature"
-            )
+            ) from e
 
         # Parse JSON payload
         try:
@@ -161,7 +161,7 @@ class ClerkWebhookHandler:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid JSON payload"
-            )
+            ) from e
 
         # Extract event type and data
         event_type = event.get("type")
@@ -204,7 +204,7 @@ class ClerkWebhookHandler:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error processing event: {str(e)}"
-            )
+            ) from e
 
     async def _handle_user_created(self, data: dict[str, Any]) -> None:
         """Handle user.created event.

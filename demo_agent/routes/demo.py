@@ -466,7 +466,7 @@ async def demo_query(request_data: DemoRequest, request: Request):
         # Don't expose internal error details to users
         safe_message = sanitize_error_message(e, include_details=False)
 
-        raise HTTPException(status_code=500, detail=safe_message)
+        raise HTTPException(status_code=500, detail=safe_message) from e
 
 
 @router.get("/status")
@@ -558,7 +558,7 @@ async def demo_status(
         raise
     except Exception as e:
         logger.exception(f"Error in demo_status: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/history")
@@ -706,7 +706,7 @@ async def get_demo_history(
         raise HTTPException(
             status_code=500,
             detail="Failed to retrieve chat history",
-        )
+        ) from e
 
 
 @router.post("/verify-captcha", tags=["Security"])
@@ -802,4 +802,4 @@ async def verify_captcha(
         raise
     except Exception as e:
         logger.exception(f"Error in verify_captcha: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

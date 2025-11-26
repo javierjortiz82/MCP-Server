@@ -377,4 +377,4 @@ async def check_migration_status(request: Request):
         logger.error(f"Error checking migration status: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error checking migration status: {str(e)}"
-        )
+        ) from e
