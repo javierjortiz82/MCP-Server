@@ -16,7 +16,7 @@ from demo_agent.webhooks.clerk_webhooks import get_clerk_webhook_handler
 router = APIRouter(prefix="/v1/webhooks", tags=["Webhooks"])
 
 
-@router.post("/clerk")
+@router.post("/clerk", response_model=None)
 async def clerk_webhook(
     request: Request,
     svix_id: str = Header(..., alias="svix-id"),

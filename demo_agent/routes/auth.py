@@ -238,7 +238,7 @@ async def resend_otp_code(request_data: ResendOTPRequest, request: Request) -> R
     )
 
 
-@router.get("/me")
+@router.get("/me", response_model=None)
 async def get_current_user_info(request: Request) -> dict[str, Any] | JSONResponse:
     """Get current authenticated user information.
 
@@ -303,7 +303,7 @@ async def get_current_user_info(request: Request) -> dict[str, Any] | JSONRespon
     }
 
 
-@router.post("/check-migration")
+@router.post("/check-migration", response_model=None)
 async def check_migration_status(request: Request) -> dict[str, Any]:
     """Check if a legacy user needs to migrate to Clerk.
 

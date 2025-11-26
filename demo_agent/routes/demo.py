@@ -470,7 +470,7 @@ async def demo_query(request_data: DemoRequest, request: Request) -> DemoRespons
         raise HTTPException(status_code=500, detail=safe_message) from e
 
 
-@router.get("/status")
+@router.get("/status", response_model=None)
 async def demo_status(
     request: Request,
     user_id: int | None = Query(None, description="User ID (required for OTP users, optional for Clerk OAuth users)"),
@@ -562,7 +562,7 @@ async def demo_status(
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
-@router.get("/history")
+@router.get("/history", response_model=None)
 async def get_demo_history(
     request: Request,
     limit: int = Query(100, description="Maximum number of messages to return"),
@@ -710,7 +710,7 @@ async def get_demo_history(
         ) from e
 
 
-@router.post("/verify-captcha", tags=["Security"])
+@router.post("/verify-captcha", tags=["Security"], response_model=None)
 async def verify_captcha(
     request: Request,
     token: str = Query(..., description="reCAPTCHA v3 response token"),
