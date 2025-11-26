@@ -31,7 +31,7 @@ from demo_agent.utils.validators import validate_session_id
 router = APIRouter(prefix="/v1/demo", tags=["Demo"])
 
 
-def get_services(request: Request):
+def get_services(request: Request) -> tuple[Any, Any]:
     """Get service instances from app state.
 
     Args:
@@ -53,7 +53,7 @@ def get_services(request: Request):
 
 
 @router.post("", response_model=DemoResponse)
-async def demo_query(request_data: DemoRequest, request: Request):
+async def demo_query(request_data: DemoRequest, request: Request) -> DemoResponse | JSONResponse:
     """Process a demo query with token-bucket rate limiting.
 
     Request:
@@ -472,8 +472,8 @@ async def demo_query(request_data: DemoRequest, request: Request):
 @router.get("/status")
 async def demo_status(
     user_id: int | None = Query(None, description="User ID (required for OTP users, optional for Clerk OAuth users)"),
-    request: Request = None
-):
+    request: Request | None = None
+) -> dict[str, Any]:
     """Get authenticated user's current quota status.
 
     Requires Clerk authentication. Extracts user_id from JWT token.
@@ -565,8 +565,8 @@ async def demo_status(
 async def get_demo_history(
     limit: int = Query(100, description="Maximum number of messages to return"),
     user_id: int | None = Query(None, description="User ID (required for OTP users, optional for Clerk OAuth users)"),
-    request: Request = None,
-):
+    request: Request | None = None,
+) -> dict[str, Any]:
     """Retrieve user's complete conversation history (all devices, all sessions).
 
     Requires Clerk authentication. Returns all messages for the authenticated user.
@@ -715,8 +715,8 @@ async def verify_captcha(
     user_id: str | None = Query(None, description="Authenticated user ID"),
     session_id: str | None = Query(None, description="Anonymous session ID"),
     remote_ip: str | None = Query(None, description="Client IP address"),
-    request: Request = None,
-):
+    request: Request | None = None,
+) -> dict[str, Any]:
     """Verify reCAPTCHA v3 token.
 
     Query Parameters:

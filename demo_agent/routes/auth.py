@@ -26,7 +26,7 @@ from demo_agent.services.clerk_service import get_clerk_service
 router = APIRouter(prefix="/v1/auth", tags=["Authentication"])
 
 
-def get_services(request: Request):
+def get_services(request: Request) -> tuple[Any, Any]:
     """Get service instances from app state.
 
     Args:
@@ -49,7 +49,7 @@ def get_services(request: Request):
 
 
 @router.post("/register", response_model=RegisterResponse)
-async def register(request_data: UserRegisterRequest, request: Request):
+async def register(request_data: UserRegisterRequest, request: Request) -> RegisterResponse | JSONResponse:
     """Register new user with email/password.
 
     Creates user account and sends OTP verification email.
@@ -95,7 +95,7 @@ async def register(request_data: UserRegisterRequest, request: Request):
 
 
 @router.post("/register/oauth", response_model=RegisterResponse)
-async def register_with_oauth(request_data: OAuthRegisterRequest, request: Request):
+async def register_with_oauth(request_data: OAuthRegisterRequest, request: Request) -> RegisterResponse | JSONResponse:
     """Register new user with OAuth provider (Google, Apple).
 
     OAuth users are automatically verified (email verified by provider).
@@ -140,7 +140,7 @@ async def register_with_oauth(request_data: OAuthRegisterRequest, request: Reque
 
 
 @router.post("/verify-otp", response_model=VerifyOTPResponse)
-async def verify_otp_code(request_data: VerifyOTPRequest, request: Request):
+async def verify_otp_code(request_data: VerifyOTPRequest, request: Request) -> VerifyOTPResponse | JSONResponse:
     """Verify OTP code and activate user account.
 
     Request:
@@ -188,7 +188,7 @@ async def verify_otp_code(request_data: VerifyOTPRequest, request: Request):
 
 
 @router.post("/resend-otp", response_model=ResendOTPResponse)
-async def resend_otp_code(request_data: ResendOTPRequest, request: Request):
+async def resend_otp_code(request_data: ResendOTPRequest, request: Request) -> ResendOTPResponse | JSONResponse:
     """Resend OTP verification email.
 
     Request:
@@ -236,7 +236,7 @@ async def resend_otp_code(request_data: ResendOTPRequest, request: Request):
 
 
 @router.get("/me")
-async def get_current_user_info(request: Request):
+async def get_current_user_info(request: Request) -> dict[str, Any] | JSONResponse:
     """Get current authenticated user information.
 
     Requires: Valid Clerk Bearer token in Authorization header
@@ -301,7 +301,7 @@ async def get_current_user_info(request: Request):
 
 
 @router.post("/check-migration")
-async def check_migration_status(request: Request):
+async def check_migration_status(request: Request) -> dict[str, Any]:
     """Check if a legacy user needs to migrate to Clerk.
 
     Used by legacy auth endpoints to redirect users to Clerk login.

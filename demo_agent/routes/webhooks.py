@@ -7,6 +7,8 @@ Created: 2025-11-10
 Version: 1.0.0
 """
 
+from typing import Any
+
 from fastapi import APIRouter, Header, Request
 
 from demo_agent.webhooks.clerk_webhooks import get_clerk_webhook_handler
@@ -20,7 +22,7 @@ async def clerk_webhook(
     svix_id: str = Header(..., alias="svix-id"),
     svix_timestamp: str = Header(..., alias="svix-timestamp"),
     svix_signature: str = Header(..., alias="svix-signature"),
-):
+) -> dict[str, Any]:
     """Receive webhooks from Clerk Identity Provider.
 
     Processes user and session events:

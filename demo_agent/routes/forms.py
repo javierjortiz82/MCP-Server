@@ -19,7 +19,7 @@ from demo_agent.services.client_ip_service import extract_client_ip
 router = APIRouter(prefix="/v1", tags=["Forms"])
 
 
-def get_demo_agent(request: Request):
+def get_demo_agent(request: Request) -> Any:
     """Get demo_agent instance from app state.
 
     Args:
@@ -43,7 +43,7 @@ def get_demo_agent(request: Request):
 async def submit_contact_request(
     contact: ContactRequest,
     request: Request,
-):
+) -> ContactResponse | JSONResponse:
     """Submit contact form with reCAPTCHA validation.
 
     Processes contact form submissions from the website with spam protection.
@@ -244,7 +244,7 @@ async def submit_contact_request(
 
 
 @router.post("/booking", response_model=BookingResponse)
-async def submit_booking_request(booking: BookingRequest, request: Request):
+async def submit_booking_request(booking: BookingRequest, request: Request) -> BookingResponse | JSONResponse:
     """Submit demo booking request with reCAPTCHA verification.
 
     Public endpoint for scheduling demo bookings from website.
