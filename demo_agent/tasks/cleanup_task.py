@@ -1,8 +1,10 @@
 """Automated background tasks for system cleanup and maintenance.
 
 Tasks:
-- cleanup_expired_otp_codes: Remove OTP codes that have expired
 - cleanup_expired_sessions: Remove sessions that have exceeded their TTL/idle timeout
+
+Note: OTP codes are stored in cache/memory and are automatically expired by the cache layer.
+Database cleanup is not required for OTP codes at this time.
 
 These tasks should be scheduled to run periodically (e.g., hourly via APScheduler or Celery).
 
@@ -36,37 +38,15 @@ class CleanupTask:
     def cleanup_expired_otp_codes(self) -> int:
         """Delete OTP codes that have expired.
 
-        OTP codes expire after OTP_EXPIRATION_MINUTES.
-        This task should run periodically to clean up old records.
+        Note: OTP codes are currently stored in cache/memory, not in database.
+        This method is a placeholder for future database-backed OTP storage.
 
         Returns:
-            int: Number of expired OTP codes deleted
+            int: Number of expired OTP codes deleted (currently 0)
         """
-        db = self.SessionLocal()
-        try:
-            from demo_agent.db.models import OTPCode
-
-            now = datetime.now(timezone.utc)
-
-            # Delete OTP codes where expires_at < now
-            deleted = db.query(OTPCode).filter(
-                OTPCode.expires_at < now
-            ).delete()
-
-            db.commit()
-
-            if deleted > 0:
-                logger.info(f"Cleanup: Deleted {deleted} expired OTP codes")
-
-            return deleted
-
-        except Exception as e:
-            logger.error(f"Error cleaning up expired OTP codes: {str(e)}")
-            db.rollback()
-            return 0
-
-        finally:
-            db.close()
+        # OTP codes are not currently stored in database
+        # Cleanup is handled by cache expiration
+        return 0
 
     def cleanup_expired_sessions(self) -> int:
         """Delete sessions that have exceeded their timeout.
