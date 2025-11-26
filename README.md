@@ -2026,7 +2026,30 @@ Please verify:
 - **Feature requests:** Evaluated bi-weekly
 - **Dependency updates:** Monthly
 
-### Recent Updates (v2.1.0 - 2025-10-09)
+### Recent Updates
+
+#### v2.3.1 - 2025-11-25 (Current)
+
+**Cross-Language Product Search Enhancement**
+
+- 🌐 **Semantic Fallback Mechanism** - Automatically activates for low-confidence text matches
+- 🔍 **Fuzzy Search Improvements:**
+  - Lowered similarity threshold from 0.3 → 0.5 for better cross-language fallback activation
+  - Added debug logging to track similarity scores and fallback activation
+  - Supports cross-language queries: "Chair" (English) → "Silla" (Spanish) products
+- 🖼️ **OCR Service Migration:**
+  - Migrated from `/ocr` → `/analyze` endpoint (new Vision API)
+  - Added support for both OCR and object detection modes
+  - Improved response parsing for unified result field
+  - Better handling of confidence scores
+- 🛠️ **Logging Improvements:**
+  - Safe handling of None confidence scores
+  - Updated log messages to reflect Analyze service terminology
+  - Enhanced error handling for edge cases
+
+**GitHub:** [PR #9](https://github.com/javierjortiz82/MCP-Server/pull/9)
+
+#### v2.1.0 - 2025-10-09 (Previous)
 
 - 🎨 Major refactoring: SOLID principles applied
 - 📦 Created `PromptBuilder` and `ResultSerializer` classes
