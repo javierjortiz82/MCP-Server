@@ -1,10 +1,20 @@
-# Lab01-MCP: Intelligent Sales Agent Platform
+# MCP-Server — AI Sales Agent Platform (Model Context Protocol)
 
-> A production-ready AI-powered sales platform combining Google Gemini AI, Model Context Protocol (MCP), and PostgreSQL for intelligent product search and recommendations.
+> Conversational sales platform built on a multi-agent client powered by Google Gemini, an MCP server implemented with the official Python SDK (FastMCP), and PostgreSQL + pgvector for semantic product search, bookings and user management.
+
+**Author:** Javier Josué Ortiz León · [LinkedIn](https://www.linkedin.com/in/javier-ortiz-leon) · Internal project name: *Lab01-MCP*
+
+**Highlights**
+
+- **MCP server** built with the official `mcp` Python SDK (FastMCP), following the [Model Context Protocol specification](https://modelcontextprotocol.io): 24 tools (product catalog, bookings, user management) plus resources and prompts, over Streamable HTTP (stateless) and stdio transports.
+- **Multi-agent orchestration** on Gemini 2.5 Flash: intent router with specialized booking and general agents.
+- **Search:** PostgreSQL 16 with pgvector (semantic) and pg_trgm (fuzzy / full-text).
+- **Microservices** orchestrated with Docker Compose: MCP server, agent, client, email service, PostgreSQL and Nginx.
+- **Quality and security:** Pydantic validation, rate limiting, OTP authentication, security headers and a pytest test suite.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Google Gemini](https://img.shields.io/badge/Gemini-2.5%20Flash-4285F4?logo=google)](https://ai.google.dev/gemini-api/docs)
-[![MCP Protocol](https://img.shields.io/badge/MCP-1.2.0+-orange.svg)](https://github.com/anthropics/mcp)
+[![MCP Protocol](https://img.shields.io/badge/MCP-1.2.0+-orange.svg)](https://modelcontextprotocol.io)
 [![Pydantic v2](https://img.shields.io/badge/pydantic-v2-E92063.svg)](https://docs.pydantic.dev/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker)](https://www.docker.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
@@ -19,8 +29,8 @@ Get up and running in 5 minutes:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourusername/Lab01-MCP.git
-cd Lab01-MCP
+git clone https://github.com/javierjortiz82/MCP-Server.git
+cd MCP-Server
 
 # 2. Set up Docker infrastructure environment
 cd DockerConfig
@@ -908,8 +918,8 @@ class DiscordAdapter:
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/yourusername/Lab01-MCP.git
-cd Lab01-MCP
+git clone https://github.com/javierjortiz82/MCP-Server.git
+cd MCP-Server
 
 # 2. Configure environment
 cp .env.example .env
@@ -940,8 +950,8 @@ docker-compose logs -f client-mcp
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/yourusername/Lab01-MCP.git
-cd Lab01-MCP
+git clone https://github.com/javierjortiz82/MCP-Server.git
+cd MCP-Server
 
 # 2. Create virtual environment
 python3.11 -m venv .venv
@@ -968,8 +978,8 @@ python -c "from gemini_agent import GeminiAgent; print('✅ Installation success
 
 ```bash
 # 1. Clone and setup base
-git clone https://github.com/yourusername/Lab01-MCP.git
-cd Lab01-MCP
+git clone https://github.com/javierjortiz82/MCP-Server.git
+cd MCP-Server
 python3.11 -m venv .venv
 source .venv/bin/activate
 
@@ -1213,7 +1223,7 @@ python3 scripts/odiseo_cli.py
 
 ```bash
 # From project root
-cd /home/javort/Lab01-MCP
+cd MCP-Server
 python -m client_mcp
 
 # Legacy commands (still supported):
@@ -1864,8 +1874,8 @@ We welcome contributions! Here's how to get started:
 
 ```bash
 # 1. Fork and clone
-git clone https://github.com/yourusername/Lab01-MCP.git
-cd Lab01-MCP
+git clone https://github.com/javierjortiz82/MCP-Server.git
+cd MCP-Server
 
 # 2. Create virtual environment
 python3.11 -m venv .venv
